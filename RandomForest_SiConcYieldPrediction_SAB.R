@@ -28,23 +28,27 @@ import_plot <- function(rf_model) {
 
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
-drivers<-read.csv("AllDrivers_Harmonized.csv")
-
-## Also add in the climate classifications: 
-climate_Z <- read.csv("KG_Clim_Name.csv")
-
+drivers<-read.csv("AllDrivers_Harmonized_20231110.csv")
 drivers<-drivers[,!colnames(drivers) %in% c("X.1", "X", "Stream_Name", "rndCoord.lon", "rndCoord.lat", "Name", "cycle1")]
 drivers<-drivers[!duplicated(drivers$Stream_ID),]
 
+## Also add in the climate classifications: 
+Upscaled_KG <- read.csv("KG_Clim_Name.csv")
+names(Upscaled_KG)[names(Upscaled_KG) == 'Name'] <- 'Up_KG'
+
 ## Merge by climate zone so we have a new column that gives the KG up-scaled classifications
-drivers <- merge(drivers, climate_Z)
-names(drivers)[names(drivers) == 'Name'] <- 'Up_KG'
+drivers <- merge(drivers, Upscaled_KG, by = "ClimateZ")
 drivers$Up_KG = as.factor(drivers$Up_KG)
 
 #crop to only relevant drivers
-drivers_cropped <- drivers[,c("med_si","CV_C","med_q","CV_Q", "cvc_cvq","slope","Latitude", 
-                              "drainSqKm", "num_days","prop_area","precip", "evapotrans", "temp", "npp",
-                            "major_rock","major_land", "major_soil", "elevation_mean_m", "cycle0")]
+drivers_cropped <- drivers[,c("med_si","min_Q", "max_Q", "CV_Q","Latitude", "drainSqKm", "num_days","prop_area","precip", 
+                              "evapotrans", "temp", "npp", "cycle0", "rocks_volcanic", "rocks_sedimentary", "rocks_plutonic", 
+                              "rocks_metamorphic", "rocks_cabronate_evaporite", "land_evergreen_needleleaf_forest", "land_tundra",
+                              "land_shrubland_grassland", "land_cropland", "land_mixed_forest", "land_urban_and_built_up_land",
+                              "land_barren_or_sparseley_vegetated", "land_wetland", "land_evergreen_broadleaf_forest", "soil_inceptisols",
+                              "soil_andisols", "soil_gelisols", "soil_mollisols", "soil_alfisols", "soil_entisols", "soil_spodosols",
+                              "soil_histosol", "soil_ardisols", "soil_vertisols", "soil_oxisol", "soil_ultisols", "N", "P", "elevation_mean_m",
+                              "Min_Daylength", "Max_Daylength")]
 
 drivers_cropped<-drivers_cropped[complete.cases(drivers_cropped$num_days),]
 drivers_cropped<-drivers_cropped[complete.cases(drivers_cropped$drainSqKm),]
@@ -118,17 +122,21 @@ test_numtree_average <- function(ntree_list) {
 
 ## Intial subsetting of Random Forest Plots: 
 ## Drainage Area:
-small <- drivers_cropped[drivers_cropped$drainSqKm < 50,]
-medium <- drivers_cropped[(drivers_cropped$drainSqKm > 50) & (drivers_cropped$drainSqKm < 1000), ]
+## Remove medium drainage area -- just include small and large: 
+# small <- drivers_cropped[drivers_cropped$drainSqKm < 50,]
+# medium <- drivers_cropped[(drivers_cropped$drainSqKm > 50) & (drivers_cropped$drainSqKm < 1000), ]
+# large <- drivers_cropped[(drivers_cropped$drainSqKm >  1000) & (drivers_cropped$drainSqKm < 3000000),]
+
+small <- drivers_cropped[drivers_cropped$drainSqKm < 1000,]
 large <- drivers_cropped[(drivers_cropped$drainSqKm >  1000) & (drivers_cropped$drainSqKm < 3000000),]
 
 small <-small[,!c(colnames(small) %like% "drainSqKm")]
-medium <-medium[,!c(colnames(medium) %like% "drainSqKm")]
+#medium <-medium[,!c(colnames(medium) %like% "drainSqKm")]
 large <-large[,!c(colnames(large) %like% "drainSqKm")]
 
 ## Median silica concentrations
-low_Si  <- drivers_cropped[drivers_cropped$med_si < 3,]
-high_Si  <- drivers_cropped[drivers_cropped$med_si > 3,]
+# low_Si  <- drivers_cropped[drivers_cropped$med_si < 3,]
+# high_Si  <- drivers_cropped[drivers_cropped$med_si > 3,]
 
 # low_Si <-low_Si[,!c(colnames(low_Si) %like% "si")]
 # high_Si <-high_Si[,!c(colnames(high_Si) %like% "si")]
@@ -163,57 +171,9 @@ rf_func <- function(subset_of_drivers, subset_title, subset_variable, subset_var
   
 
   #playing around w partial dependence plots
-  par.Long <- partial(rf_model, pred.var = "cycle0")
-  partial_plot <-autoplot(par.Long, contour = T)
-  print(partial_plot)
-  
-  par.Long <- partial(rf_model, pred.var = "temp")
-  partial_plot <-autoplot(par.Long, contour = T)
-  print(partial_plot)
-  
-  par.Long <- partial(rf_model, pred.var = "precip")
-  partial_plot <-autoplot(par.Long, contour = T)
-  print(partial_plot)
-  
-  par.Long <- partial(rf_model, pred.var = "slope")
-  partial_plot <-autoplot(par.Long, contour = T)
-  print(partial_plot)
-  
-  par.Long <- partial(rf_model, pred.var = "prop_area")
-  partial_plot <-autoplot(par.Long, contour = T)
-  print(partial_plot)
-  
-  par.Long <- partial(rf_model, pred.var = "num_days")
-  partial_plot <-autoplot(par.Long, contour = T)
-  print(partial_plot)
-  
-  par.Long <- partial(rf_model, pred.var = "CV_C")
-  partial_plot <-autoplot(par.Long, contour = T)
-  print(partial_plot)
-  
-  par.Long <- partial(rf_model, pred.var = "elevation_mean_m")
-  partial_plot <-autoplot(par.Long, contour = T)
-  print(partial_plot)
-  
-  par.Long <- partial(rf_model, pred.var = "Latitude")
-  partial_plot <-autoplot(par.Long, contour = T)
-  print(partial_plot)
-  
-  par.Long <- partial(rf_model, pred.var = "npp")
-  partial_plot <-autoplot(par.Long, contour = T)
-  print(partial_plot)
-  
-  par.Long <- partial(rf_model, pred.var = "evapotrans")
-  partial_plot <-autoplot(par.Long, contour = T)
-  print(partial_plot)
-  
-  par.Long <- partial(rf_model, pred.var = "CV_Q")
-  partial_plot <-autoplot(par.Long, contour = T)
-  print(partial_plot)
-  
-  par.Long <- partial(rf_model, pred.var = "cvc_cvq")
-  partial_plot <-autoplot(par.Long, contour = T)
-  print(partial_plot)
+  # par.Long <- partial(rf_model, pred.var = "cycle0")
+  # partial_plot <-autoplot(par.Long, contour = T)
+  # print(partial_plot)
 
  
 }
@@ -221,8 +181,8 @@ rf_func <- function(subset_of_drivers, subset_title, subset_variable, subset_var
 all_results<- rf_func(drivers_cropped, subset_title = "all sites, no subsets", drivers_cropped$med_si, "Median DSi")
 
 # Apply function
-small_results<- rf_func(small, subset_title = "catchment size < 50 km2", small$med_si, subset_variable_name =  "Median DSi")
-medium_results<- rf_func(medium, subset_title = "catchment size > 50 < 1000 km2", medium$med_si, "Median DSi")
+small_results<- rf_func(small, subset_title = "catchment size < 1000 km2", small$med_si, subset_variable_name =  "Median DSi")
+#medium_results<- rf_func(medium, subset_title = "catchment size > 50 < 1000 km2", medium$med_si, "Median DSi")
 large_results<- rf_func(large, subset_title = "catchment size > 1000 < 3000000 km2", large$med_si, "Median DSi")
 
 ## Apply function
@@ -232,8 +192,8 @@ sed_carb_results<- rf_func(sed_carb, subset_title = "Sedimentary-Carbonate", sed
 
 ## Apply function: 
 ## LATER: Look at N:P ratios or other productivity metrics
-low_results<- rf_func(low_Si, subset_title = "median Si < 3 mg", low_Si$med_si, "Median Si")
-high_results<- rf_func(high_Si, subset_title = "median Si > 3 mg", high_Si$med_si, "Median Si")
+# low_results<- rf_func(low_Si, subset_title = "median Si < 3 mg", low_Si$med_si, "Median Si")
+# high_results<- rf_func(high_Si, subset_title = "median Si > 3 mg", high_Si$med_si, "Median Si")
 
 
 #### Make boxplots of distributions for each model subset -----------------
@@ -246,8 +206,8 @@ drivers_cropped2<-drivers_cropped2[complete.cases(drivers_cropped2$drainSqKm),]
 drivers_cropped2<- drivers_cropped2[,!c(colnames(drivers_cropped2) %like% ".1")]
 
 ## Drainage Area:
-small <- drivers_cropped2[drivers_cropped2$drainSqKm < 50,]
-medium <- drivers_cropped2[(drivers_cropped2$drainSqKm > 50) & (drivers_cropped2$drainSqKm < 1000), ]
+small <- drivers_cropped2[drivers_cropped2$drainSqKm < 1000,]
+#medium <- drivers_cropped2[(drivers_cropped2$drainSqKm > 50) & (drivers_cropped2$drainSqKm < 1000), ]
 large <- drivers_cropped2[(drivers_cropped2$drainSqKm >  1000) & (drivers_cropped2$drainSqKm < 3000000),]
 
 ## Lithology
@@ -256,14 +216,15 @@ metamorphic <- drivers_cropped2[drivers_cropped2$major_rock %like% "metamorphic"
 sed_carb <- drivers_cropped2[drivers_cropped2$major_rock %like% "sed" | drivers_cropped2$major_rock %like% "carb",]
 
 ## Median silica concentrations
-low_Si  <- drivers_cropped2[drivers_cropped2$med_si < 3,]
-high_Si  <- drivers_cropped2[drivers_cropped2$med_si > 3,]
+# low_Si  <- drivers_cropped2[drivers_cropped2$med_si < 3,]
+# high_Si  <- drivers_cropped2[drivers_cropped2$med_si > 3,]
 
 
 ### Pull out the boxplots and plot outside of RF function with full suite of variables (so LTER/ Up_KG can be used for fill)
-bp_func <- function(subset_of_drivers, subset_title, subset_variable, subset_variable_name){
+bp_func <- function(subset_of_drivers, axis_lims, subset_title, subset_variable, subset_variable_name){
   boxplot <- ggplot(subset_of_drivers, aes(x= Up_KG, y=subset_variable, fill=Up_KG)) + 
     geom_boxplot() + 
+    ylim(axis_lims)+
     labs(x=NULL, y=subset_variable_name, title=subset_title)+
     theme_bw(base_size = 18)+
     theme(legend.position="none", 
@@ -272,11 +233,15 @@ bp_func <- function(subset_of_drivers, subset_title, subset_variable, subset_var
 }
 
 
-all_results<- bp_func(drivers_cropped2, subset_title = "all sites, no subsets", drivers_cropped2$med_si, "Median DSi")
+all_med_si<- bp_func(drivers_cropped2, axis_lims = c(0, 20), subset_title = "all sites", drivers_cropped2$med_si, "Median DSi")
+all_DA<- bp_func(drivers_cropped2, subset_title = "all sites", axis_lims = c(0, 300000), drivers_cropped2$drainSqKm, "Drainage Area (sqkm)")
+# all_rock <- bp_func(drivers_cropped2, axis_lims = c(0, 20), subset_title = "all sites", drivers_cropped2$, "Median DSi")
+
+
 
 # Apply function
 small_results<- bp_func(small, subset_title = "catchment size < 50 km2", small$drainSqKm, subset_variable_name =  "Drainage Area (sqkm)")
-medium_results<- bp_func(medium, subset_title = "catchment size > 50 < 1000 km2", medium$drainSqKm, "Drainage Area (sqkm)")
+#medium_results<- bp_func(medium, subset_title = "catchment size > 50 < 1000 km2", medium$drainSqKm, "Drainage Area (sqkm)")
 large_results<- bp_func(large, subset_title = "catchment size > 1000 < 3000000 km2", large$drainSqKm, "Drainage Area (sqkm)")
 
 ## Apply function: 
