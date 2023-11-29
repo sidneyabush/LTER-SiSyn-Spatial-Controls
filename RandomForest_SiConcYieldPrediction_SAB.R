@@ -40,15 +40,32 @@ names(Upscaled_KG)[names(Upscaled_KG) == 'Name'] <- 'Up_KG'
 drivers <- merge(drivers, Upscaled_KG, by = "ClimateZ")
 drivers$Up_KG = as.factor(drivers$Up_KG)
 
+## add new driver that is N:P ratios:
+drivers$N_P <- drivers$N / drivers$P
+
 #crop to only relevant drivers
-drivers_cropped <- drivers[,c("med_si","min_Q", "max_Q", "CV_Q","Latitude", "drainSqKm", "num_days","prop_area","precip", 
-                              "evapotrans", "temp", "npp", "cycle0", "rocks_volcanic", "rocks_sedimentary", "rocks_plutonic", 
-                              "rocks_metamorphic", "rocks_cabronate_evaporite", "land_evergreen_needleleaf_forest", "land_tundra",
-                              "land_shrubland_grassland", "land_cropland", "land_mixed_forest", "land_urban_and_built_up_land",
-                              "land_barren_or_sparseley_vegetated", "land_wetland", "land_evergreen_broadleaf_forest", "soil_inceptisols",
-                              "soil_andisols", "soil_gelisols", "soil_mollisols", "soil_alfisols", "soil_entisols", "soil_spodosols",
-                              "soil_histosol", "soil_ardisols", "soil_vertisols", "soil_oxisol", "soil_ultisols", "N", "P", "elevation_mean_m",
-                              "Min_Daylength", "Max_Daylength")]
+# drivers_cropped <- drivers[,c("med_si","min_Q", "max_Q", "CV_Q","Latitude", "drainSqKm", "num_days","prop_area","precip",
+#                               "evapotrans", "temp", "npp", "cycle0", "rocks_volcanic", "rocks_sedimentary", "rocks_plutonic",
+#                               "rocks_metamorphic", "rocks_cabronate_evaporite", "land_evergreen_needleleaf_forest", "land_tundra",
+#                               "land_shrubland_grassland", "land_cropland", "land_mixed_forest", "land_urban_and_built_up_land",
+#                               "land_barren_or_sparsely_vegetated", "land_wetland", "land_evergreen_broadleaf_forest", "soil_inceptisols",
+#                               "soil_andisols", "soil_gelisols", "soil_mollisols", "soil_alfisols", "soil_entisols", "soil_spodosols",
+#                               "soil_histosol", "soil_ardisols", "soil_vertisols", "soil_oxisol", "soil_ultisols", "N", "P", "elevation_mean_m",
+#                               "Min_Daylength", "Max_Daylength", "N_P")]
+#
+# drivers_cropped <- drivers[,c("med_si","min_Q", "max_Q", "CV_Q","Latitude", "drainSqKm", "num_days","prop_area","precip",
+#                               "evapotrans", "temp", "npp", "cycle0", "major_rock","land_evergreen_needleleaf_forest", "land_tundra",
+#                               "land_shrubland_grassland", "land_cropland", "land_mixed_forest", "land_urban_and_built_up_land",
+#                               "land_barren_or_sparsely_vegetated", "land_wetland", "land_evergreen_broadleaf_forest", "major_soil", "N", "P", 
+#                               "elevation_mean_m", "Min_Daylength", "Max_Daylength", "N_P")]
+
+drivers_cropped <- drivers[,c("med_si","min_Q", "max_Q", "CV_Q","Latitude", "drainSqKm", "num_days","prop_area","precip",
+                              "evapotrans", "temp", "npp", "cycle0", "major_rock", "major_land", "major_soil", "N", "P", "elevation_mean_m",
+                              "Min_Daylength", "Max_Daylength", "N_P")]
+# 
+# drivers_cropped <- drivers[,c("med_si","min_Q", "max_Q", "CV_Q","Latitude", "drainSqKm", "num_days","prop_area","precip",
+#                               "evapotrans", "temp", "npp", "cycle0", "major_land", "major_soil", "N", "elevation_mean_m",
+#                               "Min_Daylength", "Max_Daylength", "N_P")]
 
 drivers_cropped<-drivers_cropped[complete.cases(drivers_cropped$num_days),]
 drivers_cropped<-drivers_cropped[complete.cases(drivers_cropped$drainSqKm),]
@@ -120,36 +137,36 @@ test_numtree_average <- function(ntree_list) {
 # autoplot(par.Long, contour = T)
 
 
-## Intial subsetting of Random Forest Plots: 
-## Drainage Area:
-## Remove medium drainage area -- just include small and large: 
-# small <- drivers_cropped[drivers_cropped$drainSqKm < 50,]
-# medium <- drivers_cropped[(drivers_cropped$drainSqKm > 50) & (drivers_cropped$drainSqKm < 1000), ]
+# ## Intial subsetting of Random Forest Plots: 
+# ## Drainage Area:
+# ## Remove medium drainage area -- just include small and large: 
+# # small <- drivers_cropped[drivers_cropped$drainSqKm < 50,]
+# # medium <- drivers_cropped[(drivers_cropped$drainSqKm > 50) & (drivers_cropped$drainSqKm < 1000), ]
+# # large <- drivers_cropped[(drivers_cropped$drainSqKm >  1000) & (drivers_cropped$drainSqKm < 3000000),]
+# 
+# small <- drivers_cropped[drivers_cropped$drainSqKm < 1000,]
 # large <- drivers_cropped[(drivers_cropped$drainSqKm >  1000) & (drivers_cropped$drainSqKm < 3000000),]
-
-small <- drivers_cropped[drivers_cropped$drainSqKm < 1000,]
-large <- drivers_cropped[(drivers_cropped$drainSqKm >  1000) & (drivers_cropped$drainSqKm < 3000000),]
-
-small <-small[,!c(colnames(small) %like% "drainSqKm")]
-#medium <-medium[,!c(colnames(medium) %like% "drainSqKm")]
-large <-large[,!c(colnames(large) %like% "drainSqKm")]
-
-## Median silica concentrations
-# low_Si  <- drivers_cropped[drivers_cropped$med_si < 3,]
-# high_Si  <- drivers_cropped[drivers_cropped$med_si > 3,]
-
-# low_Si <-low_Si[,!c(colnames(low_Si) %like% "si")]
-# high_Si <-high_Si[,!c(colnames(high_Si) %like% "si")]
-
-## Lithology
-pluto_volcanic <- drivers_cropped[drivers_cropped$major_rock %like% "volcanic" | drivers_cropped$major_rock %like% "pluto",]
-metamorphic <- drivers_cropped[drivers_cropped$major_rock %like% "metamorphic",]
-sed_carb <- drivers_cropped[drivers_cropped$major_rock %like% "sed" | drivers_cropped$major_rock %like% "carb",]
-
-## Need to remove rock info for the lithology subset: 
-pluto_volcanic <-pluto_volcanic[,!c(colnames(pluto_volcanic) %like% "rock")]
-metamorphic <-metamorphic[,!c(colnames(metamorphic) %like% "rock")]
-sed_carb <-sed_carb[,!c(colnames(sed_carb) %like% "rock")]
+# 
+# small <-small[,!c(colnames(small) %like% "drainSqKm")]
+# #medium <-medium[,!c(colnames(medium) %like% "drainSqKm")]
+# large <-large[,!c(colnames(large) %like% "drainSqKm")]
+# 
+# ## Median silica concentrations
+# # low_Si  <- drivers_cropped[drivers_cropped$med_si < 3,]
+# # high_Si  <- drivers_cropped[drivers_cropped$med_si > 3,]
+# 
+# # low_Si <-low_Si[,!c(colnames(low_Si) %like% "si")]
+# # high_Si <-high_Si[,!c(colnames(high_Si) %like% "si")]
+# 
+# ## Lithology
+# pluto_volcanic <- drivers_cropped[drivers_cropped$major_rock %like% "volcanic" | drivers_cropped$major_rock %like% "pluto",]
+# metamorphic <- drivers_cropped[drivers_cropped$major_rock %like% "metamorphic",]
+# sed_carb <- drivers_cropped[drivers_cropped$major_rock %like% "sed" | drivers_cropped$major_rock %like% "carb",]
+# 
+# ## Need to remove rock info for the lithology subset: 
+# pluto_volcanic <-pluto_volcanic[,!c(colnames(pluto_volcanic) %like% "rock")]
+# metamorphic <-metamorphic[,!c(colnames(metamorphic) %like% "rock")]
+# sed_carb <-sed_carb[,!c(colnames(sed_carb) %like% "rock")]
 
 # Make model into function: 
 #### model ####
