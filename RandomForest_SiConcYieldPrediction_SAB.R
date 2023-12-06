@@ -56,8 +56,8 @@ drivers[,c(29:56)]<-replace(drivers[,c(29:56)], is.na(drivers[,c(29:56)]), 0)
 #                               "Min_Daylength", "Max_Daylength", "N_P")]
 
 drivers_cropped <- drivers[,c("med_si","min_Q", "max_Q", "q_95", "q_5","CV_Q", "q_max_day", "q_min_day", "Latitude", "drainSqKm", "num_days","prop_area","precip", 
-                              "evapotrans", "temp", "npp", "cycle0" , "major_land",  "major_rock",
-                               "N", "P", "elevation_mean_m", "Max_Daylength", "N_P")]
+                              "evapotrans", "temp", "npp", "cycle0" , "major_land","P",
+                               "N", "elevation_mean_m", "Max_Daylength", "N_P")]
 
 
 drivers_cropped<-drivers_cropped[complete.cases(drivers_cropped$num_days),]
@@ -144,10 +144,16 @@ test_numtree_average <- function(ntree_list) {
 # #medium <-medium[,!c(colnames(medium) %like% "drainSqKm")]
 # large <-large[,!c(colnames(large) %like% "drainSqKm")]
 # 
-# ## Median silica concentrations
-# # low_Si  <- drivers_cropped[drivers_cropped$med_si < 3,]
-# # high_Si  <- drivers_cropped[drivers_cropped$med_si > 3,]
-# 
+# Median silica concentrations
+low  <- drivers_cropped[drivers_cropped$P < 7,]
+high  <- drivers_cropped[drivers_cropped$P > 7,]
+
+# ## Need to remove P info for the  subset: 
+low <-low[,!c(colnames(low) %like% "P")]
+high <-high[,!c(colnames(high) %like% "P")]
+
+
+
 # # low_Si <-low_Si[,!c(colnames(low_Si) %like% "si")]
 # # high_Si <-high_Si[,!c(colnames(high_Si) %like% "si")]
 # 
@@ -181,7 +187,7 @@ rf_func <- function(subset_of_drivers, subset_title, subset_variable, subset_var
   
 
   #playing around w partial dependence plots
-  # par.Long <- partial(rf_model, pred.var = "cycle0")
+  # par.Long <- partial(rf_model, pred.var = "P")
   # partial_plot <-autoplot(par.Long, contour = T)
   # print(partial_plot)
 
@@ -199,71 +205,71 @@ all_results<- rf_func(drivers_cropped, subset_title = "all sites, no subsets", d
 # pluto_volcanic_results<- rf_func(pluto_volcanic, subset_title = "Pluto-Volcanic", pluto_volcanic$med_si, "Median Si")
 # metamorphic_results<- rf_func(metamorphic, subset_title = "Metamorphic", metamorphic$med_si, "Median Si")
 # sed_carb_results<- rf_func(sed_carb, subset_title = "Sedimentary-Carbonate", sed_carb$med_si, "Median Si")
-# 
-# ## Apply function: 
-# ## LATER: Look at N:P ratios or other productivity metrics
-# # low_results<- rf_func(low_Si, subset_title = "median Si < 3 mg", low_Si$med_si, "Median Si")
-# # high_results<- rf_func(high_Si, subset_title = "median Si > 3 mg", high_Si$med_si, "Median Si")
-# 
-# 
-# #### Make boxplots of distributions for each model subset -----------------
-# drivers_cropped2 <- drivers[,c("med_si","min_Q", "max_Q", "q_95", "q_5","CV_Q", "q_max_day", "q_min_day", "Latitude", "drainSqKm", "num_days","prop_area","precip", 
-# "evapotrans", "temp", "npp", "cycle0", "major_rock" , "major_land", 
-# "N", "P", "elevation_mean_m", "Max_Daylength", "N_P", "Up_KG")]
-# 
-# 
-# drivers_cropped2<-drivers_cropped2[complete.cases(drivers_cropped2$num_days),]
-# drivers_cropped2<-drivers_cropped2[complete.cases(drivers_cropped2$drainSqKm),]
-# drivers_cropped2<- drivers_cropped2[,!c(colnames(drivers_cropped2) %like% ".1")]
-# 
-# ## Drainage Area:
-# small <- drivers_cropped2[drivers_cropped2$drainSqKm < 1000,]
-# #medium <- drivers_cropped2[(drivers_cropped2$drainSqKm > 50) & (drivers_cropped2$drainSqKm < 1000), ]
-# large <- drivers_cropped2[(drivers_cropped2$drainSqKm >  1000) & (drivers_cropped2$drainSqKm < 3000000),]
-# 
-# ## Lithology
-# pluto_volcanic <- drivers_cropped2[drivers_cropped2$major_rock %like% "volcanic" | drivers_cropped2$major_rock %like% "pluto",]
-# metamorphic <- drivers_cropped2[drivers_cropped2$major_rock %like% "metamorphic",]
-# sed_carb <- drivers_cropped2[drivers_cropped2$major_rock %like% "sed" | drivers_cropped2$major_rock %like% "carb",]
-# 
-# ## Median silica concentrations
-# # low_Si  <- drivers_cropped2[drivers_cropped2$med_si < 3,]
-# # high_Si  <- drivers_cropped2[drivers_cropped2$med_si > 3,]
-# 
-# 
-# ### Pull out the boxplots and plot outside of RF function with full suite of variables (so LTER/ Up_KG can be used for fill)
-# bp_func <- function(subset_of_drivers, axis_lims, subset_title, subset_variable, subset_variable_name){
-#   boxplot <- ggplot(subset_of_drivers, aes(x= Up_KG, y=subset_variable, fill=Up_KG)) + 
-#     geom_boxplot() + 
-#     ylim(axis_lims)+
-#     labs(x=NULL, y=subset_variable_name, title=subset_title)+
-#     theme_bw(base_size = 18)+
-#     theme(legend.position="none", 
-#       axis.text.x=element_text(angle=45, hjust=1))
-#   show(boxplot)
-# }
-# 
-# 
-# all_med_si<- bp_func(drivers_cropped2, axis_lims = c(0, 20), subset_title = "all sites", drivers_cropped2$med_si, "Median DSi")
-# all_DA<- bp_func(drivers_cropped2, subset_title = "all sites", axis_lims = c(0, 300000), drivers_cropped2$drainSqKm, "Drainage Area (sqkm)")
-# # all_rock <- bp_func(drivers_cropped2, axis_lims = c(0, 20), subset_title = "all sites", drivers_cropped2$, "Median DSi")
-# 
-# 
-# 
-# # Apply function
-# small_results<- bp_func(small, subset_title = "catchment size < 50 km2", small$drainSqKm, subset_variable_name =  "Drainage Area (sqkm)")
-# #medium_results<- bp_func(medium, subset_title = "catchment size > 50 < 1000 km2", medium$drainSqKm, "Drainage Area (sqkm)")
-# large_results<- bp_func(large, subset_title = "catchment size > 1000 < 3000000 km2", large$drainSqKm, "Drainage Area (sqkm)")
-# 
-# ## Apply function: 
-# ## LATER: Look at N:P ratios
-# low_results<- bp_func(low_Si, subset_title = "median Si < 3 mg", low_Si$med_si, "Median Si")
-# high_results<- bp_func(high_Si, subset_title = "median Si > 3 mg", high_Si$med_si, "Median Si")
-# 
-# ## Apply function
-# pluto_volcanic_results<- bp_func(pluto_volcanic, subset_title = "Pluto-Volcanic", pluto_volcanic$med_si, "Median Si")
-# metamorphic_results<- bp_func(metamorphic, subset_title = "Metamorphic", metamorphic$med_si, "Median Si")
-# sed_carb_results<- bp_func(sed_carb, subset_title = "Sedimentary-Carbonate", sed_carb$med_si, "Median Si")
+
+## Apply function:
+## LATER: Look at N:P ratios or other productivity metrics
+low_results<- rf_func(low, subset_title = "median P < 7 mg", low$P, "Median P")
+high_results<- rf_func(high, subset_title = "median P > 7 mg", high$P, "Median P")
+
+
+#### Make boxplots of distributions for each model subset -----------------
+drivers_cropped2 <- drivers[,c("med_si","min_Q", "max_Q", "q_95", "q_5","CV_Q", "q_max_day", "q_min_day", "Latitude", "drainSqKm", "num_days","prop_area","precip",
+"evapotrans", "temp", "npp", "cycle0", "major_rock" , "major_land",
+"N", "P", "elevation_mean_m", "Max_Daylength", "N_P", "Up_KG")]
+
+
+drivers_cropped2<-drivers_cropped2[complete.cases(drivers_cropped2$num_days),]
+drivers_cropped2<-drivers_cropped2[complete.cases(drivers_cropped2$drainSqKm),]
+drivers_cropped2<- drivers_cropped2[,!c(colnames(drivers_cropped2) %like% ".1")]
+
+## Drainage Area:
+small <- drivers_cropped2[drivers_cropped2$drainSqKm < 1000,]
+#medium <- drivers_cropped2[(drivers_cropped2$drainSqKm > 50) & (drivers_cropped2$drainSqKm < 1000), ]
+large <- drivers_cropped2[(drivers_cropped2$drainSqKm >  1000) & (drivers_cropped2$drainSqKm < 3000000),]
+
+## Lithology
+pluto_volcanic <- drivers_cropped2[drivers_cropped2$major_rock %like% "volcanic" | drivers_cropped2$major_rock %like% "pluto",]
+metamorphic <- drivers_cropped2[drivers_cropped2$major_rock %like% "metamorphic",]
+sed_carb <- drivers_cropped2[drivers_cropped2$major_rock %like% "sed" | drivers_cropped2$major_rock %like% "carb",]
+
+## Median  concentrations
+low  <- drivers_cropped2[drivers_cropped2$P < 7,]
+high  <- drivers_cropped2[drivers_cropped2$P > 7,]
+
+
+### Pull out the boxplots and plot outside of RF function with full suite of variables (so LTER/ Up_KG can be used for fill)
+bp_func <- function(subset_of_drivers, axis_lims, subset_title, subset_variable, subset_variable_name){
+  boxplot <- ggplot(subset_of_drivers, aes(x= Up_KG, y=subset_variable, fill=Up_KG)) +
+    geom_boxplot() +
+    ylim(axis_lims)+
+    labs(x=NULL, y=subset_variable_name, title=subset_title)+
+    theme_bw(base_size = 18)+
+    theme(legend.position="none",
+      axis.text.x=element_text(angle=45, hjust=1))
+  show(boxplot)
+}
+
+
+all_med_si<- bp_func(drivers_cropped2, axis_lims = c(0, 20), subset_title = "all sites", drivers_cropped2$med_si, "Median DSi")
+all_DA<- bp_func(drivers_cropped2, subset_title = "all sites", axis_lims = c(0, 300000), drivers_cropped2$drainSqKm, "Drainage Area (sqkm)")
+# all_rock <- bp_func(drivers_cropped2, axis_lims = c(0, 20), subset_title = "all sites", drivers_cropped2$, "Median DSi")
+
+
+
+# Apply function
+small_results<- bp_func(small, subset_title = "catchment size < 50 km2", small$drainSqKm, subset_variable_name =  "Drainage Area (sqkm)")
+#medium_results<- bp_func(medium, subset_title = "catchment size > 50 < 1000 km2", medium$drainSqKm, "Drainage Area (sqkm)")
+large_results<- bp_func(large, subset_title = "catchment size > 1000 < 3000000 km2", large$drainSqKm, "Drainage Area (sqkm)")
+
+## Apply function:
+## LATER: Look at N:P ratios
+low_results<- bp_func(low_Si, subset_title = "median Si < 3 mg", low_Si$med_si, "Median Si")
+high_results<- bp_func(high_Si, subset_title = "median Si > 3 mg", high_Si$med_si, "Median Si")
+
+## Apply function
+pluto_volcanic_results<- bp_func(pluto_volcanic, subset_title = "Pluto-Volcanic", pluto_volcanic$med_si, "Median Si")
+metamorphic_results<- bp_func(metamorphic, subset_title = "Metamorphic", metamorphic$med_si, "Median Si")
+sed_carb_results<- bp_func(sed_carb, subset_title = "Sedimentary-Carbonate", sed_carb$med_si, "Median Si")
 
 
 # #some next steps (ideas)
