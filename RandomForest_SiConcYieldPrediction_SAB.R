@@ -13,8 +13,7 @@ library(pdp)
 library(dplyr)
 library(data.table)
 
-
-#this code made importance plots
+#this code makes importance plots
 import_plot <- function(rf_model) {
   
   importance_df<-as.data.frame(rf_model$importance)
@@ -44,31 +43,17 @@ drivers$Up_KG = as.factor(drivers$Up_KG)
 drivers$N_P <- drivers$N / drivers$P
 drivers[,c(29:56)]<-replace(drivers[,c(29:56)], is.na(drivers[,c(29:56)]), 0)
 
-
-#crop to only relevant drivers
-# drivers_cropped <- drivers[,c("med_si","min_Q", "max_Q", "CV_Q","Latitude", "drainSqKm", "num_days","prop_area","precip",
-#                               "evapotrans", "temp", "npp", "cycle0", "rocks_volcanic", "rocks_sedimentary", "rocks_plutonic",
-#                               "rocks_metamorphic", "rocks_cabronate_evaporite", "land_evergreen_needleleaf_forest", "land_tundra",
-#                               "land_shrubland_grassland", "land_cropland", "land_mixed_forest", "land_urban_and_built_up_land",
-#                               "land_barren_or_sparsely_vegetated", "land_wetland", "land_evergreen_broadleaf_forest", "soil_inceptisols",
-#                               "soil_andisols", "soil_gelisols", "soil_mollisols", "soil_alfisols", "soil_entisols", "soil_spodosols",
-#                               "soil_histosol", "soil_ardisols", "soil_vertisols", "soil_oxisol", "soil_ultisols", "N", "P", "elevation_mean_m",
-#                               "Min_Daylength", "Max_Daylength", "N_P")]
-
-drivers_cropped <- drivers[,c("med_si","min_Q", "max_Q", "q_95", "q_5","CV_Q", "q_max_day", "q_min_day", "Latitude", "drainSqKm", "num_days","prop_area","precip", 
-                              "evapotrans", "temp", "npp", "cycle0" , "major_land","P",
+drivers_cropped <- drivers[,c("med_si","min_Q", "max_Q", "q_95", "q_5","CV_Q", "q_max_day", "q_min_day", "drainSqKm", 
+                              "prop_area","precip", "evapotrans", "temp", "npp", "cycle0" , "major_land","P",
                                "N", "elevation_mean_m", "Max_Daylength", "N_P")]
 
-
-drivers_cropped<-drivers_cropped[complete.cases(drivers_cropped$num_days),]
+# drivers_cropped<-drivers_cropped[complete.cases(drivers_cropped$num_days),]
 drivers_cropped<-drivers_cropped[complete.cases(drivers_cropped$drainSqKm),]
 drivers_cropped<- drivers_cropped[,!c(colnames(drivers_cropped) %like% ".1")]
-
 
 ####test ntree ####
 #this only tests on the base model, which includes all parameters. we might expect things to change once we start 
 #removing variables
-
 test_numtree_average <- function(ntree_list) {
   
   OOB<-list()
@@ -79,7 +64,8 @@ test_numtree_average <- function(ntree_list) {
     
     set.seed(123)
     
-    rf_model<-randomForest(med_si~.,data=drivers_cropped, importance=TRUE, proximity=TRUE, ntree=ntree_list[i], mtry=6)
+    rf_model<-randomForest(med_si~.,data=drivers_cropped, importance=TRUE, 
+                           proximity=TRUE, ntree=ntree_list[i], mtry=6)
     
     OOB[[i]]<-mean(rf_model$rsq)
     
@@ -92,10 +78,10 @@ test_numtree_average <- function(ntree_list) {
 ### THINGS TO ADD INTO RF FUNCTION:
 #tune mtry based on optimized ntree
 set.seed(123)
-tuneRF(drivers_df[,c(2:29)], drivers_df[,1], ntreeTry = 100, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(drivers_cropped[,c(2:21)], drivers_cropped[,1], ntreeTry = 100, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 #set seeds for RFE
-size=ncol(drivers_df)-1
+size=ncol(drivers_cropped)-1
 #this is number of cross validation repeats and folds
 cv_repeats = 5
 cv_number = 5
@@ -120,9 +106,9 @@ control <- rfeControl(functions = rfFuncs, # random forest
                       verbose = TRUE) # number of folds
 
 #divide data into predictor variables (y) and response variables (x)
-x<-drivers_df[,!(colnames(drivers_df)=="Centroid_Name")]
+x<-drivers_cropped[,!(colnames(drivers_cropped)=="med_si")]
 
-y<-drivers_df$Centroid
+y<-drivers_cropped$med_si
 
 #split into testing and training data
 # inTrain <- createDataPartition(y, p = .70, list = FALSE)[,1]
@@ -160,7 +146,7 @@ test_numtree_optimized <- function(ntree_list) {
     
     set.seed(123)
     rf_model<-randomForest(rf_formula,
-                           data=drivers_df, importance=TRUE, proximity=TRUE, ntree=ntree_list[[i]],sampsize=c(30,30,30,30,30))
+                           data=drivers_df, importance=TRUE, proximity=TRUE, ntree=ntree_list[[i]])
     OOB[[i]]<-rf_model$err.rate[,1]
     
   }
