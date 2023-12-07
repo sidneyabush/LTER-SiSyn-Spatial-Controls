@@ -88,6 +88,146 @@ test_numtree_average <- function(ntree_list) {
   return(OOB)
   
 }
+
+### THINGS TO ADD INTO RF FUNCTION:
+#tune mtry based on optimized ntree
+set.seed(123)
+tuneRF(drivers_df[,c(2:29)], drivers_df[,1], ntreeTry = 100, stepFactor = 1, improve = 0.5, plot = FALSE)
+
+#set seeds for RFE
+size=ncol(drivers_df)-1
+#this is number of cross validation repeats and folds
+cv_repeats = 5
+cv_number = 5
+
+total_repeats<-(cv_repeats*cv_number)+1
+
+seeds <- vector(mode = "list", length = total_repeats)
+for (i in 1:25) {
+  
+  seeds[[i]]<-rep(123, size)
+  
+}
+
+seeds[[total_repeats]]<-123
+
+#set control functions for recursive feature elimination on RF
+control <- rfeControl(functions = rfFuncs, # random forest
+                      method = "repeatedcv", # repeated cv
+                      repeats = cv_repeats, # number of repeats
+                      number = cv_number,
+                      seeds = seeds,
+                      verbose = TRUE) # number of folds
+
+#divide data into predictor variables (y) and response variables (x)
+x<-drivers_df[,!(colnames(drivers_df)=="Centroid_Name")]
+
+y<-drivers_df$Centroid
+
+#split into testing and training data
+# inTrain <- createDataPartition(y, p = .70, list = FALSE)[,1]
+# 
+# x_train <- x[ inTrain, ]
+# x_test  <- x[-inTrain, ]
+# 
+# y_train <- y[ inTrain]
+# y_test  <- y[-inTrain]
+
+#run RFE, this will take a bit
+#we are allowing the number of variables retained to range from 1 to all of them here
+#to change that changes input into the "sizes" variable
+set.seed(123)
+result_rfe <- rfe(x = x, 
+                  y = y, 
+                  sizes = c(1:size),
+                  rfeControl = control)
+
+#print rfe results
+result_rfe
+
+#Put selected features into variable
+new_rf_input<-paste(predictors(result_rfe), collapse = "+")
+
+#Format those features into a formula to put in the optimized random forest model
+rf_formula<-formula(paste("Centroid_Name~", new_rf_input))
+
+#retune RF after RFE optimization
+test_numtree_optimized <- function(ntree_list) {
+  
+  OOB<-list()
+  
+  for (i in 1:length(ntree_list)) {
+    
+    set.seed(123)
+    rf_model<-randomForest(rf_formula,
+                           data=drivers_df, importance=TRUE, proximity=TRUE, ntree=ntree_list[[i]],sampsize=c(30,30,30,30,30))
+    OOB[[i]]<-rf_model$err.rate[,1]
+    
+  }
+  
+  return(OOB)
+  
+}
+
+OOB_list<-test_numtree_optimized(c(100,200,300,400,500,600,700,800,900,1000,1100,1200,1300,1400,1500,1600,1700,1800,1900,2000))
+
+tre_list<-c(100,200,300,400,500,600,700,800,900,1000,1100,1200,1300,1400,1500,1600,1700,1800,1900,2000)
+
+OOB_df<-as.data.frame(unlist(OOB_list))
+
+OOB_num<-list()
+
+for (i in 1:length(tre_list)) {
+  
+  OOB_num[[i]]<-rep(tre_list[i], tre_list[i])
+  
+}
+
+OOB_df$tree_num<-unlist(OOB_num)
+
+OOB_mean<-OOB_df %>% group_by(tree_num) %>%
+  summarise(mean_oob=mean(`unlist(OOB_list)`))
+
+#visualize and select number of trees that gives the minimum OOB error
+ggplot(OOB_mean, aes(tree_num, mean_oob))+geom_point()+geom_line()+
+  theme_classic()+scale_x_continuous(breaks = seq(100,2000,100))+theme(text = element_text(size=20))
+
+#retune mtry
+kept_drivers<-drivers_df[,c(colnames(drivers_df) %in% predictors(result_rfe))]
+
+set.seed(123)
+tuneRF(kept_drivers, drivers_df[,1], ntreeTry = 500, stepFactor = 1, improve = 0.5, plot = FALSE)
+
+#run optimized random forest model, with retuned ntree and mtry parameters
+set.seed(123)
+rf_model2<-randomForest(rf_formula,
+                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=500, mtry=4, sampsize=c(30,30,30,30,30))
+
+
+rf_model2
+
+randomForest::varImpPlot(rf_model2)
+
+setdiff(colnames(drivers_df), predictors(result_rfe))
+
+### This is for creating a plot
+importance_df<-data.frame(rf_model2$importance)
+importance_df$driver<-rownames(importance_df)
+
+vars_order<-importance_df %>%
+  dplyr::arrange(desc(MeanDecreaseAccuracy), driver) %>%
+  dplyr::select(driver)
+
+importance_melt<-melt(importance_df[,-7], id.vars = "driver")
+
+importance_melt$driver<-factor(importance_melt$driver, levels = vars_order$driver)
+
+ggplot(importance_melt, aes(variable, driver))+geom_raster(aes(fill=value))+
+  scale_fill_gradient(low="grey90", high="red")+theme_bw()+labs(x="", y="Variable",fill="Mean Decrease Accuracy")+
+  theme(text = element_text(size=15))+scale_y_discrete(limits=rev)+
+  scale_x_discrete(labels=c("FP","FT","ST","STFP","STVS","Overall Model"))
+
+
 ## Optimizing # of trees
 #test
 # set.seed(123)
