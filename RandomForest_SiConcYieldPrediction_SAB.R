@@ -12,6 +12,8 @@ library(tree)
 library(pdp)
 library(dplyr)
 library(data.table)
+require(pdp)
+
 
 #this code makes importance plots
 import_plot <- function(rf_model) {

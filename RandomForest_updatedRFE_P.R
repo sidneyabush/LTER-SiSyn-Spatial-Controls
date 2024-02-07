@@ -21,6 +21,8 @@ require(rcartocolor)
 require(arsenal)
 require(googledrive)
 require(data.table)
+require(pdp)
+
 
 #function to see variable importance by regime
 import_plot <- function(rf_model) {

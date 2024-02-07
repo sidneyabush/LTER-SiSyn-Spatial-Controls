@@ -56,6 +56,7 @@ test_numtree_average <- function(ntree_list) {
 #read in drivers data
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
+
 # drivers_url<-"https://drive.google.com/file/d/102LAmZFHOg64kMvorybxMiy9vCrFF1Cd/view?usp=drive_link"
 # 
 # file_get<-drive_get(as_id(drivers_url))
@@ -93,14 +94,20 @@ drivers<-drivers[complete.cases(drivers$npp),]
 ## add new driver that is N:P ratios:
 drivers$N_P <- drivers$N / drivers$P
 
+# High median P concentrations
+#drivers  <- drivers[drivers$P < 7,]
+drivers  <- drivers[drivers$P > 7,]
+
 #select only features to be included in model
 drivers_df<-drivers[,c("med_si","CV_Q","precip","evapotrans","temp","npp","cycle0","q_95","q_5",
-                       "prop_area","N","P","Max_Daylength","q_max_day","q_min_day", "major_rock", "major_land",
+                       "prop_area","N","Max_Daylength","q_max_day","q_min_day", "major_land",
                        "N_P")]
 
 colnames(drivers_df) =  c('med_si','CV_Q','Precip','Evapotrans','Temp', "NPP", "Green_Up_Day", "Q_95",
-                          "Q_5", "Snow_Cover", "N", "P", "Max_Daylength", "Q_max_day", "Q_min_day",
-                          "Lithology", "Land_Cover", "N_P")
+                          "Q_5", "Snow_Cover", "N", "Max_Daylength", "Q_max_day", "Q_min_day",
+                          "Land_Cover", "N_P")
+
+
 
 # Optionally adding in all rock/ land types, not just major
 #keep_these_too<-drivers[,colnames(drivers) %like% c("rock|land")]
@@ -139,7 +146,7 @@ ggplot(OOB_mean, aes(tree_num, mean_oob))+geom_point()+geom_line()+
 #tune mtry based on optimized ntree
 set.seed(123)
 ## need to adjust these column values when removing variables
-tuneRF(drivers_df[,c(2:18)], drivers_df[,1], ntreeTry = 300, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(drivers_df[,c(2:16)], drivers_df[,1], ntreeTry = 2000, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 #run intial RF using tuned parameters
 set.seed(123)
@@ -257,7 +264,7 @@ ggplot(OOB_mean, aes(tree_num, mean_oob))+geom_point()+geom_line()+
 kept_drivers<-drivers_df[,c(colnames(drivers_df) %in% predictors(result_rfe))]
 
 set.seed(123)
-tuneRF(kept_drivers, drivers_df[,1], ntreeTry = 300, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(kept_drivers, drivers_df[,1], ntreeTry = 2000, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 #run optimized random forest model, with retuned ntree and mtry parameters
 set.seed(123)
@@ -270,9 +277,9 @@ rf_model2
 randomForest::varImpPlot(rf_model2)
 
 lm_plot <- plot(rf_model2$predicted, drivers_df$med_si, xlab="Predicted", ylab="Observed", 
-                main= "Optimized RF Model - All Drivers") + abline(a=0, b=1, col="red") + theme(text = element_text(size=20))
-  legend("topleft", bty = "n", legend = paste("R2=",format(mean(rf_model2$rsq), digits=3))) 
-  legend("topright", bty="n", legend = paste("MSE=", format(mean(rf_model2$mse), digits=3)))
+                main= "Optimized RF Model - Median P > 7 mg") + abline(a=0, b=1, col="red") + theme(text = element_text(size=20))
+legend("topleft", bty = "n", legend = paste("R2=",format(mean(rf_model2$rsq), digits=3))) 
+legend("topright", bty="n", legend = paste("MSE=", format(mean(rf_model2$mse), digits=3)))
 
 #playing around w partial dependence plots
 par.Long <- partial(rf_model2, pred.var = "P")
@@ -327,9 +334,9 @@ importance_melt$driver<-factor(importance_melt$driver, levels = vars_order$drive
 
 ggplot(importance_melt, aes(variable, driver))+geom_raster(aes(fill=value))+
   scale_fill_gradient(low="grey90", high="red")+theme_bw()
-  #labs(x="", y="Variable",fill="Mean Decrease Accuracy")+
-  #theme(text = element_text(size=15))+scale_y_discrete(limits=rev)
-  # scale_x_discrete(labels=c("FP","FT","ST","STFP","STVS","Overall Model"))
+#labs(x="", y="Variable",fill="Mean Decrease Accuracy")+
+#theme(text = element_text(size=15))+scale_y_discrete(limits=rev)
+# scale_x_discrete(labels=c("FP","FT","ST","STFP","STVS","Overall Model"))
 
 ###plot most important variables across clusters
 # centroid_abb<-as.data.frame(c("Fall Peak"="FP", "Fall Trough"="FT", "Spring Trough"="ST", "Spring Trough, Fall Peak"="STFP", 
