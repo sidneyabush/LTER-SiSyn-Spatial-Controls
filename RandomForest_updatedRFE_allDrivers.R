@@ -54,11 +54,11 @@ test_numtree_average <- function(ntree_list) {
 #read in drivers data
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
-drivers_url<-"https://drive.google.com/file/d/102LAmZFHOg64kMvorybxMiy9vCrFF1Cd/view?usp=drive_link"
-
-file_get<-drive_get(as_id(drivers_url))
-
-drive_download(file_get$drive_resource, overwrite = T)
+# drivers_url<-"https://drive.google.com/file/d/102LAmZFHOg64kMvorybxMiy9vCrFF1Cd/view?usp=drive_link"
+# 
+# file_get<-drive_get(as_id(drivers_url))
+# 
+# drive_download(file_get$drive_resource, overwrite = T)
 
 drivers<-read.csv("AllDrivers_Harmonized_20231129.csv")
 
@@ -90,11 +90,10 @@ drivers<-drivers[complete.cases(drivers$npp),]
 
 #select only features to be included in model
 drivers_df<-drivers[,c("med_si","CV_Q","precip","evapotrans","temp","npp","cycle0","q_95","q_5",
-                       "prop_area","N","P","Max_Daylength","q_max_day","q_min_day", "major_rock", "major_land")]
+                       "prop_area","N","P","Max_Daylength","q_max_day","q_min_day", "major_rock", "land_evergreen_needleleaf_forest",
+                       "land_tundra", "land_shrubland_grassland", "land_cropland", "land_mixed_forest", "land_urban_and_built_up_land",
+                       "land_barren_or_sparsely_vegetated", "land_wetland", "land_evergreen_broadleaf_forest")]
 
-# drivers_df <- drivers[,c("med_si","min_Q", "max_Q", "q_95", "q_5","CV_Q", "q_max_day", "q_min_day", "drainSqKm",
-#                               "prop_area","precip", "evapotrans", "temp", "npp", "cycle0" , "major_land","P",
-#                               "N", "elevation_mean_m", "Max_Daylength", "N_P")]
 
 #keep_these_too<-drivers[,colnames(drivers) %like% c("rock|land")]
 
