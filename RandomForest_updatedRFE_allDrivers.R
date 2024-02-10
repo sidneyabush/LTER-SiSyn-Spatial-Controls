@@ -90,9 +90,7 @@ drivers<-drivers[complete.cases(drivers$npp),]
 
 #select only features to be included in model
 drivers_df<-drivers[,c("med_si","CV_Q","precip","evapotrans","temp","npp","cycle0","q_95","q_5",
-                       "prop_area","N","P","Max_Daylength","q_max_day","q_min_day", "major_rock", "land_evergreen_needleleaf_forest",
-                       "land_tundra", "land_shrubland_grassland", "land_cropland", "land_mixed_forest", "land_urban_and_built_up_land",
-                       "land_barren_or_sparsely_vegetated", "land_wetland", "land_evergreen_broadleaf_forest")]
+                       "prop_area","N","P","Max_Daylength","q_max_day","q_min_day", "major_rock")]
 
 
 #keep_these_too<-drivers[,colnames(drivers) %like% c("rock|land")]
