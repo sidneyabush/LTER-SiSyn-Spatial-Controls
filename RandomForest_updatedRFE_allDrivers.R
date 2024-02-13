@@ -65,39 +65,25 @@ drivers<-read.csv("AllDrivers_Harmonized_20231129.csv")
 #remove any duplicated rows
 drivers<-drivers[!duplicated(drivers$Stream_ID),]
 
-# #read in cluster data for average cluster, modal cluster, number of clusters
-# si_clust<-read.csv("ClusterAllMetadata.csv")
-# 
-# #merge cluster and drivers data
-# si_clust$Stream_ID<-paste0(si_clust$LTER, "__", si_clust$Site)
-# 
-# si_clust<-si_clust[,c("Centroid_Name", "Stream_ID")]
-# 
-# drivers<-merge(drivers, si_clust, by=c("Stream_ID"))
-
 #remove variables not interested in ever including
 drivers<-dplyr::select(drivers, -c("cycle1","X","X.1","ClimateZ","Latitude","Longitude","LTER","rndCoord.lat",
                                    "rndCoord.lon"))
 
 #look at distribution of NA across columns
-#sapply(drivers, function(x) sum(is.na(x)))
+sapply(drivers, function(x) sum(is.na(x)))
 
 #remove sites w NA
 drivers<-drivers[complete.cases(drivers$npp),]
 
-#turn centroid name to factor
-# drivers$Centroid_Name<-as.factor(drivers$Centroid_Name)
-
 #select only features to be included in model
-drivers_df<-drivers[,c("med_si","CV_Q","precip","evapotrans","temp","npp","cycle0","q_95","q_5",
-                       "prop_area","N","P","Max_Daylength","q_max_day","q_min_day", "major_rock")]
+drivers_df <- dplyr::select(drivers, -c("mean_si", "sd_si", "min_Si", "max_Si","CV_C", # remove Si variables
+                                        "mean_q", "med_q", "sd_q",                     # remove flow variables
+                                        "major_rock", "major_land", "major_soil"))     # remove major rock, land, soil variables
 
+remove_these_too<-drivers[,colnames(drivers_df) %like% -c("soil")]
+drivers_df<-bind_cols(drivers_df, keep_these_too)
 
-#keep_these_too<-drivers[,colnames(drivers) %like% c("rock|land")]
-
-#drivers_df<-bind_cols(drivers_df, keep_these_too)
-
-#drivers_df[,c(17:31)]<-replace(drivers_df[,c(17:31)], is.na(drivers_df[,c(17:31)]), 0)
+#drivers_df[,c(17:31)]<-replace(drivers_df[,c(17:31)], is.na(drivers_df[,c(17:31)]), 0) # edit these rows when changing variables included 
 
 #look at correlation between variables
 #driver_cor<-cor(drivers_df[,c(2:9,12:15)])
