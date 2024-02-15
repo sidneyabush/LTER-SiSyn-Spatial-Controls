@@ -82,6 +82,12 @@ drivers_df <- dplyr::select(drivers, -c("Stream_Name", "Stream_ID",             
 # there are also some drivers we dont want to include because they're not important to be expanded out (e.g., soil, geology if we switch to major rock)
 drivers_df <- dplyr::select(drivers_df,-contains("soil"))
 
+# change col names so it looks pretty: 
+names(drivers_df)[6]<-paste("drainage_area")
+names(drivers_df)[7]<-paste("snow_cover")
+names(drivers_df)[12]<-paste("green_up_day") 
+names(drivers_df)[30]<-paste("max_daylength") 
+
 # there are multiple instances where we filter by row #'s
 replace_na <- c(13:26) # this is to replace NAs in % land cover, geology and soils with a 0
 numeric_drivers <- c(2:30) # this is for plotting correlation between all numeric drivers
@@ -258,7 +264,7 @@ par.Long <- partial(rf_model2, pred.var = "P")
 partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
 print(partial_plot)
 
-par.Long <- partial(rf_model2, pred.var = "cycle0")
+par.Long <- partial(rf_model2, pred.var = "green_up_day")
 partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
 print(partial_plot)
 
