@@ -96,7 +96,7 @@ drivers_df[,replace_na]<-replace(drivers_df[,replace_na], is.na(drivers_df[,repl
 drivers_df <- drivers_df %>% mutate_if(is.integer, as.numeric)
 
 # Low volcanic rock percentages
-drivers_df  <- drivers_df[drivers_df$rocks_volcanic < 30,]
+drivers_df  <- drivers_df[drivers_df$rocks_volcanic > 30,]
 
 # now remove rock as a driver: 
 drivers_df <- dplyr::select(drivers_df,-contains("rocks"))
