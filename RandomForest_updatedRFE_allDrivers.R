@@ -276,7 +276,7 @@ par.Long <- partial(rf_model2, pred.var = "temp")
 partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
 print(partial_plot)
 
-par.Long <- partial(rf_model2, pred.var = "Max_Daylength")
+par.Long <- partial(rf_model2, pred.var = "max_daylength")
 partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
 print(partial_plot)
 
@@ -288,11 +288,16 @@ par.Long <- partial(rf_model2, pred.var = "land_tundra")
 partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
 print(partial_plot)
 
-
 par.Long <- partial(rf_model2, pred.var = "land_shrubland_grassland")
 partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
 print(partial_plot)
+
+par.Long <- partial(rf_model2, pred.var = "q_95")
+partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
+print(partial_plot)
+
+par.Long <- partial(rf_model2, pred.var = "npp")
+partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
+print(partial_plot)
+
 # dev.off()
-
-
-
