@@ -89,6 +89,9 @@ names(drivers_df)[7]<-paste("snow_cover")
 names(drivers_df)[12]<-paste("green_up_day") 
 names(drivers_df)[30]<-paste("max_daylength") 
 
+# there are multiple instances where we filter by row #'s
+replace_na <- c(13:26) # this is to replace NAs in % land cover, geology and soils with a 0
+
 # next let's replace the NA values for things like land cover % and geology % with a zero
 drivers_df[,replace_na]<-replace(drivers_df[,replace_na], is.na(drivers_df[,replace_na]), 0) 
 
@@ -101,8 +104,6 @@ drivers_df  <- drivers_df[drivers_df$rocks_volcanic > 30,]
 # now remove rock as a driver: 
 drivers_df <- dplyr::select(drivers_df,-contains("rocks"))
 
-# there are multiple instances where we filter by row #'s
-replace_na <- c(13:21) # this is to replace NAs in % land cover, geology and soils with a 0
 numeric_drivers <- c(2:25) # this is for plotting correlation between all numeric drivers
 
 #look at correlation between driver variables
