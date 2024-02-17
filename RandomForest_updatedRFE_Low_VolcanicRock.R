@@ -53,6 +53,16 @@ test_numtree_average <- function(ntree_list) {
   return(MSE)
 }
 
+# Consider these columns for outlier removal 
+cols_to_consider <- c("med_si")
+sd_limit <- 1.5
+
+remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit = sd_limit){
+  z_scores <- as.data.frame(sapply(data_to_filter[cols], function(data) (abs(data-mean(data, na.rm = TRUE))/sd(data, na.rm = TRUE))))    
+  return(subset(data_to_filter, !rowSums(z_scores>limit, na.rm = TRUE)))
+}
+
+
 #read in drivers data
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 drivers<-read.csv("AllDrivers_Harmonized_20231129.csv")
@@ -106,6 +116,8 @@ drivers_df <- dplyr::select(drivers_df,-contains("rocks"))
 
 numeric_drivers <- c(2:25) # this is for plotting correlation between all numeric drivers
 
+# remove outliers
+drivers_df<-remove_outlier_rows(drivers_df)
 
 #look at correlation between driver variables
 driver_cor <- cor(drivers_df[,numeric_drivers]) # edit these rows when changing variables included 
@@ -265,15 +277,11 @@ legend("topleft", bty = "n", legend = paste("R2=",format(mean(rf_model2$rsq), di
 legend("topright", bty="n", legend = paste("MSE=", format(mean(rf_model2$mse), digits=3)))
 
 #playing around w partial dependence plots
-par.Long <- partial(rf_model2, pred.var = "rocks_volcanic")
-partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
-print(partial_plot)
-
 par.Long <- partial(rf_model2, pred.var = "P")
 partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
 print(partial_plot)
 
-par.Long <- partial(rf_model2, pred.var = "green_up_day")
+par.Long <- partial(rf_model2, pred.var = "rocks_volcanic")
 partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
 print(partial_plot)
 
@@ -285,19 +293,11 @@ par.Long <- partial(rf_model2, pred.var = "temp")
 partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
 print(partial_plot)
 
-par.Long <- partial(rf_model2, pred.var = "max_daylength")
+par.Long <- partial(rf_model2, pred.var = "snow_cover")
 partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
 print(partial_plot)
 
-par.Long <- partial(rf_model2, pred.var = "npp")
-partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
-print(partial_plot)
-
-par.Long <- partial(rf_model2, pred.var = "land_tundra")
-partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
-print(partial_plot)
-
-par.Long <- partial(rf_model2, pred.var = "land_shrubland_grassland")
+par.Long <- partial(rf_model2, pred.var = "green_up_day")
 partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
 print(partial_plot)
 
@@ -305,8 +305,5 @@ par.Long <- partial(rf_model2, pred.var = "q_95")
 partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
 print(partial_plot)
 
-par.Long <- partial(rf_model2, pred.var = "npp")
-partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
-print(partial_plot)
 
 # dev.off()

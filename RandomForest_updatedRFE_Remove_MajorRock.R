@@ -70,6 +70,9 @@ sapply(drivers, function(x) sum(is.na(x)))
 #remove sites w NA
 drivers<-drivers[complete.cases(drivers$npp),]
 
+#remove the dismal river --- huge outlier
+drivers <- drivers %>%  filter(!Stream_Name=='Dismal River')
+
 #select only features to be included in model
 drivers_df <- dplyr::select(drivers, -c("Stream_Name", "Stream_ID",                                     # remove metadata
                                         "Min_Daylength", "elevation_min_m", "elevation_max_m",          # remove duplicate drivers

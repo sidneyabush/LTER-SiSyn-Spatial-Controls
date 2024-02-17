@@ -23,6 +23,7 @@ require(googledrive)
 require(data.table)
 require(ggplot2)
 require(corrplot)
+require(pdp)
 
 #function to see variable importance by regime
 import_plot <- function(rf_model) {
@@ -137,12 +138,12 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE))+geom_point()+geom_line()+
 
 #tune mtry based on optimized ntree
 set.seed(123)
-tuneRF(drivers_df[,numeric_drivers], drivers_df[,1], ntreeTry = 1100, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(drivers_df[,numeric_drivers], drivers_df[,1], ntreeTry = 700, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 #run intial RF using tuned parameters
 set.seed(123)
 rf_model1<-randomForest(med_si~.,
-                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=1100,mtry=8)
+                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=700,mtry=8)
 
 #visualize output
 rf_model1
@@ -246,12 +247,12 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE))+geom_point()+geom_line()+
 kept_drivers<-drivers_df[,c(colnames(drivers_df) %in% predictors(result_rfe))]
 
 set.seed(123)
-tuneRF(kept_drivers, drivers_df[,1], ntreeTry = 800, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(kept_drivers, drivers_df[,1], ntreeTry = 900, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 #run optimized random forest model, with retuned ntree and mtry parameters
 set.seed(123)
 rf_model2<-randomForest(rf_formula,
-                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=800, mtry=4)
+                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=900, mtry=4)
 
 
 rf_model2
@@ -264,10 +265,6 @@ legend("topleft", bty = "n", legend = paste("R2=",format(mean(rf_model2$rsq), di
 legend("topright", bty="n", legend = paste("MSE=", format(mean(rf_model2$mse), digits=3)))
 
 #playing around w partial dependence plots
-par.Long <- partial(rf_model2, pred.var = "rocks_volcanic")
-partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
-print(partial_plot)
-
 par.Long <- partial(rf_model2, pred.var = "P")
 partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
 print(partial_plot)

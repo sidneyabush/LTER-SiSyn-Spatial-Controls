@@ -23,6 +23,7 @@ require(googledrive)
 require(data.table)
 require(ggplot2)
 require(corrplot)
+require(pdp)
 
 #function to see variable importance by regime
 import_plot <- function(rf_model) {
@@ -53,6 +54,16 @@ test_numtree_average <- function(ntree_list) {
   return(MSE)
 }
 
+# Consider these columns for outlier removal 
+cols_to_consider <- c("med_si")
+sd_limit <- 1.5
+
+remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit = sd_limit){
+  z_scores <- as.data.frame(sapply(data_to_filter[cols], function(data) (abs(data-mean(data, na.rm = TRUE))/sd(data, na.rm = TRUE))))    
+  return(subset(data_to_filter, !rowSums(z_scores>limit, na.rm = TRUE)))
+}
+
+
 #read in drivers data
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 drivers<-read.csv("AllDrivers_Harmonized_20231129.csv")
@@ -69,6 +80,9 @@ sapply(drivers, function(x) sum(is.na(x)))
 
 #remove sites w NA
 drivers<-drivers[complete.cases(drivers$npp),]
+
+#remove the dismal river --- huge outlier
+# drivers <- drivers %>%  filter(!Stream_Name=='Dismal River')
 
 #select only features to be included in model
 drivers_df <- dplyr::select(drivers, -c("Stream_Name", "Stream_ID",                                     # remove metadata
@@ -97,6 +111,9 @@ drivers_df[,replace_na]<-replace(drivers_df[,replace_na], is.na(drivers_df[,repl
 
 # convert all to numeric
 drivers_df <- drivers_df %>% mutate_if(is.integer, as.numeric)
+
+# remove outliers
+drivers_df<-remove_outlier_rows(drivers_df)
 
 #look at correlation between driver variables
 driver_cor <- cor(drivers_df[,numeric_drivers]) # edit these rows when changing variables included 
@@ -238,7 +255,7 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE))+geom_point()+geom_line()+
 kept_drivers<-drivers_df[,c(colnames(drivers_df) %in% predictors(result_rfe))]
 
 set.seed(123)
-tuneRF(kept_drivers, drivers_df[,1], ntreeTry = 700, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(kept_drivers, drivers_df[,1], ntreeTry = 1000, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 #run optimized random forest model, with retuned ntree and mtry parameters
 set.seed(123)
