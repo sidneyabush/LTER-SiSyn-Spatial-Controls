@@ -89,39 +89,46 @@ drivers_df <- dplyr::select(drivers, -c("Stream_Name", "Stream_ID",             
                                         "Min_Daylength", "elevation_min_m", "elevation_max_m",          # remove duplicate drivers
                                         "elevation_median_m", "num_days",
                                         "mean_si", "sd_si", "min_Si", "max_Si","CV_C",                  # remove Si variables
-                                        "mean_q", "med_q", "sd_q", "CV_Q", "min_Q", "max_Q",            # remove flow variables
-                                        "cvc_cvq", "slope",                                             # remove CQ
-                                        "major_rock", "major_soil"))                                    # remove major land, soil variables
+                                        "med_q", "sd_q", "CV_Q", "min_Q", "max_Q",            # remove flow variables
+                                        "cvc_cvq", "slope",                                                      # remove CQ
+                                        "major_rock", "major_soil", "major_land"))                      # remove major land, soil variables
 
 # there are also some drivers we dont want to include because they're not important to be expanded out (e.g., soil, geology if we switch to major rock)
 drivers_df <- dplyr::select(drivers_df,-contains("soil"))
 drivers_df <- dplyr::select(drivers_df,-contains("rock"))
+drivers_df <- dplyr::select(drivers_df,-contains("land"))
 
-
-## Land Cover
-drivers_df <- drivers_df[drivers_df$major_land %like% "crop",]
-
-## Need to remove land info for the lithology subset: 
-drivers_df <-drivers_df[,!c(colnames(drivers_df) %like% "land")]
 
 # change col names so it looks pretty: 
-names(drivers_df)[6]<-paste("drainage_area")
-names(drivers_df)[7]<-paste("snow_cover")
-names(drivers_df)[12]<-paste("green_up_day") 
-names(drivers_df)[16]<-paste("max_daylength") 
+names(drivers_df)[7]<-paste("drainage_area")
+names(drivers_df)[8]<-paste("snow_cover")
+names(drivers_df)[13]<-paste("green_up_day") 
+names(drivers_df)[17]<-paste("max_daylength") 
 
 # there are multiple instances where we filter by row #'s
-replace_na <- c(13:16) # this is to replace NAs in % land cover, geology and soils with a 0
-numeric_drivers <- c(2:16) # this is for plotting correlation between all numeric drivers
+# replace_na <- c(13:16) # this is to replace NAs in % land cover, geology and soils with a 0
+numeric_drivers <- c(2:15) # this is for plotting correlation between all numeric drivers
 
 # next let's replace the NA values for things like land cover % and geology % with a zero
-drivers_df[,replace_na]<-replace(drivers_df[,replace_na], is.na(drivers_df[,replace_na]), 0) 
+# drivers_df[,replace_na]<-replace(drivers_df[,replace_na], is.na(drivers_df[,replace_na]), 0) 
 
 # convert all to numeric
 drivers_df <- drivers_df %>% mutate_if(is.integer, as.numeric)
 
 # remove outliers
 drivers_df<-remove_outlier_rows(drivers_df)
+
+# chemostatic CQ slope
+# #drivers_df <- drivers_df[ which( drivers_df$slope > -0.1 & drivers_df$slope < 0.1) , ]
+# # mobilizing CQ slope
+# # drivers_df <- drivers_df[ which( drivers_df$slope > 0.1), ]
+# # diluting CQ slope
+# drivers_df <- drivers_df[ which( drivers_df$slope < -0.1), ]
+
+# drivers_df <- drivers_df[ which( drivers_df$slope < -0.1), ]
+
+# now remove P as a driver: 
+#drivers_df <- dplyr::select(drivers_df,-("mean_q"))
 
 #look at correlation between driver variables
 driver_cor <- cor(drivers_df[,numeric_drivers]) # edit these rows when changing variables included 
@@ -276,15 +283,15 @@ rf_model2
 randomForest::varImpPlot(rf_model2)
 
 lm_plot <- plot(rf_model2$predicted, drivers_df$med_si, xlab="Predicted", ylab="Observed", 
-                main= "Optimized RF Model - Cropland") + abline(a=0, b=1, col="red") + theme(text = element_text(size=20))
+                main= "Optimized RF Model - diluting") + abline(a=0, b=1, col="red") + theme(text = element_text(size=20))
 legend("topleft", bty = "n", legend = paste("R2=",format(mean(rf_model2$rsq), digits=3))) 
 legend("topright", bty="n", legend = paste("MSE=", format(mean(rf_model2$mse), digits=3)))
 
 #playing around w partial dependence plots
-par.Long <- partial(rf_model2, pred.var = "elevation_mean_m")
+par.Long <- partial(rf_model2, pred.var = "mean_q")
 partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
 print(partial_plot)
- 
+
 par.Long <- partial(rf_model2, pred.var = "green_up_day")
 partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
 print(partial_plot)
