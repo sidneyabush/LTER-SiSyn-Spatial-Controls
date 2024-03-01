@@ -89,8 +89,8 @@ drivers_df <- dplyr::select(drivers, -c("Stream_Name", "Stream_ID",             
                                         "Min_Daylength", "elevation_min_m", "elevation_max_m",          # remove duplicate drivers
                                         "elevation_median_m", "num_days",
                                         "mean_si", "sd_si", "min_Si", "max_Si","CV_C",                  # remove Si variables
-                                        "med_q", "sd_q", "CV_Q", "min_Q", "max_Q",            # remove flow variables
-                                        "cvc_cvq", "slope",                                                      # remove CQ
+                                        "mean_q", "med_q", "sd_q", "CV_Q", "min_Q", "max_Q",            # remove flow variables
+                                        "cvc_cvq",                                                      # remove CQ
                                         "major_rock", "major_soil", "major_land"))                      # remove major land, soil variables
 
 # there are also some drivers we dont want to include because they're not important to be expanded out (e.g., soil, geology if we switch to major rock)
@@ -98,23 +98,16 @@ drivers_df <- dplyr::select(drivers_df,-contains("soil"))
 drivers_df <- dplyr::select(drivers_df,-contains("rock"))
 drivers_df <- dplyr::select(drivers_df,-contains("land"))
 
+
 # change col names so it looks pretty: 
 names(drivers_df)[7]<-paste("drainage_area")
 names(drivers_df)[8]<-paste("snow_cover")
 names(drivers_df)[13]<-paste("green_up_day") 
-names(drivers_df)[17]<-paste("max_daylength")
-
-# Add water yield: 
-drivers_df$water_yield <- drivers_df$mean_q/drivers_df$drainage_area
-
-# now remove mean Q as a driver: 
-drivers_df <- dplyr::select(drivers_df,-("mean_q"))
-drivers_df <- dplyr::select(drivers_df,-("drainage_area"))
-
+names(drivers_df)[17]<-paste("max_daylength") 
 
 # there are multiple instances where we filter by row #'s
 # replace_na <- c(13:16) # this is to replace NAs in % land cover, geology and soils with a 0
-numeric_drivers <- c(2:16) # this is for plotting correlation between all numeric drivers
+numeric_drivers <- c(2:15) # this is for plotting correlation between all numeric drivers
 
 # next let's replace the NA values for things like land cover % and geology % with a zero
 # drivers_df[,replace_na]<-replace(drivers_df[,replace_na], is.na(drivers_df[,replace_na]), 0) 
@@ -124,6 +117,17 @@ drivers_df <- drivers_df %>% mutate_if(is.integer, as.numeric)
 
 # remove outliers
 drivers_df<-remove_outlier_rows(drivers_df)
+
+# chemostatic CQ slope
+#drivers_df <- drivers_df[ which( drivers_df$slope > -0.1 & drivers_df$slope < 0.1) , ]
+# mobilizing CQ slope
+drivers_df <- drivers_df[ which( drivers_df$slope > 0.1), ]
+# diluting CQ slope
+# drivers_df <- drivers_df[ which( drivers_df$slope < -0.1), ]
+
+
+# now remove P as a driver: 
+drivers_df <- dplyr::select(drivers_df,-("slope"))
 
 #look at correlation between driver variables
 driver_cor <- cor(drivers_df[,numeric_drivers]) # edit these rows when changing variables included 
@@ -156,12 +160,12 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE))+geom_point()+geom_line()+
 
 #tune mtry based on optimized ntree
 set.seed(123)
-tuneRF(drivers_df[,numeric_drivers], drivers_df[,1], ntreeTry = 900, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(drivers_df[,numeric_drivers], drivers_df[,1], ntreeTry = 2000, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 #run intial RF using tuned parameters
 set.seed(123)
 rf_model1<-randomForest(med_si~.,
-                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=900,mtry=5)
+                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=2000,mtry=4)
 
 #visualize output
 rf_model1
@@ -265,12 +269,12 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE))+geom_point()+geom_line()+
 kept_drivers<-drivers_df[,c(colnames(drivers_df) %in% predictors(result_rfe))]
 
 set.seed(123)
-tuneRF(kept_drivers, drivers_df[,1], ntreeTry = 1200, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(kept_drivers, drivers_df[,1], ntreeTry = 2000, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 #run optimized random forest model, with retuned ntree and mtry parameters
 set.seed(123)
 rf_model2<-randomForest(rf_formula,
-                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=1200, mtry=4)
+                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=2000, mtry=1)
 
 
 rf_model2
@@ -278,12 +282,12 @@ rf_model2
 randomForest::varImpPlot(rf_model2)
 
 lm_plot <- plot(rf_model2$predicted, drivers_df$med_si, xlab="Predicted", ylab="Observed", 
-                main= "Optimized RF Model - diluting") + abline(a=0, b=1, col="red") + theme(text = element_text(size=20))
+                main= "Optimized RF Model - Mobilizing") + abline(a=0, b=1, col="red") + theme(text = element_text(size=20))
 legend("topleft", bty = "n", legend = paste("R2=",format(mean(rf_model2$rsq), digits=3))) 
 legend("topright", bty="n", legend = paste("MSE=", format(mean(rf_model2$mse), digits=3)))
 
 #playing around w partial dependence plots
-par.Long <- partial(rf_model2, pred.var = "water_yield")
+par.Long <- partial(rf_model2, pred.var = "elevation_mean_m")
 partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
 print(partial_plot)
 

@@ -97,7 +97,8 @@ drivers_df <- dplyr::select(drivers, -c("Stream_Name", "Stream_ID",             
 drivers_df <- dplyr::select(drivers_df,-contains("soil"))
 
 ## Lithology
-drivers_df <- drivers_df[drivers_df$major_rock %like% "sedimentary" | drivers_df$major_rock %like% "carbonate",]
+# drivers_df <- drivers_df[drivers_df$major_rock %like% "sedimentary" | drivers_df$major_rock %like% "carbonate",]
+drivers_df <- drivers_df[drivers_df$major_rock %like% "sedimentary",]
 
 ## Need to remove rock info for the lithology subset: 
 drivers_df <-drivers_df[,!c(colnames(drivers_df) %like% "rock")]
@@ -152,12 +153,12 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE))+geom_point()+geom_line()+
 
 #tune mtry based on optimized ntree
 set.seed(123)
-tuneRF(drivers_df[,numeric_drivers], drivers_df[,1], ntreeTry = 1000, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(drivers_df[,numeric_drivers], drivers_df[,1], ntreeTry = 900, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 #run intial RF using tuned parameters
 set.seed(123)
 rf_model1<-randomForest(med_si~.,
-                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=1000,mtry=8)
+                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=900,mtry=8)
 
 #visualize output
 rf_model1
@@ -261,12 +262,12 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE))+geom_point()+geom_line()+
 kept_drivers<-drivers_df[,c(colnames(drivers_df) %in% predictors(result_rfe))]
 
 set.seed(123)
-tuneRF(kept_drivers, drivers_df[,1], ntreeTry = 800, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(kept_drivers, drivers_df[,1], ntreeTry = 900, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 #run optimized random forest model, with retuned ntree and mtry parameters
 set.seed(123)
 rf_model2<-randomForest(rf_formula,
-                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=800, mtry=7)
+                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=900, mtry=7)
 
 
 rf_model2
@@ -274,7 +275,7 @@ rf_model2
 randomForest::varImpPlot(rf_model2)
 
 lm_plot <- plot(rf_model2$predicted, drivers_df$med_si, xlab="Predicted", ylab="Observed", 
-                main= "Optimized RF Model - Sedimentary-Carbonate Rocks") + abline(a=0, b=1, col="red") + theme(text = element_text(size=20))
+                main= "Optimized RF Model - Sedimentary Rocks") + abline(a=0, b=1, col="red") + theme(text = element_text(size=20))
 legend("topleft", bty = "n", legend = paste("R2=",format(mean(rf_model2$rsq), digits=3))) 
 legend("topright", bty="n", legend = paste("MSE=", format(mean(rf_model2$mse), digits=3)))
 
