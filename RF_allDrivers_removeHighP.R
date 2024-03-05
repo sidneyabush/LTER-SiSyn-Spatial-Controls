@@ -100,11 +100,11 @@ drivers_df <- dplyr::select(drivers_df,-contains("soil"))
 names(drivers_df)[6]<-paste("drainage_area")
 names(drivers_df)[7]<-paste("snow_cover")
 names(drivers_df)[12]<-paste("green_up_day") 
-names(drivers_df)[28]<-paste("max_daylength") 
+names(drivers_df)[30]<-paste("max_daylength") 
 
 # there are multiple instances where we filter by row #'s
-replace_na <- c(13:25) # this is to replace NAs in % land cover, geology and soils with a 0
-numeric_drivers <- c(2:28) # this is for plotting correlation between all numeric drivers
+replace_na <- c(13:26) # this is to replace NAs in % land cover, geology and soils with a 0
+numeric_drivers <- c(2:30) # this is for plotting correlation between all numeric drivers
 
 # next let's replace the NA values for things like land cover % and geology % with a zero
 drivers_df[,replace_na]<-replace(drivers_df[,replace_na], is.na(drivers_df[,replace_na]), 0) 
@@ -112,9 +112,9 @@ drivers_df[,replace_na]<-replace(drivers_df[,replace_na], is.na(drivers_df[,repl
 # convert all to numeric
 drivers_df <- drivers_df %>% mutate_if(is.integer, as.numeric)
 
-# Remove very High volcanic Rocks
-#drivers_df  <- drivers_df[drivers_df$P < 4,]
-drivers_df  <- drivers_df[drivers_df$rocks_volcanic < 30,]
+# Remove very High P concentrations and High volcanic Rocks
+drivers_df  <- drivers_df[drivers_df$P < 5,]
+# drivers_df  <- drivers_df[drivers_df$rocks_volcanic < 30,]
 
 # remove outliers
 drivers_df<-remove_outlier_rows(drivers_df)
@@ -150,12 +150,12 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE))+geom_point()+geom_line()+
 
 #tune mtry based on optimized ntree
 set.seed(123)
-tuneRF(drivers_df[,numeric_drivers], drivers_df[,1], ntreeTry = 1000, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(drivers_df[,numeric_drivers], drivers_df[,1], ntreeTry = 1400, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 #run intial RF using tuned parameters
 set.seed(123)
 rf_model1<-randomForest(med_si~.,
-                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=1000,mtry=9)
+                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=1400,mtry=9)
 
 #visualize output
 rf_model1
@@ -260,12 +260,12 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE))+geom_point()+geom_line()+
 kept_drivers<-drivers_df[,c(colnames(drivers_df) %in% predictors(result_rfe))]
 
 set.seed(123)
-tuneRF(kept_drivers, drivers_df[,1], ntreeTry = 1100, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(kept_drivers, drivers_df[,1], ntreeTry = 1200, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 #run optimized random forest model, with retuned ntree and mtry parameters
 set.seed(123)
 rf_model2<-randomForest(rf_formula,
-                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=1100, mtry=8)
+                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=1200, mtry=4)
 
 
 rf_model2
@@ -273,7 +273,7 @@ rf_model2
 randomForest::varImpPlot(rf_model2)
 
 lm_plot <- plot(rf_model2$predicted, drivers_df$med_si, xlab="Predicted", ylab="Observed", 
-                main= "Optimized RF Model - All Drivers") + abline(a=0, b=1, col="red") + theme(text = element_text(size=20))
+                main= "Optimized RF Model - All Drivers, remove high median P") + abline(a=0, b=1, col="red") + theme(text = element_text(size=20))
 legend("topleft", bty = "n", legend = paste("R2=",format(mean(rf_model2$rsq), digits=3))) 
 legend("topright", bty="n", legend = paste("MSE=", format(mean(rf_model2$mse), digits=3)))
 

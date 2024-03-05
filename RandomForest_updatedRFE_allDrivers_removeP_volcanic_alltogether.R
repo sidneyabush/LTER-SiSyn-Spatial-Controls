@@ -91,7 +91,8 @@ drivers_df <- dplyr::select(drivers, -c("Stream_Name", "Stream_ID",             
                                         "mean_si", "sd_si", "min_Si", "max_Si","CV_C",                  # remove Si variables
                                         "mean_q", "med_q", "sd_q", "CV_Q", "min_Q", "max_Q",            # remove flow variables
                                         "cvc_cvq", "slope",                                             # remove CQ
-                                        "major_rock", "major_land", "major_soil"))                      # remove major rock, land, soil variables
+                                        "major_rock", "major_land", "major_soil",
+                                        "rocks_volcanic", "P"))                      # remove major rock, land, soil variables
 
 # there are also some drivers we dont want to include because they're not important to be expanded out (e.g., soil, geology if we switch to major rock)
 drivers_df <- dplyr::select(drivers_df,-contains("soil"))
@@ -113,7 +114,7 @@ drivers_df[,replace_na]<-replace(drivers_df[,replace_na], is.na(drivers_df[,repl
 drivers_df <- drivers_df %>% mutate_if(is.integer, as.numeric)
 
 # Remove very High P concentrations and High volcanic Rocks
-drivers_df  <- drivers_df[drivers_df$P < 4,]
+# drivers_df  <- drivers_df[drivers_df$P < 4,]
 # drivers_df  <- drivers_df[drivers_df$rocks_volcanic < 30,]
 
 # remove outliers
@@ -150,7 +151,7 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE))+geom_point()+geom_line()+
 
 #tune mtry based on optimized ntree
 set.seed(123)
-tuneRF(drivers_df[,numeric_drivers], drivers_df[,1], ntreeTry = 1000, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(drivers_df[,numeric_drivers], drivers_df[,1], ntreeTry = 1400, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 #run intial RF using tuned parameters
 set.seed(123)
@@ -310,7 +311,7 @@ par.Long <- partial(rf_model2, pred.var = "land_tundra")
 partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
 print(partial_plot)
 
-par.Long <- partial(rf_model2, pred.var = "land_shrubland_grassland")
+par.Long <- partial(rf_model2, pred.var = "snow_cover")
 partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
 print(partial_plot)
 
