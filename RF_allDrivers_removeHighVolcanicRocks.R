@@ -112,7 +112,7 @@ sapply(drivers, function(x) sum(is.na(x)))
 drivers_df <- drivers_df %>% mutate_if(is.integer, as.numeric)
 
 # Remove very High volcanic Rocks
-# drivers_df  <- drivers_df[drivers_df$rocks_volcanic < 30,]
+drivers_df  <- drivers_df[drivers_df$rocks_volcanic < 30,]
 
 # remove outliers
 drivers_df <- remove_outlier_rows(drivers_df)

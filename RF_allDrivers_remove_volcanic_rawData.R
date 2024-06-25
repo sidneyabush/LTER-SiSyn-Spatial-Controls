@@ -77,6 +77,10 @@ sapply(drivers, function(x) sum(is.na(x)))
 ## There is an issue with the Canadian sites and not having snow data:
 drivers <-drivers[complete.cases(drivers$prop_area),]
 
+# Remove sites with major volcanic rock
+drivers <- subset(drivers, !major_rock == "volcanic")
+
+
 
 #select only features to be included in model
 drivers_df <- dplyr::select(drivers, -c("Stream_Name", "Stream_ID",                                     # remove metadata
@@ -141,12 +145,12 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE))+geom_point()+geom_line()+
 
 #tune mtry based on optimized ntree
 set.seed(123)
-tuneRF(drivers_df[,numeric_drivers], drivers_df[,1], ntreeTry = 500, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(drivers_df[,numeric_drivers], drivers_df[,1], ntreeTry = 800, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 #run intial RF using tuned parameters
 set.seed(123)
 rf_model1<-randomForest(med_si~.,
-                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=500,mtry=10)
+                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=800,mtry=10)
 
 #visualize output
 rf_model1
@@ -251,12 +255,12 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE))+geom_point()+geom_line()+
 kept_drivers<-drivers_df[,c(colnames(drivers_df) %in% predictors(result_rfe))]
 
 set.seed(123)
-tuneRF(kept_drivers, drivers_df[,1], ntreeTry = 700, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(kept_drivers, drivers_df[,1], ntreeTry = 800, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 #run optimized random forest model, with retuned ntree and mtry parameters
 set.seed(123)
 rf_model2<-randomForest(rf_formula,
-                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=700, mtry=4)
+                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=800, mtry=10)
 
 
 rf_model2
@@ -275,23 +279,33 @@ legend("bottomright", bty="n", cex=1.5, legend = paste("MSE=", format(mean(rf_mo
 
 #playing around w partial dependence plots
 par.Long <- partial(rf_model2, pred.var = "P")
-partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
+partial_plot <-autoplot(par.Long, contour = T, size = 2) + 
+  theme_article() + 
+  theme(text = element_text(size=30))
 print(partial_plot)
 
 par.Long <- partial(rf_model2, pred.var = "green_up_day")
-partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
+partial_plot <-autoplot(par.Long, contour = T, size = 2) + 
+  theme_article() + 
+  theme(text = element_text(size=20))
 print(partial_plot)
 
 par.Long <- partial(rf_model2, pred.var = "precip")
-partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
+partial_plot <-autoplot(par.Long, contour = T, size = 2) + 
+  theme_article() + 
+  theme(text = element_text(size=20))
 print(partial_plot)
 
 par.Long <- partial(rf_model2, pred.var = "temp")
-partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
+partial_plot <-autoplot(par.Long, contour = T, size = 2) + 
+  theme_article() + 
+  theme(text = element_text(size=20))
 print(partial_plot)
 
 par.Long <- partial(rf_model2, pred.var = "snow_cover")
-partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
+partial_plot <-autoplot(par.Long, contour = T, size = 2) + 
+  theme_article() + 
+  theme(text = element_text(size=20))
 print(partial_plot)
 
 # dev.off()
