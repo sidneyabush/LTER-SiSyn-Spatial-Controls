@@ -14,7 +14,7 @@ librarian::shelf(remotes, RRF, caret, randomForest, DAAG, party, rpart, rpart.pl
 rm(list = ls())
 
 ## ------------------------------------------------------- ##
-              # Load Functions ----
+# Load Functions ----
 ## ------------------------------------------------------- ##
 # Function to see variable importance by regime
 import_plot <- function(rf_model) {
@@ -34,7 +34,7 @@ test_numtree_average <- function(ntree_list) {
   for (i in 1:length(ntree_list)) {
     
     set.seed(123)
-    rf_model<-randomForest(med_si~.,
+    rf_model<-randomForest(yields~.,
                            data=drivers_df, importance=TRUE, proximity=TRUE, 
                            ntree=ntree_list[[i]])
     # MSE[[i]]<-rf_model$err.rate[,1]
@@ -46,7 +46,7 @@ test_numtree_average <- function(ntree_list) {
 }
 
 # Consider these columns for outlier removal 
-cols_to_consider <- c("med_si")
+cols_to_consider <- c("yields")
 sd_limit <- 1.5
 
 remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit = sd_limit){
@@ -55,58 +55,54 @@ remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit =
 }
 
 ## ------------------------------------------------------- ##
-              # Read in and Tidy Data ----
+# Read in and Tidy Data ----
 ## ------------------------------------------------------- ##
 # Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 # Read in the adata
-drivers <- read.csv("AllDrivers_Harmonized_20240623.csv")
+drivers <- read.csv("AllDrivers_Harmonized_20240621.csv")
 
 # Remove any duplicated rows
 drivers <- drivers[!duplicated(drivers$Stream_ID),]
 
+# Add in yields
+drivers$CQ <- drivers$med_si * drivers$mean_q
+drivers$yields <- drivers$CQ / drivers$drainSqKm
+
 #remove variables not interested in ever including
-drivers<-dplyr::select(drivers, -c("cycle1","X","X.1","Name","ClimateZ","Latitude","Longitude","LTER","rndCoord.lat",
-                                   "rndCoord.lon", "Use_WRTDS"))
+drivers <- dplyr::select(drivers, -c("cycle1","X","X.1","Name","ClimateZ","Latitude","Longitude","LTER","rndCoord.lat",
+                                     "rndCoord.lon", "CQ", "drainSqKm"))
 
 # look at distribution of NA across columns
 sapply(drivers, function(x) sum(is.na(x)))
 
-#remove sites w NA
-drivers <-drivers[complete.cases(drivers$npp),]
+## Remove sites w NA
+## There is an issue with the Canadian sites and not having snow data:
+drivers <-drivers[complete.cases(drivers$prop_area),]
 
-#remove the dismal river --- huge outlier
-drivers <- drivers %>%  filter(!Stream_Name=='Dismal River')
 
 #select only features to be included in model
 drivers_df <- dplyr::select(drivers, -c("Stream_Name", "Stream_ID",                                     # remove metadata
                                         "Min_Daylength", "elevation_min_m", "elevation_max_m",          # remove duplicate drivers
                                         "elevation_median_m", "num_days",
-                                        "mean_si", "sd_si", "min_Si", "max_Si","CV_C",                  # remove Si variables
+                                        "mean_si", "sd_si", "min_Si", "max_Si","CV_C", "med_si",                  # remove Si variables
                                         "mean_q", "med_q", "sd_q", "CV_Q", "min_Q", "max_Q",            # remove flow variables
                                         "cvc_cvq", "slope",                                             # remove CQ
-                                        "major_land", "major_soil"))                                    # remove major land, soil variables
+                                        "major_rock", "major_land", "major_soil",
+                                        "rocks_volcanic"))                      # remove major rock, land, soil variables
 
 # there are also some drivers we dont want to include because they're not important to be expanded out (e.g., soil, geology if we switch to major rock)
 drivers_df <- dplyr::select(drivers_df,-contains("soil"))
 
-## Lithology
-# drivers_df <- drivers_df[drivers_df$major_rock %like% "volcanic" | drivers_df$major_rock %like% "pluto",]
-drivers_df <- drivers_df[drivers_df$major_rock %like% "volcanic",]
-
-## Need to remove rock info for the lithology subset: 
-drivers_df <-drivers_df[,!c(colnames(drivers_df) %like% "rock")]
-
 # change col names so it looks pretty: 
-names(drivers_df)[6]<-paste("drainage_area")
-names(drivers_df)[7]<-paste("snow_cover")
-names(drivers_df)[12]<-paste("green_up_day") 
-names(drivers_df)[25]<-paste("max_daylength") 
+names(drivers_df)[5]<-paste("snow_cover")
+names(drivers_df)[10]<-paste("green_up_day")
+names(drivers_df)[29]<-paste("max_daylength")
 
 # there are multiple instances where we filter by row #'s
-replace_na <- c(13:21) # this is to replace NAs in % land cover, geology and soils with a 0
-numeric_drivers <- c(2:25) # this is for plotting correlation between all numeric drivers
+replace_na <- c(11:25) # this is to replace NAs in % land cover, geology and soils with a 0
+numeric_drivers <- c(1:29) # this is for plotting correlation between all numeric drivers
 
 # next let's replace the NA values for things like land cover % and geology % with a zero
 drivers_df[,replace_na]<-replace(drivers_df[,replace_na], is.na(drivers_df[,replace_na]), 0) 
@@ -148,12 +144,12 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE))+geom_point()+geom_line()+
 
 #tune mtry based on optimized ntree
 set.seed(123)
-tuneRF(drivers_df[,numeric_drivers], drivers_df[,1], ntreeTry = 500, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(drivers_df[,numeric_drivers], drivers_df[,1], ntreeTry = 800, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 #run intial RF using tuned parameters
 set.seed(123)
-rf_model1<-randomForest(med_si~.,
-                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=500,mtry=8)
+rf_model1<-randomForest(yields~.,
+                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=800,mtry=9)
 
 #visualize output
 rf_model1
@@ -187,9 +183,9 @@ control <- rfeControl(functions = rfFuncs, # random forest
                       verbose = TRUE) # number of folds
 
 #divide data into predictor variables (y) and response variables (x)
-x<-drivers_df[,!(colnames(drivers_df)=="med_si")]
+x<-drivers_df[,!(colnames(drivers_df)=="yields")]
 
-y<-drivers_df$med_si
+y<-drivers_df$yields
 
 #run RFE, this will take a bit
 #we are allowing the number of variables retained to range from 1 to all of them here
@@ -203,11 +199,12 @@ result_rfe <- rfe(x = x,
 #print rfe results
 result_rfe
 
+
 #Put selected features into variable
 new_rf_input<-paste(predictors(result_rfe), collapse = "+")
 
 #Format those features into a formula to put in the optimized random forest model
-rf_formula<-formula(paste("med_si~", new_rf_input))
+rf_formula<-formula(paste("yields~", new_rf_input))
 
 #retune RF after RFE optimization
 test_numtree_optimized <- function(ntree_list) {
@@ -257,40 +254,49 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE))+geom_point()+geom_line()+
 kept_drivers<-drivers_df[,c(colnames(drivers_df) %in% predictors(result_rfe))]
 
 set.seed(123)
-tuneRF(kept_drivers, drivers_df[,1], ntreeTry = 500, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(kept_drivers, drivers_df[,1], ntreeTry = 400, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 #run optimized random forest model, with retuned ntree and mtry parameters
 set.seed(123)
 rf_model2<-randomForest(rf_formula,
-                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=500, mtry=7)
+                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=400, mtry=8)
 
 
 rf_model2
 
 randomForest::varImpPlot(rf_model2)
 
-lm_plot <- plot(rf_model2$predicted, drivers_df$med_si, xlab="Predicted", ylab="Observed", 
-                main= "Optimized RF Model - Volcanic Rocks") + abline(a=0, b=1, col="red") + theme(text = element_text(size=20))
-legend("topleft", bty = "n", legend = paste("R2=",format(mean(rf_model2$rsq), digits=3))) 
-legend("topright", bty="n", legend = paste("MSE=", format(mean(rf_model2$mse), digits=3)))
+lm_plot <- plot(rf_model2$predicted, drivers_df$yields, 
+                pch=16, cex= 1.5,
+                xlab="Predicted",
+                ylab="Observed", 
+                main= "Yields: Removed Lithology", 
+                cex.lab=1.5, cex.axis=1.5, cex.main=1.5, cex.sub=1.5) + 
+  abline(a=0, b=1, lwd = 3, col="#76933C", lty = 2) + 
+  theme(text = element_text(size=40), face = "bold")
+legend("topleft", bty = "n", cex=1.5, legend = paste("R2=",format(mean(rf_model2$rsq), digits=3))) 
+legend("bottomright", bty="n", cex=1.5, legend = paste("MSE=", format(mean(rf_model2$mse), digits=3)))
 
 #playing around w partial dependence plots
+par.Long <- partial(rf_model2, pred.var = "max_daylength")
+partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
+print(partial_plot)
+
+par.Long <- partial(rf_model2, pred.var = "npp")
+partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
+print(partial_plot)
+
+par.Long <- partial(rf_model2, pred.var = "land_evergreen_needleleaf_forest")
+partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
+print(partial_plot)
+
 par.Long <- partial(rf_model2, pred.var = "temp")
-partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
-print(partial_plot)
-
-par.Long <- partial(rf_model2, pred.var = "q_max_day")
-partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
-print(partial_plot)
-
-par.Long <- partial(rf_model2, pred.var = "P")
 partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
 print(partial_plot)
 
 par.Long <- partial(rf_model2, pred.var = "green_up_day")
 partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
 print(partial_plot)
-
 
 
 # dev.off()

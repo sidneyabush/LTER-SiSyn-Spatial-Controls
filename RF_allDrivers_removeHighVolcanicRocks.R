@@ -1,31 +1,22 @@
+## ------------------------------------------------------- ##
+# Housekeeping ----
+## ------------------------------------------------------- ##
+# Load needed libraries
+# install.packages("librarian")
 # install.packages(c("DAAG", "party", "rpart", "rpart.plot", "mlbench", "pROC", "tree"))
 # install.packages("tree")
 # install.packages("RRF")
 # install.packages("arsenal")
-require(remotes)
-require(RRF)
-require(caret)
-require(randomForest)
-library(DAAG)
-library(party)
-library(rpart)
-library(rpart.plot)
-library(mlbench)
-library(caret)
-library(pROC)
-library(tree)
-require(dplyr)
-require(plot.matrix)
-require(reshape2)
-require(rcartocolor)
-require(arsenal)
-require(googledrive)
-require(data.table)
-require(ggplot2)
-require(corrplot)
-require(pdp)
+librarian::shelf(remotes, RRF, caret, randomForest, DAAG, party, rpart, rpart.plot, mlbench, pROC, tree, dplyr,
+                 plot.matrix, reshape2, rcartocolor, arsenal, googledrive, data.table, ggplot2, corrplot, pdp)
 
-#function to see variable importance by regime
+# Clear environment
+rm(list = ls())
+
+## ------------------------------------------------------- ##
+# Load Functions ----
+## ------------------------------------------------------- ##
+# Function to see variable importance by regime
 import_plot <- function(rf_model) {
   
   importance_df<-as.data.frame(rf_model$importance)
@@ -63,26 +54,33 @@ remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit =
   return(subset(data_to_filter, !rowSums(z_scores>limit, na.rm = TRUE)))
 }
 
-
-#read in drivers data
+## ------------------------------------------------------- ##
+          # Read in and Tidy Data ----
+## ------------------------------------------------------- ##
+# Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
-drivers<-read.csv("AllDrivers_Harmonized_20231129.csv")
 
-#remove any duplicated rows
-drivers<-drivers[!duplicated(drivers$Stream_ID),]
+# Read in the adata
+drivers <- read.csv("AllDrivers_Harmonized_20240621.csv")
+
+
+# Remove any duplicated rows
+drivers <- drivers[!duplicated(drivers$Stream_ID),]
 
 #remove variables not interested in ever including
-drivers<-dplyr::select(drivers, -c("cycle1","X","X.1","Name","ClimateZ","Latitude","Longitude","LTER","rndCoord.lat",
+drivers <- dplyr::select(drivers, -c("cycle1","X","X.1","Name","ClimateZ","Latitude","Longitude","LTER","rndCoord.lat",
                                    "rndCoord.lon"))
 
-#look at distribution of NA across columns
+# look at distribution of NA across columns
 sapply(drivers, function(x) sum(is.na(x)))
 
-#remove sites w NA
-drivers<-drivers[complete.cases(drivers$npp),]
+## Remove sites w NA
+## There is an issue with the Canadian sites and not having snow data:
+drivers <-drivers[complete.cases(drivers$prop_area),]
+
 
 #remove the dismal river --- huge outlier
-# drivers <- drivers %>%  filter(!Stream_Name=='Dismal River')
+#drivers <- drivers %>%  filter(!Stream_Name=='Dismal River')
 
 #select only features to be included in model
 drivers_df <- dplyr::select(drivers, -c("Stream_Name", "Stream_ID",                                     # remove metadata
@@ -91,7 +89,7 @@ drivers_df <- dplyr::select(drivers, -c("Stream_Name", "Stream_ID",             
                                         "mean_si", "sd_si", "min_Si", "max_Si","CV_C",                  # remove Si variables
                                         "mean_q", "med_q", "sd_q", "CV_Q", "min_Q", "max_Q",            # remove flow variables
                                         "cvc_cvq", "slope",                                             # remove CQ
-                                        "major_rock", "major_land", "major_soil"))                      # remove major rock, land, soil variables
+                                        "major_land", "major_soil"))                                    # remove major land, soil variables
 
 # there are also some drivers we dont want to include because they're not important to be expanded out (e.g., soil, geology if we switch to major rock)
 drivers_df <- dplyr::select(drivers_df,-contains("soil"))
@@ -100,24 +98,24 @@ drivers_df <- dplyr::select(drivers_df,-contains("soil"))
 names(drivers_df)[6]<-paste("drainage_area")
 names(drivers_df)[7]<-paste("snow_cover")
 names(drivers_df)[12]<-paste("green_up_day") 
-names(drivers_df)[30]<-paste("max_daylength") 
+names(drivers_df)[33]<-paste("max_daylength") 
 
 # there are multiple instances where we filter by row #'s
-replace_na <- c(13:26) # this is to replace NAs in % land cover, geology and soils with a 0
-numeric_drivers <- c(2:30) # this is for plotting correlation between all numeric drivers
+replace_na <- c(14:29) # this is to replace NAs in % land cover, geology and soils with a 0
+numeric_drivers <- c(2:12, 14:33) # this is for plotting correlation between all numeric drivers
 
 # next let's replace the NA values for things like land cover % and geology % with a zero
-drivers_df[,replace_na]<-replace(drivers_df[,replace_na], is.na(drivers_df[,replace_na]), 0) 
+drivers_df[,replace_na] <- replace(drivers_df[,replace_na], is.na(drivers_df[,replace_na]), 0) 
+sapply(drivers, function(x) sum(is.na(x)))
 
 # convert all to numeric
 drivers_df <- drivers_df %>% mutate_if(is.integer, as.numeric)
 
 # Remove very High volcanic Rocks
-#drivers_df  <- drivers_df[drivers_df$P < 4,]
-drivers_df  <- drivers_df[drivers_df$rocks_volcanic < 30,]
+# drivers_df  <- drivers_df[drivers_df$rocks_volcanic < 30,]
 
 # remove outliers
-drivers_df<-remove_outlier_rows(drivers_df)
+drivers_df <- remove_outlier_rows(drivers_df)
 
 #look at correlation between driver variables
 driver_cor <- cor(drivers_df[,numeric_drivers]) # edit these rows when changing variables included 
@@ -125,7 +123,7 @@ corrplot(driver_cor, type="lower", pch.col = "black", tl.col = "black", diag = F
 
 #original model, all parameters
 #test number of trees 100-1000
-MSE_list<-test_numtree_average(c(100,200,300,400,500,600,700,800,900,1000,1100,1200,1300,1400,1500,1600,1700,1800,1900,2000))
+MSE_list <- test_numtree_average(c(100,200,300,400,500,600,700,800,900,1000,1100,1200,1300,1400,1500,1600,1700,1800,1900,2000))
 
 tre_list<-c(100,200,300,400,500,600,700,800,900,1000,1100,1200,1300,1400,1500,1600,1700,1800,1900,2000)
 

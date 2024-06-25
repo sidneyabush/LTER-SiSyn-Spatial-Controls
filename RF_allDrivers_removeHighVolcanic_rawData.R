@@ -14,7 +14,7 @@ librarian::shelf(remotes, RRF, caret, randomForest, DAAG, party, rpart, rpart.pl
 rm(list = ls())
 
 ## ------------------------------------------------------- ##
-              # Load Functions ----
+# Load Functions ----
 ## ------------------------------------------------------- ##
 # Function to see variable importance by regime
 import_plot <- function(rf_model) {
@@ -55,29 +55,32 @@ remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit =
 }
 
 ## ------------------------------------------------------- ##
-              # Read in and Tidy Data ----
+          # Read in and Tidy Data ----
 ## ------------------------------------------------------- ##
 # Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 # Read in the adata
-drivers <- read.csv("AllDrivers_Harmonized_20240623.csv")
+drivers <- read.csv("AllDrivers_Harmonized_20240621.csv")
+
 
 # Remove any duplicated rows
 drivers <- drivers[!duplicated(drivers$Stream_ID),]
 
 #remove variables not interested in ever including
-drivers<-dplyr::select(drivers, -c("cycle1","X","X.1","Name","ClimateZ","Latitude","Longitude","LTER","rndCoord.lat",
-                                   "rndCoord.lon", "Use_WRTDS"))
+drivers <- dplyr::select(drivers, -c("cycle1","X","X.1","Name","ClimateZ","Latitude","Longitude","LTER","rndCoord.lat",
+                                   "rndCoord.lon"))
 
 # look at distribution of NA across columns
 sapply(drivers, function(x) sum(is.na(x)))
 
-#remove sites w NA
-drivers <-drivers[complete.cases(drivers$npp),]
+## Remove sites w NA
+## There is an issue with the Canadian sites and not having snow data:
+drivers <-drivers[complete.cases(drivers$prop_area),]
+
 
 #remove the dismal river --- huge outlier
-drivers <- drivers %>%  filter(!Stream_Name=='Dismal River')
+#drivers <- drivers %>%  filter(!Stream_Name=='Dismal River')
 
 #select only features to be included in model
 drivers_df <- dplyr::select(drivers, -c("Stream_Name", "Stream_ID",                                     # remove metadata
@@ -91,31 +94,28 @@ drivers_df <- dplyr::select(drivers, -c("Stream_Name", "Stream_ID",             
 # there are also some drivers we dont want to include because they're not important to be expanded out (e.g., soil, geology if we switch to major rock)
 drivers_df <- dplyr::select(drivers_df,-contains("soil"))
 
-## Lithology
-# drivers_df <- drivers_df[drivers_df$major_rock %like% "volcanic" | drivers_df$major_rock %like% "pluto",]
-drivers_df <- drivers_df[drivers_df$major_rock %like% "volcanic",]
-
-## Need to remove rock info for the lithology subset: 
-drivers_df <-drivers_df[,!c(colnames(drivers_df) %like% "rock")]
-
 # change col names so it looks pretty: 
 names(drivers_df)[6]<-paste("drainage_area")
 names(drivers_df)[7]<-paste("snow_cover")
 names(drivers_df)[12]<-paste("green_up_day") 
-names(drivers_df)[25]<-paste("max_daylength") 
+names(drivers_df)[33]<-paste("max_daylength") 
 
 # there are multiple instances where we filter by row #'s
-replace_na <- c(13:21) # this is to replace NAs in % land cover, geology and soils with a 0
-numeric_drivers <- c(2:25) # this is for plotting correlation between all numeric drivers
+replace_na <- c(14:29) # this is to replace NAs in % land cover, geology and soils with a 0
+numeric_drivers <- c(2:12, 14:33) # this is for plotting correlation between all numeric drivers
 
 # next let's replace the NA values for things like land cover % and geology % with a zero
-drivers_df[,replace_na]<-replace(drivers_df[,replace_na], is.na(drivers_df[,replace_na]), 0) 
+drivers_df[,replace_na] <- replace(drivers_df[,replace_na], is.na(drivers_df[,replace_na]), 0) 
+sapply(drivers, function(x) sum(is.na(x)))
 
 # convert all to numeric
 drivers_df <- drivers_df %>% mutate_if(is.integer, as.numeric)
 
+# Remove very High volcanic Rocks
+drivers_df  <- drivers_df[drivers_df$rocks_volcanic < 30,]
+
 # remove outliers
-drivers_df<-remove_outlier_rows(drivers_df)
+drivers_df <- remove_outlier_rows(drivers_df)
 
 #look at correlation between driver variables
 driver_cor <- cor(drivers_df[,numeric_drivers]) # edit these rows when changing variables included 
@@ -123,7 +123,7 @@ corrplot(driver_cor, type="lower", pch.col = "black", tl.col = "black", diag = F
 
 #original model, all parameters
 #test number of trees 100-1000
-MSE_list<-test_numtree_average(c(100,200,300,400,500,600,700,800,900,1000,1100,1200,1300,1400,1500,1600,1700,1800,1900,2000))
+MSE_list <- test_numtree_average(c(100,200,300,400,500,600,700,800,900,1000,1100,1200,1300,1400,1500,1600,1700,1800,1900,2000))
 
 tre_list<-c(100,200,300,400,500,600,700,800,900,1000,1100,1200,1300,1400,1500,1600,1700,1800,1900,2000)
 
@@ -148,12 +148,12 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE))+geom_point()+geom_line()+
 
 #tune mtry based on optimized ntree
 set.seed(123)
-tuneRF(drivers_df[,numeric_drivers], drivers_df[,1], ntreeTry = 500, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(drivers_df[,numeric_drivers], drivers_df[,1], ntreeTry = 900, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 #run intial RF using tuned parameters
 set.seed(123)
 rf_model1<-randomForest(med_si~.,
-                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=500,mtry=8)
+                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=900,mtry=9)
 
 #visualize output
 rf_model1
@@ -257,12 +257,12 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE))+geom_point()+geom_line()+
 kept_drivers<-drivers_df[,c(colnames(drivers_df) %in% predictors(result_rfe))]
 
 set.seed(123)
-tuneRF(kept_drivers, drivers_df[,1], ntreeTry = 500, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(kept_drivers, drivers_df[,1], ntreeTry = 800, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 #run optimized random forest model, with retuned ntree and mtry parameters
 set.seed(123)
 rf_model2<-randomForest(rf_formula,
-                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=500, mtry=7)
+                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=800, mtry=8)
 
 
 rf_model2
@@ -270,20 +270,12 @@ rf_model2
 randomForest::varImpPlot(rf_model2)
 
 lm_plot <- plot(rf_model2$predicted, drivers_df$med_si, xlab="Predicted", ylab="Observed", 
-                main= "Optimized RF Model - Volcanic Rocks") + abline(a=0, b=1, col="red") + theme(text = element_text(size=20))
+                main= "Optimized RF Model - All Drivers, remove high volcanic rock") + abline(a=0, b=1, col="red") + theme(text = element_text(size=20))
 legend("topleft", bty = "n", legend = paste("R2=",format(mean(rf_model2$rsq), digits=3))) 
 legend("topright", bty="n", legend = paste("MSE=", format(mean(rf_model2$mse), digits=3)))
 
 #playing around w partial dependence plots
-par.Long <- partial(rf_model2, pred.var = "temp")
-partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
-print(partial_plot)
-
-par.Long <- partial(rf_model2, pred.var = "q_max_day")
-partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
-print(partial_plot)
-
-par.Long <- partial(rf_model2, pred.var = "P")
+par.Long <- partial(rf_model2, pred.var = "precip")
 partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
 print(partial_plot)
 
@@ -291,6 +283,40 @@ par.Long <- partial(rf_model2, pred.var = "green_up_day")
 partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
 print(partial_plot)
 
+par.Long <- partial(rf_model2, pred.var = "temp")
+partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
+print(partial_plot)
 
+par.Long <- partial(rf_model2, pred.var = "precip")
+partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
+print(partial_plot)
+
+par.Long <- partial(rf_model2, pred.var = "temp")
+partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
+print(partial_plot)
+
+par.Long <- partial(rf_model2, pred.var = "max_daylength")
+partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
+print(partial_plot)
+
+par.Long <- partial(rf_model2, pred.var = "npp")
+partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
+print(partial_plot)
+
+par.Long <- partial(rf_model2, pred.var = "land_tundra")
+partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
+print(partial_plot)
+
+par.Long <- partial(rf_model2, pred.var = "land_shrubland_grassland")
+partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
+print(partial_plot)
+
+par.Long <- partial(rf_model2, pred.var = "q_95")
+partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
+print(partial_plot)
+
+par.Long <- partial(rf_model2, pred.var = "npp")
+partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
+print(partial_plot)
 
 # dev.off()
