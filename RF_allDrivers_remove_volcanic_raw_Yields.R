@@ -74,6 +74,8 @@ drivers$yields <- drivers$CQ / drivers$drainSqKm
 drivers <- dplyr::select(drivers, -c("cycle1","X","X.1","Name","ClimateZ","Latitude","Longitude","LTER","rndCoord.lat",
                                      "rndCoord.lon", "CQ", "drainSqKm"))
 
+drivers$Climate <- drivers$Climate
+
 # look at distribution of NA across columns
 sapply(drivers, function(x) sum(is.na(x)))
 
@@ -81,6 +83,8 @@ sapply(drivers, function(x) sum(is.na(x)))
 ## There is an issue with the Canadian sites and not having snow data:
 drivers <-drivers[complete.cases(drivers$prop_area),]
 
+# Remove sites with major volcanic rock
+# drivers <- subset(drivers, !major_rock == "volcanic")
 
 #select only features to be included in model
 drivers_df <- dplyr::select(drivers, -c("Stream_Name", "Stream_ID",                                     # remove metadata
@@ -94,15 +98,17 @@ drivers_df <- dplyr::select(drivers, -c("Stream_Name", "Stream_ID",             
 
 # there are also some drivers we dont want to include because they're not important to be expanded out (e.g., soil, geology if we switch to major rock)
 drivers_df <- dplyr::select(drivers_df,-contains("soil"))
+drivers_df <- dplyr::select(drivers_df,-contains("rock"))
+
 
 # change col names so it looks pretty: 
 names(drivers_df)[5]<-paste("snow_cover")
 names(drivers_df)[10]<-paste("green_up_day")
-names(drivers_df)[29]<-paste("max_daylength")
+names(drivers_df)[25]<-paste("max_daylength")
 
 # there are multiple instances where we filter by row #'s
-replace_na <- c(11:25) # this is to replace NAs in % land cover, geology and soils with a 0
-numeric_drivers <- c(1:29) # this is for plotting correlation between all numeric drivers
+replace_na <- c(11:21) # this is to replace NAs in % land cover, geology and soils with a 0
+numeric_drivers <- c(1:25) # this is for plotting correlation between all numeric drivers
 
 # next let's replace the NA values for things like land cover % and geology % with a zero
 drivers_df[,replace_na]<-replace(drivers_df[,replace_na], is.na(drivers_df[,replace_na]), 0) 
@@ -144,12 +150,12 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE))+geom_point()+geom_line()+
 
 #tune mtry based on optimized ntree
 set.seed(123)
-tuneRF(drivers_df[,numeric_drivers], drivers_df[,1], ntreeTry = 800, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(drivers_df[,numeric_drivers], drivers_df[,1], ntreeTry = 1200, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 #run intial RF using tuned parameters
 set.seed(123)
 rf_model1<-randomForest(yields~.,
-                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=800,mtry=9)
+                        data=drivers_df, importance=TRUE, proximity=TRUE, ntree=1300,mtry=8)
 
 #visualize output
 rf_model1
@@ -279,24 +285,33 @@ legend("bottomright", bty="n", cex=1.5, legend = paste("MSE=", format(mean(rf_mo
 
 #playing around w partial dependence plots
 par.Long <- partial(rf_model2, pred.var = "max_daylength")
-partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
+partial_plot <-autoplot(par.Long, contour = T, size=2) + 
+  theme_article() + 
+  theme(text = element_text(size=30))
 print(partial_plot)
 
 par.Long <- partial(rf_model2, pred.var = "npp")
-partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
-print(partial_plot)
-
-par.Long <- partial(rf_model2, pred.var = "land_evergreen_needleleaf_forest")
-partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
-print(partial_plot)
-
-par.Long <- partial(rf_model2, pred.var = "temp")
-partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
+partial_plot <-autoplot(par.Long, contour = T, size=2) + 
+  theme_article() + 
+  theme(text = element_text(size=30))
 print(partial_plot)
 
 par.Long <- partial(rf_model2, pred.var = "green_up_day")
-partial_plot <-autoplot(par.Long, contour = T) + theme_bw() + theme(text = element_text(size=20))
+partial_plot <-autoplot(par.Long, contour = T, size=2) + 
+  theme_article() + 
+  theme(text = element_text(size=30))
 print(partial_plot)
 
+par.Long <- partial(rf_model2, pred.var = "N")
+partial_plot <-autoplot(par.Long, contour = T, size=2) + 
+  theme_article() + 
+  theme(text = element_text(size=30))
+print(partial_plot)
+
+par.Long <- partial(rf_model2, pred.var = "temp")
+partial_plot <-autoplot(par.Long, contour = T, size=2) + 
+  theme_article() + 
+  theme(text = element_text(size=30))
+print(partial_plot)
 
 # dev.off()
