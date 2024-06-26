@@ -272,10 +272,10 @@ rf_model2
 
 randomForest::varImpPlot(rf_model2)
 
-lm_plot <- plot(rf_model2$predicted, drivers_df$yields, 
+lm_plot <- plot(log(rf_model2$predicted), log(drivers_df$yields), 
                 pch=16, cex= 1.5,
-                xlab="Predicted",
-                ylab="Observed", 
+                xlab="log(Predicted)",
+                ylab="log(Observed)", 
                 main= "Yields: Removed Lithology", 
                 cex.lab=1.5, cex.axis=1.5, cex.main=1.5, cex.sub=1.5) + 
   abline(a=0, b=1, lwd = 3, col="#76933C", lty = 2) + 
