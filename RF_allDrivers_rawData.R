@@ -1,21 +1,11 @@
-## ------------------------------------------------------- ##
-# Housekeeping ----
-## ------------------------------------------------------- ##
 # Load needed libraries
-# install.packages("librarian")
-# install.packages(c("DAAG", "party", "rpart", "rpart.plot", "mlbench", "pROC", "tree"))
-# install.packages("tree")
-# install.packages("RRF")
-# install.packages("arsenal")
 librarian::shelf(remotes, RRF, caret, randomForest, DAAG, party, rpart, rpart.plot, mlbench, pROC, tree, dplyr,
-                 plot.matrix, reshape2, rcartocolor, arsenal, googledrive, data.table, ggplot2, corrplot, pdp)
+                 plot.matrix, reshape2, rcartocolor, arsenal, googledrive, data.table, ggplot2, corrplot, pdp, shapviz)
 
 # Clear environment
 rm(list = ls())
 
-## ------------------------------------------------------- ##
 # Load Functions ----
-## ------------------------------------------------------- ##
 # Function to see variable importance by regime
 import_plot <- function(rf_model) {
   
@@ -24,11 +14,11 @@ import_plot <- function(rf_model) {
   
   importance_melt<-melt(importance_df, id.vars=c("MeanDecreaseAccuracy", "MeanDecreaseGini", "driver"))
   
-  ggplot(importance_melt, aes(driver, value))+geom_point()+facet_wrap(~variable)+theme_article()+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  ggplot(importance_melt, aes(driver, value))+geom_point()+facet_wrap(~variable)+theme_bw()+theme(axis.text.x = element_text(angle = 45, hjust = 1))
   
 }
 
-####function to test ntree - change the internal function to reflect the RF model that you are using
+# Function to test ntree - change the internal function to reflect the RF model that you are using
 test_numtree_average <- function(ntree_list) {
   MSE<-list()
   for (i in 1:length(ntree_list)) {
@@ -37,7 +27,6 @@ test_numtree_average <- function(ntree_list) {
     rf_model<-randomForest(med_si~.,
                            data=drivers_df, importance=TRUE, proximity=TRUE, 
                            ntree=ntree_list[[i]])
-    # MSE[[i]]<-rf_model$err.rate[,1]
     MSE[[i]]<-rf_model$mse
     
     
@@ -45,77 +34,59 @@ test_numtree_average <- function(ntree_list) {
   return(MSE)
 }
 
-# Consider these columns for outlier removal 
 cols_to_consider <- c("med_si")
 sd_limit <- 1.5
-
-remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit = sd_limit){
-  z_scores <- as.data.frame(sapply(data_to_filter[cols], function(data) (abs(data-mean(data, na.rm = TRUE))/sd(data, na.rm = TRUE))))    
-  return(subset(data_to_filter, !rowSums(z_scores>limit, na.rm = TRUE)))
+remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit = sd_limit) {
+  # Calculate Z-scores directly and filter out rows with Z-scores exceeding the limit
+  z_scores <- sapply(data_to_filter[cols], function(data) abs((data - mean(data, na.rm = TRUE)) / sd(data, na.rm = TRUE)))
+  
+  # Use rowSums to filter out rows with any Z-scores above the limit
+  return(data_to_filter[rowSums(z_scores > limit, na.rm = TRUE) == 0, ])
 }
 
-## ------------------------------------------------------- ##
-          # Read in and Tidy Data ----
-## ------------------------------------------------------- ##
+# Read in and tidy data ----
 # Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
-# Read in the adata
-drivers <- read.csv("AllDrivers_Harmonized_20240621.csv")
+drivers_df <- read.csv("AllDrivers_Harmonized_20240621.csv") %>%
+  distinct(Stream_ID, .keep_all = TRUE) %>%    # Remove duplicate rows based on Stream_ID
+  select(-cycle1, -X, -X.1, -Name, -ClimateZ, -Latitude, -Longitude, -LTER, -rndCoord.lat, -rndCoord.lon) %>%  # Remove unwanted variables
+  filter(complete.cases(prop_area)) %>%        # Remove rows with NA in prop_area
+  select(-Stream_Name, -Stream_ID, -Min_Daylength, -elevation_min_m, -elevation_max_m, -elevation_median_m, 
+         -num_days, -mean_si, -sd_si, -min_Si, -max_Si, -CV_C, 
+         -mean_q, -med_q, -sd_q, -CV_Q, -min_Q, -max_Q, 
+         -cvc_cvq, -slope, -major_land, -major_soil, -major_rock) %>%  # Select features for the model
+  select(-contains("soil"))                    # Remove soil-related variables
 
+# Change specific column names
+colnames(drivers_df)[c(6, 7, 12, 32)] <- c("drainage_area", "snow_cover", "green_up_day", "max_daylength")
 
-# Remove any duplicated rows
-drivers <- drivers[!duplicated(drivers$Stream_ID),]
-
-#remove variables not interested in ever including
-drivers <- dplyr::select(drivers, -c("cycle1","X","X.1","Name","ClimateZ","Latitude","Longitude","LTER","rndCoord.lat",
-                                   "rndCoord.lon"))
-
-# look at distribution of NA across columns
-sapply(drivers, function(x) sum(is.na(x)))
-
-## Remove sites w NA
-## There is an issue with the Canadian sites and not having snow data:
-drivers <-drivers[complete.cases(drivers$prop_area),]
-
-#select only features to be included in model
-drivers_df <- dplyr::select(drivers, -c("Stream_Name", "Stream_ID",                                     # remove metadata
-                                        "Min_Daylength", "elevation_min_m", "elevation_max_m",          # remove duplicate drivers
-                                        "elevation_median_m", "num_days",
-                                        "mean_si", "sd_si", "min_Si", "max_Si","CV_C",                  # remove Si variables
-                                        "mean_q", "med_q", "sd_q", "CV_Q", "min_Q", "max_Q",            # remove flow variables
-                                        "cvc_cvq", "slope",                                             # remove CQ
-                                        "major_land", "major_soil", "major_rock"))                                    # remove major land, soil variables
-
-# there are also some drivers we dont want to include because they're not important to be expanded out (e.g., soil, geology if we switch to major rock)
-drivers_df <- dplyr::select(drivers_df,-contains("soil"))
-
-# change col names so it looks pretty: 
-names(drivers_df)[6]<-paste("drainage_area")
-names(drivers_df)[7]<-paste("snow_cover")
-names(drivers_df)[12]<-paste("green_up_day") 
-names(drivers_df)[32]<-paste("max_daylength") 
-
-# there are multiple instances where we filter by row #'s
-replace_na <- c(13:28) # this is to replace NAs in % land cover, geology and soils with a 0
-numeric_drivers <- c(2:32) # this is for plotting correlation between all numeric drivers
-
-# next let's replace the NA values for things like land cover % and geology % with a zero
-drivers_df[,replace_na] <- replace(drivers_df[,replace_na], is.na(drivers_df[,replace_na]), 0) 
+# Check distribution of NA across columns (if needed for debugging)
 sapply(drivers_df, function(x) sum(is.na(x)))
 
-# convert all to numeric
-drivers_df <- drivers_df %>% mutate_if(is.integer, as.numeric)
+# Define columns for replacing NAs and converting to numeric
+replace_na <- 13:28  # Indices for % land cover, geology, and soils
+numeric_drivers <- 2:32  # Indices for numeric drivers
 
-# remove outliers
+# Replace NA values in the specified columns with 0
+drivers_df[, replace_na] <- lapply(drivers_df[, replace_na], function(x) replace(x, is.na(x), 0))
+
+# Convert all integer columns to numeric in one step
+drivers_df <- drivers_df %>% 
+  mutate(across(where(is.integer), as.numeric))
+
+# Remove outliers using custom function
 drivers_df <- remove_outlier_rows(drivers_df)
 
-#look at correlation between driver variables
+# Optionally, check distribution of NAs across all columns, it should be 0 for all columns
+sapply(drivers_df, function(x) sum(is.na(x)))
+
+# Plot correlation between driver variables ----
 driver_cor <- cor(drivers_df[,numeric_drivers]) # edit these rows when changing variables included 
 corrplot(driver_cor, type="lower", pch.col = "black", tl.col = "black", diag = F)
 
-#original model, all parameters
-#test number of trees 100-1000
+# Original model setup using all parameters ----
+# Test number of trees 100-1000
 MSE_list <- test_numtree_average(c(100,200,300,400,500,600,700,800,900,1000,1100,1200,1300,1400,1500,1600,1700,1800,1900,2000))
 
 tre_list<-c(100,200,300,400,500,600,700,800,900,1000,1100,1200,1300,1400,1500,1600,1700,1800,1900,2000)
@@ -135,28 +106,28 @@ MSE_df$tree_num<-unlist(MSE_num)
 MSE_mean<-MSE_df %>% group_by(tree_num) %>%
   summarise(mean_MSE=mean(`unlist(MSE_list)`))
 
-#visualize and select number of trees that gives the minimum MSE error
+# Visualize and select number of trees that gives the minimum MSE error
 ggplot(MSE_mean, aes(tree_num, mean_MSE))+geom_point()+geom_line()+
   theme_classic()+scale_x_continuous(breaks = seq(100,2000,100))+theme(text = element_text(size=20))
 
-#tune mtry based on optimized ntree
+# Tune mtry based on optimized ntree
 set.seed(123)
 tuneRF(drivers_df[,numeric_drivers], drivers_df[,1], ntreeTry = 300, stepFactor = 1, improve = 0.5, plot = FALSE)
 
-#run intial RF using tuned parameters
+# Run initial RF using tuned parameters
 set.seed(123)
 rf_model1<-randomForest(med_si~.,
                         data=drivers_df, importance=TRUE, proximity=TRUE, ntree=300,mtry=10)
 
-#visualize output
+# Visualize output
 rf_model1
 
-#visualize variable importance
+# Visualize variable importance
 randomForest::varImpPlot(rf_model1)
 
-#set seeds for RFE
+# Set seeds for RFE
 size=ncol(drivers_df)-1
-#this is number of cross validation repeats and folds
+# This is number of cross validation repeats and folds
 cv_repeats = 5
 cv_number = 5
 
@@ -171,7 +142,7 @@ for (i in 1:25) {
 
 seeds[[total_repeats]]<-123
 
-#set control functions for recursive feature elimination on RF
+# Set control functions for recursive feature elimination on RF
 control <- rfeControl(functions = rfFuncs, # random forest
                       method = "repeatedcv", # repeated cv
                       repeats = cv_repeats, # number of repeats
@@ -179,31 +150,30 @@ control <- rfeControl(functions = rfFuncs, # random forest
                       seeds = seeds,
                       verbose = TRUE) # number of folds
 
-#divide data into predictor variables (y) and response variables (x)
+# Divide data into predictor variables (y) and response variables (x)
 x<-drivers_df[,!(colnames(drivers_df)=="med_si")]
 
 y<-drivers_df$med_si
 
-#run RFE, this will take a bit
-#we are allowing the number of variables retained to range from 1 to all of them here
-#to change that changes input into the "sizes" variable
+# Run RFE - this will take a bit
+# We are allowing the number of variables retained to range from 1 to all of them here
+# To change that changes input into the "sizes" variable
 set.seed(123)
 result_rfe <- rfe(x = x, 
                   y = y, 
                   sizes = c(1:size),
                   rfeControl = control)
 
-#print rfe results
+# Print rfe results
 result_rfe
 
-
-#Put selected features into variable
+# Put selected features into variable
 new_rf_input<-paste(predictors(result_rfe), collapse = "+")
 
-#Format those features into a formula to put in the optimized random forest model
+# Format those features into a formula to put in the optimized random forest model
 rf_formula<-formula(paste("med_si~", new_rf_input))
 
-#retune RF after RFE optimization
+# Re-tune RF after RFE optimization
 test_numtree_optimized <- function(ntree_list) {
   
   MSE<-list()
@@ -243,17 +213,17 @@ MSE_df$tree_num<-unlist(MSE_num)
 MSE_mean<-MSE_df %>% group_by(tree_num) %>%
   summarise(mean_MSE=mean(`unlist(MSE_list)`))
 
-#visualize and select number of trees that gives the minimum MSE error
+# Visualize and select number of trees that gives the minimum MSE error
 ggplot(MSE_mean, aes(tree_num, mean_MSE))+geom_point()+geom_line()+
   theme_classic()+scale_x_continuous(breaks = seq(100,2000,100))+theme(text = element_text(size=20))
 
-#retune mtry
+# Re-tune mtry
 kept_drivers<-drivers_df[,c(colnames(drivers_df) %in% predictors(result_rfe))]
 
 set.seed(123)
 tuneRF(kept_drivers, drivers_df[,1], ntreeTry = 300, stepFactor = 1, improve = 0.5, plot = FALSE)
 
-#run optimized random forest model, with retuned ntree and mtry parameters
+# Run optimized random forest model, with re-tuned "ntree" and "mtry" parameters
 set.seed(123)
 rf_model2<-randomForest(rf_formula,
                         data=drivers_df, importance=TRUE, proximity=TRUE, ntree=300, mtry=4)
@@ -262,9 +232,6 @@ rf_model2<-randomForest(rf_formula,
 rf_model2
 
 randomForest::varImpPlot(rf_model2)
-
-library(edarf)
-
 
 lm_plot <- plot(rf_model2$predicted, drivers_df$med_si, pch = 16, cex=1.5,
                 xlab="Predicted", 
@@ -276,66 +243,19 @@ lm_plot <- plot(rf_model2$predicted, drivers_df$med_si, pch = 16, cex=1.5,
 legend("topleft", bty = "n", cex=1.5, legend = paste("R2=",format(mean(rf_model2$rsq), digits=3))) 
 legend("bottomright", bty="n", cex= 1.5, legend = paste("MSE=", format(mean(rf_model2$mse), digits=3)))
 
-#playing around w partial dependence plots
-par.Long <- partial(rf_model2, pred.var = "P")
-partial_plot <-autoplot(par.Long, contour = T) + 
-  theme_article() + 
-  theme(text = element_text(size=20))
-print(partial_plot)
+# Define a function to generate and print partial dependence plots
+plot_partial_dependence <- function(model, variable) {
+  par.Long <- partial(model, pred.var = variable)
+  partial_plot <- autoplot(par.Long, contour = TRUE) + 
+    theme_bw() + 
+    theme(text = element_text(size = 20))
+  print(partial_plot)
+}
 
-par.Long <- partial(rf_model2, pred.var = "temp")
-partial_plot <-autoplot(par.Long, contour = T) + 
-  theme_article() + 
-  theme(text = element_text(size=20))
-print(partial_plot)
+# List of variables to plot
+variables <- c("P", "temp", "green_up_day", "precip")
 
-par.Long <- partial(rf_model2, pred.var = "green_up_day")
-partial_plot <-autoplot(par.Long, contour = T) + 
-  theme_article() + 
-  theme(text = element_text(size=20))
-print(partial_plot)
+# Apply the function for each variable
+lapply(variables, function(var) plot_partial_dependence(rf_model2, var))
 
-par.Long <- partial(rf_model2, pred.var = "precip")
-partial_plot <- autoplot(par.Long, contour = T) + 
-  theme_article() + 
-  theme(text = element_text(size=20))
-print(partial_plot)
-
-## Plot some correlations: ----
-# ggplot(drivers_df, aes(P, green_up_day))+
-#   geom_point()+
-#   theme_classic()+
-#   theme(text = element_text(size=20))
-# 
-# ggplot(drivers_df, aes(P, precip))+
-#   geom_point()+
-#   theme_classic()+
-#   theme(text = element_text(size=20))   
-# 
-# ggplot(drivers_df, aes(P, N))+
-#   geom_point()+
-#   theme_classic()+
-#   theme(text = element_text(size=20))  
-# 
-# ggplot(drivers_df, aes(P, npp))+
-#   geom_point()+
-#   theme_classic()+
-#   theme(text = element_text(size=20)) 
-# 
-# ggplot(drivers_df, aes(P, land_shrubland_grassland))+
-#   geom_point()+
-#   theme_classic()+
-#   theme(text = element_text(size=20)) 
-# 
-# ggplot(drivers_df, aes(P, rocks_sedimentary))+
-#   geom_point()+
-#   theme_classic()+
-#   theme(text = element_text(size=20)) 
-# 
-# ggplot(drivers_df, aes(P, rocks_metamorphic))+
-#   geom_point()+
-#   theme_classic()+
-#   theme(text = element_text(size=20)) 
-
-# dev.off()
 
