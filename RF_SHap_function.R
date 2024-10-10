@@ -271,3 +271,6 @@ plot_shap_dependence_iml <- function(predictor, feature) {
 # Generate PDP plots for all important variables
 important_features <- feature_importance$feature  # Get the most important features
 lapply(important_features, function(var) plot_shap_dependence_iml(predictor, var))
+
+
+## SHAP values Heat Map
