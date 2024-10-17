@@ -1,12 +1,6 @@
 ## ------------------------------------------------------- ##
 # Housekeeping ----
 ## ------------------------------------------------------- ##
-# Load needed libraries
-# install.packages("librarian")
-# install.packages(c("DAAG", "party", "rpart", "rpart.plot", "mlbench", "pROC", "tree"))
-# install.packages("tree")
-# install.packages("RRF")
-# install.packages("arsenal")
 librarian::shelf(remotes, RRF, caret, randomForest, DAAG, party, rpart, rpart.plot, mlbench, pROC, tree, dplyr,
                  plot.matrix, reshape2, rcartocolor, arsenal, googledrive, data.table, ggplot2, corrplot, pdp)
 
@@ -61,7 +55,7 @@ remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit =
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 # Read in the adata
-drivers <- read.csv("AllDrivers_Harmonized_WRTDS_20240623.csv")
+drivers <- read.csv("AllDrivers_Harmonized_20241015_WRTDS_MD_KG_rawNP.csv")
 
 # Remove any duplicated rows
 drivers <- drivers[!duplicated(drivers$Stream_ID),]
@@ -74,18 +68,18 @@ drivers<-dplyr::select(drivers, -c("cycle1","X","X.1","Name","ClimateZ","Latitud
 sapply(drivers, function(x) sum(is.na(x)))
 
 ## This is a decision that will need to be revisited later: 
-drivers$permafrost[is.na(drivers$permafrost)] <- 0
+#drivers$permafrost[is.na(drivers$permafrost)] <- 0
 
 ## Remove sites w NA
-## There is an issue with the Canadian sites and not having snow data:
-drivers <-drivers[complete.cases(drivers$prop_area),]
-drivers <- drivers[complete.cases(drivers$npp),]
-## Germany is missing ET: 
-drivers <- drivers[complete.cases(drivers$cycle0),]
-# Lower Atchafalaya is missing Drainage Area
-drivers <- drivers[complete.cases(drivers$drainSqKm),]
-# None of the HYBAM sites have P
-drivers <- drivers[complete.cases(drivers$P),]
+# ## There is an issue with the Canadian sites and not having snow data:
+# drivers <-drivers[complete.cases(drivers$prop_area),]
+# drivers <- drivers[complete.cases(drivers$npp),]
+# ## Germany is missing ET: 
+# drivers <- drivers[complete.cases(drivers$cycle0),]
+# # Lower Atchafalaya is missing Drainage Area
+# drivers <- drivers[complete.cases(drivers$drainSqKm),]
+# # None of the HYBAM sites have P
+# drivers <- drivers[complete.cases(drivers$P),]
 
 
 #remove the dismal river --- huge outlier
