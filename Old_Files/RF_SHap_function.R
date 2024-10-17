@@ -64,13 +64,14 @@ remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit =
 # Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
-drivers_df <- read.csv("AllDrivers_Harmonized_20240621.csv") %>%
+drivers_df <- read.csv("AllDrivers_Harmonized_20241017_WRTDS_MD_KG_NP.csv") %>%
   distinct(Stream_ID, .keep_all = TRUE) %>%
-  select(-cycle1, -X, -X.1, -Name, -ClimateZ, -Latitude, -Longitude, -LTER, -rndCoord.lat, -rndCoord.lon) %>%
+  select(-cycle1, -X, -X.1, -Name, -ClimateZ, -Latitude, -Longitude, 
+         -LTER, -rndCoord.lat, -rndCoord.lon) %>%
   filter(complete.cases(prop_area)) %>%
-  select(-Stream_Name, -Stream_ID, -Min_Daylength, -elevation_min_m, -elevation_max_m, -elevation_median_m, 
-         -num_days, -mean_si, -sd_si, -min_Si, -max_Si, -CV_C, -mean_q, -med_q, -sd_q, -CV_Q, -min_Q, -max_Q,
-         -cvc_cvq, -slope, -major_land, -major_soil, -major_rock) %>%
+  # select(-Stream_Name, -Stream_ID, -Min_Daylength, -elevation_min_m, -elevation_max_m, -elevation_median_m, 
+  #        -num_days, -mean_si, -sd_si, -min_Si, -max_Si, -CV_C, -mean_q, -med_q, -sd_q, -CV_Q, -min_Q, -max_Q,
+  #        -cvc_cvq, -slope, -major_land, -major_soil, -major_rock) %>%
   select(-contains("soil"))  # Remove soil-related variables
 
 # Change specific column names
