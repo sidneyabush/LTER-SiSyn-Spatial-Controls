@@ -105,6 +105,7 @@ MSE_num <- list()
 for (i in 1:length(tre_list)) {
   MSE_num[[i]] <- rep(tre_list[i], tre_list[i])
 }
+
 MSE_df$tree_num <- unlist(MSE_num)
 MSE_mean <- MSE_df %>%
   group_by(tree_num) %>%
