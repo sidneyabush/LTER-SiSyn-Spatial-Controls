@@ -11,12 +11,9 @@ set.seed(123)
 # Load Functions ----
 # Function to see variable importance by regime
 import_plot <- function(rf_model) {
-  
   importance_df <- as.data.frame(rf_model$importance)
   importance_df$driver <- rownames(importance_df)
-  
   importance_melt <- melt(importance_df, id.vars = c("MeanDecreaseAccuracy", "MeanDecreaseGini", "driver"))
-  
   ggplot(importance_melt, aes(driver, value)) +
     geom_point() +
     facet_wrap(~variable) +
@@ -27,28 +24,24 @@ import_plot <- function(rf_model) {
 # Function to test ntree - change the internal function to reflect the RF model that you are using
 test_numtree_average <- function(ntree_list) {
   MSE <- list()
-  
   for (i in 1:length(ntree_list)) {
     # Set seed for each model training step within the loop
     set.seed(123)
     rf_model <- randomForest(med_si ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = ntree_list[[i]])
     MSE[[i]] <- rf_model$mse
   }
-  
   return(MSE)
 }
 
 # Function to test different numbers of trees (ntree) for optimized RF
 test_numtree_optimized <- function(ntree_list) {
   MSE <- list()
-  
   for (i in 1:length(ntree_list)) {
     # Set seed for each model training step
     set.seed(123)
     rf_model <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = ntree_list[[i]])
     MSE[[i]] <- rf_model$mse
   }
-  
   return(MSE)
 }
 
@@ -66,26 +59,33 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 drivers_df <- read.csv("AllDrivers_Harmonized_20241017_WRTDS_MD_KG_NP.csv") %>%
   distinct(Stream_ID, .keep_all = TRUE) %>%
-  select(-cycle1, -X, -X.1, -Name, -ClimateZ, -Latitude, -Longitude, 
-         -LTER, -rndCoord.lat, -rndCoord.lon) %>%
-  filter(complete.cases(prop_area)) %>%
-  # select(-Stream_Name, -Stream_ID, -Min_Daylength, -elevation_min_m, -elevation_max_m, -elevation_median_m, 
-  #        -num_days, -mean_si, -sd_si, -min_Si, -max_Si, -CV_C, -mean_q, -med_q, -sd_q, -CV_Q, -min_Q, -max_Q,
-  #        -cvc_cvq, -slope, -major_land, -major_soil, -major_rock) %>%
-  select(-contains("soil"))  # Remove soil-related variables
+  select(-Use_WRTDS, -cycle1, -X, -X.1, -Name, -ClimateZ, -Latitude, -Longitude, -LTER, -major_soil, -contains("soil"),
+         -rndCoord.lat, -rndCoord.lon, -Stream_ID, -Min_Daylength, -elevation_min_m, 
+         -elevation_max_m, -elevation_median_m, -basin_slope_median_degree, -basin_slope_min_degree, -basin_slope_max_degree,
+         -num_days, -mean_si, -sd_si, -min_Si, -max_Si, -CV_C, -mean_q, -med_q, -sd_q, -CV_Q, -min_Q, -max_Q,
+         -cvc_cvq, -C_Q_slope, -major_land, -major_soil, -major_rock, -contains("flux")) %>%
+  # Rename specific columns
+  dplyr::rename(drainage_area = drainSqKm,
+         snow_cover = prop_area,
+         green_up_day = cycle0,
+         max_daylength = Max_Daylength) %>%
+  # Replace NA values in the specified column range with 0
+  mutate_at(vars(13:28), ~replace(., is.na(.), 0)) %>%
+  # Replace NA values in the "permafrost" column with 0
+  mutate(permafrost = replace(permafrost, is.na(permafrost), 0)) ## Need to revisit this decision
 
-# Change specific column names
-colnames(drivers_df)[c(6, 7, 12, 32)] <- c("drainage_area", "snow_cover", "green_up_day", "max_daylength")
+# Testing which drivers we want to keep based on the # of sites it leaves us with
+# Assuming drivers_df is your data frame, and you want to check for complete cases in specific columns
+cols_to_check <- c("basin_slope_mean_degree", "NOx", "P", "permafrost", "green_up_day", "drainage_area")
 
-# Replace NA values in the specified columns with 0
-replace_na <- 13:28
-drivers_df[, replace_na] <- lapply(drivers_df[, replace_na], function(x) replace(x, is.na(x), 0))
+# Use complete.cases() on those columns
+drivers_df <- drivers_df[complete.cases(drivers_df[, cols_to_check]), ]
 
 # Convert all integer columns to numeric in one step
 drivers_df <- drivers_df %>% mutate(across(where(is.integer), as.numeric))
 
 # Remove outliers using custom function
-drivers_df <- remove_outlier_rows(drivers_df)
+# drivers_df <- remove_outlier_rows(drivers_df)
 
 # Optionally, check distribution of NAs across all columns
 sapply(drivers_df, function(x) sum(is.na(x)))
@@ -98,18 +98,14 @@ corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag =
 # Global seed before testing different numbers of trees (ntree) ----
 set.seed(123)
 MSE_list <- test_numtree_average(c(100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000))
-
 tre_list <- c(100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000)
-
 MSE_df <- as.data.frame(unlist(MSE_list))
 MSE_num <- list()
 
 for (i in 1:length(tre_list)) {
   MSE_num[[i]] <- rep(tre_list[i], tre_list[i])
 }
-
 MSE_df$tree_num <- unlist(MSE_num)
-
 MSE_mean <- MSE_df %>%
   group_by(tree_num) %>%
   summarise(mean_MSE = mean(`unlist(MSE_list)`))
@@ -217,8 +213,6 @@ variables <- c("P", "temp", "green_up_day", "precip")
 lapply(variables, function(var) plot_partial_dependence(rf_model2, var))
 
 # Shapley values ----
-
-
 
 # Step 1: Create the predictor object for the iml package using the original model and all data
 predictor <- Predictor$new(model = rf_model2, data = kept_drivers, y = drivers_df$med_si)
