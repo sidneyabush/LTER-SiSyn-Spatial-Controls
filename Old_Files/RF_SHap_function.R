@@ -57,7 +57,7 @@ remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit =
 # Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
-drivers_df <- read.csv("AllDrivers_Harmonized_20241017_WRTDS_MD_KG_NP.csv") %>%
+drivers_df <- read.csv("AllDrivers_Harmonized_20241018_WRTDS_MD_KG_rawNP.csv") %>%
   distinct(Stream_ID, .keep_all = TRUE) %>%
   select(-Use_WRTDS, -cycle1, -X, -X.1, -Name, -ClimateZ, -Latitude, -Longitude, -LTER, -major_soil, -contains("soil"),
          -rndCoord.lat, -rndCoord.lon, -Stream_ID, -Min_Daylength, -elevation_min_m, 
@@ -70,16 +70,56 @@ drivers_df <- read.csv("AllDrivers_Harmonized_20241017_WRTDS_MD_KG_NP.csv") %>%
          green_up_day = cycle0,
          max_daylength = Max_Daylength) %>%
   # Replace NA values in the specified column range with 0
-  mutate_at(vars(13:28), ~replace(., is.na(.), 0)) %>%
-  # Replace NA values in the "permafrost" column with 0
-  mutate(permafrost = replace(permafrost, is.na(permafrost), 0)) ## Need to revisit this decision
+  mutate_at(vars(13:28), ~replace(., is.na(.), 0)) 
+# %>%
+#   # Replace NA values in the "permafrost" column with 0
+#   mutate(permafrost = replace(permafrost, is.na(permafrost), 0)) ## Need to revisit this decision
+# 
+# 
 
 # Testing which drivers we want to keep based on the # of sites it leaves us with
 # Assuming drivers_df is your data frame, and you want to check for complete cases in specific columns
-cols_to_check <- c("basin_slope_mean_degree", "NOx", "P", "permafrost", "green_up_day", "drainage_area")
+cols_to_check <- c("P", "basin_slope_mean_degree")
 
 # Use complete.cases() on those columns
-drivers_df <- drivers_df[complete.cases(drivers_df[, cols_to_check]), ]
+drivers_df_test <- drivers_df[complete.cases(drivers_df[, cols_to_check]), ]
+
+# # Testing which drivers we want to keep based on the # of sites it leaves us with
+# # Assuming drivers_df is your data frame, and you want to check for complete cases in specific columns
+# cols_to_check <- c("basin_slope_mean_degree", "NOx", "P", "permafrost")
+# cols_to_check <- c("NOx", "P", "permafrost")
+# 
+# 
+# # Initialize a list to store missing column information for each stream
+# missing_info <- list()
+# 
+# # Loop over each Stream_Name and check for missing columns
+# for (stream_name in drivers_df$Stream_Name) {
+#   # Get the row corresponding to the current Stream_Name
+#   row_data <- drivers_df[drivers_df$Stream_Name == stream_name, cols_to_check]
+#   
+#   # Find out which columns are missing (i.e., have NA)
+#   missing_columns <- names(row_data)[is.na(row_data)]
+#   
+#   # If there are missing columns, add the stream and missing columns to the list
+#   if (length(missing_columns) > 0) {
+#     missing_info[[stream_name]] <- missing_columns
+#   }
+# }
+# 
+# # Display the streams and their missing columns
+# missing_info
+# 
+# # Assuming 'missing_info' is the list containing streams and their missing columns
+# # Convert the list into a data frame for export
+# missing_info_df <- data.frame(
+#   Stream_Name = names(missing_info),
+#   Missing_Columns = sapply(missing_info, function(cols) paste(cols, collapse = ", "))
+# )
+# 
+# # Export the data frame to a CSV file
+# write.csv(missing_info_df, file = "missing_columns_info.csv", row.names = FALSE)
+
 
 # Convert all integer columns to numeric in one step
 drivers_df <- drivers_df %>% mutate(across(where(is.integer), as.numeric))
@@ -95,25 +135,44 @@ numeric_drivers <- 2:32  # Indices for numeric drivers
 driver_cor <- cor(drivers_df[, numeric_drivers])
 corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = F)
 
-# Global seed before testing different numbers of trees (ntree) ----
+# # Global seed before testing different numbers of trees (ntree) ----
+# set.seed(123)
+# MSE_list <- test_numtree_average(c(100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000))
+# tre_list <- c(100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000)
+# MSE_df <- as.data.frame(unlist(MSE_list))
+# MSE_num <- list()
+# 
+# for (i in 1:length(tre_list)) {
+#   MSE_num[[i]] <- rep(tre_list[i], tre_list[i])
+# }
+# 
+# MSE_df$tree_num <- unlist(MSE_num)
+# MSE_mean <- MSE_df %>%
+#   group_by(tree_num) %>%
+#   summarise(mean_MSE = mean(`unlist(MSE_list)`))
+# 
+# # Visualize and select the number of trees that gives the minimum MSE error
+# ggplot(MSE_mean, aes(tree_num, mean_MSE)) + geom_point() + geom_line() + theme_classic() +
+#   scale_x_continuous(breaks = seq(100, 2000, 100)) + theme(text = element_text(size = 20))
+
 set.seed(123)
-MSE_list <- test_numtree_average(c(100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000))
-tre_list <- c(100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000)
+# Create MSE_df and tree_num list with the correct lengths
 MSE_df <- as.data.frame(unlist(MSE_list))
-MSE_num <- list()
+MSE_df$tree_num <- rep(tre_list, each = length(unlist(MSE_list[1])))
 
-for (i in 1:length(tre_list)) {
-  MSE_num[[i]] <- rep(tre_list[i], tre_list[i])
-}
-
-MSE_df$tree_num <- unlist(MSE_num)
+# Calculate mean MSE for each tree_num
 MSE_mean <- MSE_df %>%
   group_by(tree_num) %>%
   summarise(mean_MSE = mean(`unlist(MSE_list)`))
 
 # Visualize and select the number of trees that gives the minimum MSE error
-ggplot(MSE_mean, aes(tree_num, mean_MSE)) + geom_point() + geom_line() + theme_classic() +
-  scale_x_continuous(breaks = seq(100, 2000, 100)) + theme(text = element_text(size = 20))
+ggplot(MSE_mean, aes(tree_num, mean_MSE)) + 
+  geom_point() + 
+  geom_line() + 
+  theme_classic() +
+  scale_x_continuous(breaks = seq(100, 2000, 100)) + 
+  theme(text = element_text(size = 20))
+
 
 # Global seed before tuning mtry based on optimized ntree ----
 set.seed(123)
