@@ -59,24 +59,65 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 drivers_df <- read.csv("AllDrivers_Harmonized_20241018_WRTDS_MD_KG_rawNP.csv") %>%
   distinct(Stream_ID, .keep_all = TRUE) %>%
-  select(-Use_WRTDS, -Stream_Name, -cycle1, -X, -X.1, -Name, -ClimateZ, -Latitude, -Longitude, -LTER, -major_soil, -contains("soil"),
-         -rndCoord.lat, -rndCoord.lon, -Stream_ID, -Min_Daylength, -elevation_min_m, 
+  select(-Use_WRTDS, -cycle1, -X, -X.1, -Name, -ClimateZ, -Latitude, -Longitude, -LTER, -major_soil, -contains("soil"),
+         -rndCoord.lat, -rndCoord.lon, -Min_Daylength, -elevation_min_m, 
          -elevation_max_m, -elevation_median_m, -basin_slope_median_degree, -basin_slope_min_degree, -basin_slope_max_degree,
          -num_days, -mean_si, -sd_si, -min_Si, -max_Si, -CV_C, -mean_q, -med_q, -sd_q, -CV_Q, -min_Q, -max_Q,
          -cvc_cvq, -C_Q_slope, -major_land, -major_soil, -major_rock, -contains("flux")) %>%
   # Rename specific columns
   dplyr::rename(drainage_area = drainSqKm,
-         snow_cover = prop_area,
-         green_up_day = cycle0,
-         max_daylength = Max_Daylength) %>%
-  # Replace NA values in the specified column range with 0
-  dplyr::mutate_at(vars(12:27), ~replace(., is.na(.), 0))
+                snow_cover = prop_area,
+                green_up_day = cycle0,
+                max_daylength = Max_Daylength) %>%
+  # Filter to retain complete cases for snow_cover
+  filter(!is.na(snow_cover))
 
-cols_to_check <- c("P", "basin_slope_mean_degree", "green_up_day", "drainage_area", "permafrost")
+# Export a list of stream names with NA values for permafrost
+streams_with_na_permafrost <- drivers_df %>%
+  filter(is.na(permafrost)) %>%
+  select(Stream_ID, Stream_Name)
+
+# Save the list to a CSV file
+write.csv(streams_with_na_permafrost, "streams_with_na_permafrost.csv", row.names = FALSE)
+
+# Now import raw P data and merge it for sites in drivers_df where there are NA P values
+raw_P <- read.csv("AllDrivers_Harmonized_20241018_WRTDS_MD_KG_rawNP.csv") %>%
+  distinct(Stream_ID, .keep_all = TRUE) %>%
+  filter(!is.na(num_days)) %>%
+  select(Stream_Name, P) %>%
+  dplyr::rename(raw_P = P)  # Rename the P column to distinguish raw P from WRTDS P
+
+# Identify rows in drivers_df where P is NA
+drivers_df_with_na_P <- drivers_df %>%
+  filter(is.na(P)) %>%
+  select(Stream_Name, Stream_ID, P)
+
+# Merge raw P data for sites where P is NA in drivers_df
+drivers_df_with_raw_P <- drivers_df_with_na_P %>%
+  left_join(raw_P, by = "Stream_Name") %>%
+  mutate(P = ifelse(is.na(P), raw_P, P))  # Replace NA values in P with raw P values
+
+# Update the original drivers_df with the new P values
+drivers_df <- drivers_df %>%
+  left_join(drivers_df_with_raw_P %>% select(Stream_ID, P), by = "Stream_ID", suffix = c("", "_new")) %>%
+  mutate(P = ifelse(is.na(P_new), P, P_new)) %>%  # Replace P with P_new where P_new is not NA
+  select(-P_new)  # Remove the temporary P_new column
+
+# Replace NA values in the specified column range with 0
+drivers_df <- drivers_df %>%
+  dplyr::mutate_at(vars(14:29), ~replace(., is.na(.), 0)) %>%
+  # Replace NA values in the "permafrost" column with 0
+  mutate(permafrost = replace(permafrost, is.na(permafrost), 0)) %>%
+  # Remove Stream_Name and Stream_ID columns
+  select(-Stream_Name, -Stream_ID)
+  
+
+# Testing which drivers we want to keep based on the # of sites it leaves us with
+# Assuming drivers_df is your data frame, and you want to check for complete cases in specific columns
+cols_to_check <- c("P", "basin_slope_mean_degree", "green_up_day", "drainage_area")
+
 # Use complete.cases() on those columns
 drivers_df <- drivers_df[complete.cases(drivers_df[, cols_to_check]), ]
-
-## Want to export a .csv with all NA values: 
 
 # Convert all integer columns to numeric in one step
 drivers_df <- drivers_df %>% mutate(across(where(is.integer), as.numeric))
@@ -179,40 +220,39 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE)) + geom_point() + geom_line() +
 # Global seed before re-tuning mtry
 set.seed(123)
 kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
-tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 1000, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 300, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
-rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 1000, mtry = 4)
+rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 300, mtry = 2)
 
 # Visualize output for rf_model2
 print(rf_model2)
 randomForest::varImpPlot(rf_model2)
 
-# Generate plots comparing predicted vs observed ----
-lm_plot <- plot(rf_model2$predicted, drivers_df$med_si, pch = 16, cex = 1.5,
-                xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers",
-                cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) + 
-  abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) + 
-  theme(text = element_text(size = 40), face = "bold")
-legend("topleft", bty = "n", cex = 1.5, legend = paste("R2 =", format(mean(rf_model2$rsq), digits = 3))) 
-legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(rf_model2$mse), digits = 3)))
-
-# Generate partial dependence plots ----
-plot_partial_dependence <- function(model, variable) {
-  par.Long <- partial(model, pred.var = variable)
-  partial_plot <- autoplot(par.Long, contour = TRUE) + theme_bw() + theme(text = element_text(size = 20))
-  print(partial_plot)
-}
-
-# List of variables to plot
-variables <- c("P", "temp", "green_up_day", "precip")
-
-# Apply the function for each variable
-lapply(variables, function(var) plot_partial_dependence(rf_model2, var))
+# # Generate plots comparing predicted vs observed ----
+# lm_plot <- plot(rf_model2$predicted, drivers_df$med_si, pch = 16, cex = 1.5,
+#                 xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers",
+#                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) + 
+#   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) + 
+#   theme(text = element_text(size = 40), face = "bold")
+# legend("topleft", bty = "n", cex = 1.5, legend = paste("R2 =", format(mean(rf_model2$rsq), digits = 3))) 
+# legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(rf_model2$mse), digits = 3)))
+# 
+# # Generate partial dependence plots ----
+# plot_partial_dependence <- function(model, variable) {
+#   par.Long <- partial(model, pred.var = variable)
+#   partial_plot <- autoplot(par.Long, contour = TRUE) + theme_bw() + theme(text = element_text(size = 20))
+#   print(partial_plot)
+# }
+# 
+# # List of variables to plot
+# variables <- c("P", "temp", "green_up_day", "precip")
+# 
+# # Apply the function for each variable
+# lapply(variables, function(var) plot_partial_dependence(rf_model2, var))
 
 # Shapley values ----
-
 # Step 1: Create the predictor object for the iml package using the original model and all data
 predictor <- Predictor$new(model = rf_model2, data = kept_drivers, y = drivers_df$med_si)
 
