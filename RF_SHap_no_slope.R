@@ -1,7 +1,7 @@
 # Load needed libraries
 librarian::shelf(remotes, RRF, caret, randomForest, DAAG, party, rpart, rpart.plot, mlbench, pROC, tree, dplyr,
                  plot.matrix, reshape2, rcartocolor, arsenal, googledrive, data.table, ggplot2, corrplot, pdp, 
-                 iml, tidyr, viridis)
+                 iml, tidyr, viridis, ggbeeswarm)
 
 # Clear environment
 rm(list = ls())
@@ -363,5 +363,21 @@ create_shap_dependence_plot <- function(data, feature_name, color_var = NULL) {
 for (feature in top_5_features) {
   print(create_shap_dependence_plot(shapley_plot_data, feature))  
 }
+
+# Beeswarm SHAP plot with rotated axes
+create_beeswarm_shap_plot <- function(data) {
+  ggplot(data, aes(y = reorder(feature, abs(phi), FUN = mean), x = phi, color = phi)) +
+    geom_quasirandom(alpha = 0.6, groupOnX = FALSE) +  # Swapping axes
+    scale_color_viridis_c(option = "C", name = "SHAP Value") +
+    labs(y = "Feature", x = "SHAP Value", title = "SHAP Beeswarm Plot (Rotated)") +
+    theme_minimal() +
+    theme(plot.title = element_text(size = 16, face = "bold"), 
+          axis.text.y = element_text(size = 10, hjust = 1))  # Adjusting y-axis labels
+}
+
+# Plot the rotated beeswarm SHAP plot
+beeswarm_plot_rotated <- create_beeswarm_shap_plot(shapley_plot_data)
+print(beeswarm_plot_rotated)
+
 
 

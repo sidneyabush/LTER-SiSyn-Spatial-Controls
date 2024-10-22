@@ -73,6 +73,14 @@ drivers_df <- read.csv("AllDrivers_Harmonized_20241017_WRTDS_MD_KG_NP.csv") %>%
   # Filter to retain complete cases for snow_cover
   filter(!is.na(snow_cover))
 
+# Export a list of stream names with NA values for basin slope
+streams_with_na_slope <- drivers_df %>%
+  filter(is.na(basin_slope_mean_degree)) %>%
+  select(Stream_ID, Stream_Name)
+
+# Save the list to a CSV file
+write.csv(streams_with_na_slope, "streams_with_na_slope.csv", row.names = FALSE)
+
 # Export a list of stream names with NA values for permafrost
 streams_with_na_permafrost <- drivers_df %>%
   filter(is.na(permafrost)) %>%
