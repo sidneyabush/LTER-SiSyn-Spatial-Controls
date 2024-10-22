@@ -58,13 +58,14 @@ remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit =
 # Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
-drivers_df <- read.csv("AllDrivers_Harmonized_20241018_WRTDS_MD_KG_rawNP.csv") %>%
+drivers_df <- read.csv("AllDrivers_Harmonized_20241017_WRTDS_MD_KG_NP.csv") %>%
   distinct(Stream_ID, .keep_all = TRUE) %>%
   select(-Use_WRTDS, -cycle1, -X, -X.1, -Name, -ClimateZ, -Latitude, -Longitude, -LTER, -major_soil, -contains("soil"),
          -rndCoord.lat, -rndCoord.lon, -Min_Daylength, -elevation_min_m, 
          -elevation_max_m, -elevation_median_m, -basin_slope_median_degree, -basin_slope_min_degree, -basin_slope_max_degree,
          -num_days, -mean_si, -sd_si, -min_Si, -max_Si, -CV_C, -mean_q, -med_q, -sd_q, -CV_Q, -min_Q, -max_Q,
-         -cvc_cvq, -C_Q_slope, -major_land, -major_soil, -major_rock, -contains("flux")) %>%
+         -cvc_cvq, -C_Q_slope, -major_land, -major_soil, -major_rock, -contains("flux"),
+         -basin_slope_mean_degree) %>%
   # Rename specific columns
   dplyr::rename(drainage_area = drainSqKm,
                 snow_cover = prop_area,
@@ -115,7 +116,7 @@ drivers_df <- drivers_df %>%
 
 # Testing which drivers we want to keep based on the # of sites it leaves us with
 # Assuming drivers_df is your data frame, and you want to check for complete cases in specific columns
-cols_to_check <- c("P", "basin_slope_mean_degree", "green_up_day", "drainage_area")
+cols_to_check <- c("P", "green_up_day", "drainage_area", "NOx")
 
 # Use complete.cases() on those columns
 drivers_df <- drivers_df[complete.cases(drivers_df[, cols_to_check]), ]
@@ -130,7 +131,7 @@ drivers_df <- drivers_df %>% mutate(across(where(is.integer), as.numeric))
 sapply(drivers_df, function(x) sum(is.na(x)))
 
 # Plot correlation between driver variables ----
-numeric_drivers <- 2:32  # Indices for numeric drivers
+numeric_drivers <- 2:31  # Indices for numeric drivers
 driver_cor <- cor(drivers_df[, numeric_drivers])
 corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = F)
 
@@ -157,11 +158,11 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE)) + geom_point() + geom_line() + theme_c
 
 # Global seed before tuning mtry based on optimized ntree ----
 set.seed(123)
-tuneRF(drivers_df[, numeric_drivers], drivers_df[, 1], ntreeTry = 600, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(drivers_df[, numeric_drivers], drivers_df[, 1], ntreeTry = 2000, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
-rf_model1 <- randomForest(med_si ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 600, mtry = 10)
+rf_model1 <- randomForest(med_si ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 10)
 
 # Visualize output for rf_model1
 print(rf_model1)
@@ -221,25 +222,25 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE)) + geom_point() + geom_line() +
 # Global seed before re-tuning mtry
 set.seed(123)
 kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
-tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 300, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 600, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
-rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 300, mtry = 2)
+rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 600, mtry = 4)
 
 # Visualize output for rf_model2
 print(rf_model2)
 randomForest::varImpPlot(rf_model2)
 
-# # Generate plots comparing predicted vs observed ----
-# lm_plot <- plot(rf_model2$predicted, drivers_df$med_si, pch = 16, cex = 1.5,
-#                 xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers",
-#                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) + 
-#   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) + 
-#   theme(text = element_text(size = 40), face = "bold")
-# legend("topleft", bty = "n", cex = 1.5, legend = paste("R2 =", format(mean(rf_model2$rsq), digits = 3))) 
-# legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(rf_model2$mse), digits = 3)))
-# 
+# Generate plots comparing predicted vs observed ----
+lm_plot <- plot(rf_model2$predicted, drivers_df$med_si, pch = 16, cex = 1.5,
+                xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers",
+                cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
+  abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
+  theme(text = element_text(size = 40), face = "bold")
+legend("topleft", bty = "n", cex = 1.5, legend = paste("R2 =", format(mean(rf_model2$rsq), digits = 3)))
+legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(rf_model2$mse), digits = 3)))
+
 # # Generate partial dependence plots ----
 # plot_partial_dependence <- function(model, variable) {
 #   par.Long <- partial(model, pred.var = variable)
@@ -326,7 +327,16 @@ ggplot(single_shap, aes(x = feature, y = phi, fill = phi > 0)) +
   coord_flip() +  # Flip for horizontal bars
   theme_minimal()
 
-# Define a function to create a dependence plot for a given feature, with an option to color by another variable
+# Step 1: Calculate SHAP feature importance (mean absolute SHAP values)
+shapley_feature_importance <- shapley_plot_data %>%
+  group_by(feature) %>%
+  summarise(importance = mean(abs(phi))) %>%
+  arrange(desc(importance))  # Order by importance (descending)
+
+# Step 2: Select the top 5 most important features
+top_5_features <- shapley_feature_importance$feature[1:10]
+
+# Step 3: Define a function to create a SHAP dependence plot for a given feature, with an option to color by another variable
 create_shap_dependence_plot <- function(data, feature_name, color_var = NULL) {
   # Determine if the color variable is continuous or discrete
   if (!is.null(color_var) && is.numeric(data[[color_var]])) {
@@ -335,7 +345,7 @@ create_shap_dependence_plot <- function(data, feature_name, color_var = NULL) {
     color_scale <- scale_color_viridis_d(option = "C")  # Discrete scale
   }
   
-  # Create a base plot
+  # Create the dependence plot
   plot <- ggplot(data[data$feature == feature_name, ], 
                  aes_string(x = "value", y = "phi", color = if (!is.null(color_var)) color_var else "feature")) +
     geom_point(alpha = 0.6) + 
@@ -349,11 +359,9 @@ create_shap_dependence_plot <- function(data, feature_name, color_var = NULL) {
   return(plot)
 }
 
-# Example of feature list you want to iterate over
-feature_list <- c("max_daylength", "P",  "precip", "land_shrubland_grassland", 
-                  "elevation_mean_m", "snow_cover", "rocks_volcanic")
-
-# Iterate through the features and create a plot for each one, without specifying another variable for color
-for (feature in feature_list) {
+# Step 4: Iterate through the top 5 most important features and create a plot for each one
+for (feature in top_5_features) {
   print(create_shap_dependence_plot(shapley_plot_data, feature))  
 }
+
+
