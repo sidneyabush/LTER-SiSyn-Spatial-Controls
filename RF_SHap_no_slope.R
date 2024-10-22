@@ -111,7 +111,7 @@ drivers_df <- drivers_df %>%
   mutate(permafrost = replace(permafrost, is.na(permafrost), 0)) %>%
   # Remove Stream_Name and Stream_ID columns
   select(-Stream_Name, -Stream_ID)
-  
+
 
 # Testing which drivers we want to keep based on the # of sites it leaves us with
 # Assuming drivers_df is your data frame, and you want to check for complete cases in specific columns
