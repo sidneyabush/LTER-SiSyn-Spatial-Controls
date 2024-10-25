@@ -13,6 +13,12 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 drivers_df <- read.csv("AllDrivers_Harmonized_20241017_WRTDS_MD_KG_NP.csv") %>%
   distinct(Stream_ID, .keep_all = TRUE)
 
+unique_major_rock <- unique(drivers_df$major_rock)
+
+# Export the unique values as a CSV file
+write.csv(unique_major_rock, "unique_major_rock.csv", row.names = FALSE)
+
+
 # Constants
 R <- 8.314 # gas constant in J/(mol*K)
 
