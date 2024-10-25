@@ -263,13 +263,14 @@ randomForest::varImpPlot(rf_model2)
 
 
 # Shapley values ----
+
 # Step 1: Create the predictor object for the iml package using the original model and all data
 predictor <- Predictor$new(model = rf_model2, data = kept_drivers, y = drivers_df$med_si)
 
-# Step 2: Calculate Shapley values for all variables
+# Step 2: Calculate Shapley values for all observations
 set.seed(123)  # For reproducibility
 shapley_list <- lapply(1:nrow(kept_drivers), function(i) {
-  shap <- Shapley$new(predictor, x.interest = kept_drivers[i, ], sample.size = 100)  # Reduce sample size if necessary
+  shap <- Shapley$new(predictor, x.interest = kept_drivers[i, ], sample.size = 100)  # Adjust sample size as needed
   shap$results  # Extract the Shapley results
 })
 
@@ -285,17 +286,25 @@ shapley_df <- shapley_df %>%
 kept_drivers_melted <- melt(kept_drivers)
 kept_drivers_melted$row_id <- rep(1:nrow(kept_drivers), ncol(kept_drivers))
 
-# Step 4: Combine Shapley values with feature values from kept_drivers
+# Step 4: Merge Shapley values with feature values from kept_drivers
 shapley_plot_data <- shapley_df %>%
   left_join(kept_drivers_melted, by = c("feature" = "variable", "row_id"))
 
-# Step 5: Calculate feature importance based on the mean absolute SHAP values
+# Step 5: Add metadata from drivers_df ----
+# Add row_id to drivers_df to enable merging with shapley_plot_data
+drivers_df$row_id <- 1:nrow(drivers_df)
+
+# Merge metadata into the shapley_plot_data based on the row_id
+shapley_plot_data <- shapley_plot_data %>%
+  left_join(drivers_df, by = "row_id")
+
+# Step 6: Calculate feature importance based on the mean absolute SHAP values
 feature_importance <- shapley_plot_data %>%
   group_by(feature) %>%
   summarise(importance = mean(abs(phi))) %>%
   arrange(desc(importance))  # Order by importance (descending)
 
-# Step 6: Plot SHAP summary with magnitude, direction, and colors
+# Step 7: Plot SHAP summary with magnitude, direction, and colors
 # Reorder features by importance in descending order (most important at the top)
 shapley_plot_data <- shapley_plot_data %>%
   mutate(feature = factor(feature, levels = rev(feature_importance$feature)))  # Reorder factor levels in descending order
@@ -308,23 +317,17 @@ ggplot(shapley_plot_data, aes(x = phi, y = feature, color = value)) +
   theme(axis.text.y = element_text(size = 12), axis.text.x = element_text(size = 12), 
         plot.title = element_text(size = 16, face = "bold"))
 
-# Calculate feature importance by averaging the absolute SHAP values
-feature_importance <- shapley_plot_data %>%
-  group_by(feature) %>%
-  summarise(importance = mean(abs(phi))) %>%
-  arrange(desc(importance))
-
-# Plot the feature importance
+# Step 8: Plot the feature importance
 ggplot(feature_importance, aes(x = reorder(feature, importance), y = importance)) +
   geom_bar(stat = "identity", fill = "steelblue") +
   coord_flip() +  # Flip coordinates for horizontal bars
   labs(x = "Feature", y = "Mean Absolute SHAP Value", title = "Feature Importance") +
   theme_minimal()
 
-# ReshapviridisLite# Reshape the SHAP values into a wide format for heatmap
+# Step 9: Reshape the SHAP values into a wide format for heatmap
 shap_wide <- dcast(shapley_plot_data, row_id ~ feature, value.var = "phi")
 
-# Create a force plot for a single observation
+# Step 10: Create a force plot for a single observation
 single_shap <- shapley_plot_data[shapley_plot_data$row_id == 1, ]  # Example for the first observation
 
 ggplot(single_shap, aes(x = feature, y = phi, fill = phi > 0)) +
@@ -334,16 +337,16 @@ ggplot(single_shap, aes(x = feature, y = phi, fill = phi > 0)) +
   coord_flip() +  # Flip for horizontal bars
   theme_minimal()
 
-# Step 1: Calculate SHAP feature importance (mean absolute SHAP values)
+# Step 11: Calculate SHAP feature importance (mean absolute SHAP values)
 shapley_feature_importance <- shapley_plot_data %>%
   group_by(feature) %>%
   summarise(importance = mean(abs(phi))) %>%
   arrange(desc(importance))  # Order by importance (descending)
 
-# Step 2: Select the top 5 most important features
-top_5_features <- shapley_feature_importance$feature[1:10]
+# Step 12: Select the top 5 most important features
+top_5_features <- shapley_feature_importance$feature[1:5]
 
-# Step 3: Define a function to create a SHAP dependence plot for a given feature, with an option to color by another variable
+# Step 13: Update function to create a SHAP dependence plot, with an option to color by another variable
 create_shap_dependence_plot <- function(data, feature_name, color_var = NULL) {
   # Determine if the color variable is continuous or discrete
   if (!is.null(color_var) && is.numeric(data[[color_var]])) {
@@ -366,9 +369,9 @@ create_shap_dependence_plot <- function(data, feature_name, color_var = NULL) {
   return(plot)
 }
 
-# Step 4: Iterate through the top 5 most important features and create a plot for each one
+# Step 14: Iterate through the top 5 most important features and create a plot for each one, with optional coloring
+color_variable <- "elevation_mean_m"  # Example: Color by 'med_si', or replace with any variable in shapley_plot_data
+
 for (feature in top_5_features) {
-  print(create_shap_dependence_plot(shapley_plot_data, feature))  
+  print(create_shap_dependence_plot(shapley_plot_data, feature, color_var = color_variable))  
 }
-
-
