@@ -11,20 +11,48 @@ library(dplyr)
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 drivers_df <- read.csv("AllDrivers_Harmonized_20241017_WRTDS_MD_KG_NP.csv") %>%
-  distinct(Stream_ID, .keep_all = TRUE)
+  distinct(Stream_ID, .keep_all = TRUE) %>%
+  # Rename specific columns
+  dplyr::rename(drainage_area = drainSqKm,
+                snow_cover = prop_area,
+                green_up_day = cycle0,
+                max_daylength = Max_Daylength)
 
 unique_major_rock <- unique(drivers_df$major_rock)
 
 # Export the unique values as a CSV file
 write.csv(unique_major_rock, "unique_major_rock.csv", row.names = FALSE)
 
+# import mapped lithologies and merge with drivers_df
+mapped_lithologies <- read.csv("mapped_lithologies.csv")
+
+# Merge the mapped lithologies with drivers_df by the "major_rock" column
+drivers_df <- merge(drivers_df, mapped_lithologies, by = "major_rock", all.x = TRUE)
+
+# Filter out rows with NA in the "major_rock" column
+drivers_df <- drivers_df %>%
+  filter(!is.na(mapped_lithology))
+
+# Calculate runoff in kg/yr/m2 per equation: 
+# Constants
+seconds_per_year <- 31536000  # Number of seconds in a year
+kg_per_m3 <- 1000  # Density of water in kg/m^3
+km2_to_m2 <- 10^6  # Conversion factor from km^2 to m^2
+
+# Calculate runoff for each row in drivers_df
+drivers_df <- drivers_df %>%
+  mutate(runoff = (med_q * seconds_per_year * kg_per_m3) / (drainage_area * km2_to_m2))
+
+# Convert the "temp" column from degrees Celsius to Kelvin
+drivers_df <- drivers_df %>%
+  mutate(temp_K = temp + 273.15)  # Add a new column 'temp_K'
 
 # Constants
 R <- 8.314 # gas constant in J/(mol*K)
 
 # Parameters for each lithology type (Table S1)
 lithology_params <- data.frame(
-  Lithology = c("su", "vb", "pb", "py", "va", "vi", "ss", "pi", "sm", "mt", "pa"),
+  mapped_lithology = c("su", "vb", "pb", "py", "va", "vi", "ss", "pi", "sm", "mt", "pa"),
   b = c(0.003364, 0.007015, 0.007015, 0.0061, 0.002455, 0.007015, 0.005341, 0.007015, 0.012481, 0.007626, 0.005095),
   sp = c(1, 1, 1, 1, 1, 1, 0.64, 0.58, 0.24, 0.25, 0.58),
   sa = c(60, 50, 50, 46, 60, 50, 60, 60, 60, 60, 60),
@@ -33,42 +61,52 @@ lithology_params <- data.frame(
   cc = c(0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5)
 )
 
-# Function to calculate CO2 consumption rate
-calculate_CO2 <- function(q, lithology, temp_celsius) {
-  params <- lithology_params %>%
-    filter(Lithology == lithology)
+# Function to calculate CO2 consumption rate and average for multiple lithologies
+calculate_CO2 <- function(q, lithologies, temp_celsius) {
   
-  if(nrow(params) == 0) stop("Lithology not found in the table")
+  # Split lithologies if there are multiple
+  lithologies_list <- strsplit(lithologies, ",\\s*")[[1]]  # Split by commas and optional spaces
   
-  # Convert temperature from Celsius to Kelvin
-  T <- temp_celsius + 273.15
+  # Initialize an empty vector to store CO2 values for each lithology
+  CO2_values <- numeric(length(lithologies_list))
   
-  b <- params$b
-  sp <- params$sp
-  sa <- params$sa
-  cp <- params$cp
-  ca <- params$ca
-  cc <- params$cc
+  # Loop through each lithology in the list and calculate CO2 consumption
+  for (i in seq_along(lithologies_list)) {
+    lith <- lithologies_list[i]
+    
+    # Look up parameters for the lithology
+    params <- lithology_params %>%
+      filter(mapped_lithology == lith)
+    
+    if (nrow(params) == 0) stop(paste("Lithology not found in the table for", lith))
+    
+    # Extract parameters
+    b <- params$b
+    sp <- params$sp
+    sa <- params$sa
+    cp <- params$cp
+    ca <- params$ca
+    cc <- params$cc
+    
+    # Gas constant (R)
+    R <- 8.314
+    
+    # CO2 consumption calculation (without soil shield 's')
+    CO2_values[i] <- q * b * (sp * exp(((1000 * sa) / R) * ((1 / 284.2) - (1 / temp_celsius))) +
+                                cp * cc * exp(((1000 * ca) / R) * ((1 / 284.2) - (1 / temp_celsius))))
+  }
   
-  # CO2 consumption calculation without s (soil shield)
-  CO2 <- q * b * (sp * exp(((1000 * sa) / R) * ((1 / 284.2) - (1 / T))) +
-                    cp * cc * exp(((1000 * ca) / R) * ((1 / 284.2) - (1 / T))))
-  
-  return(CO2)
+  # Return the average CO2 consumption across all lithologies
+  return(mean(CO2_values))
 }
 
-# Example usage:
-# Assuming you have a dataframe 'df' with columns 'Lithology', 'Runoff' (q), and 'temp' (in degrees Celsius)
-df <- data.frame(
-  Lithology = c("su", "vb", "ss"),
-  Runoff = c(1000, 1500, 1200),  # example runoff values in kg/a/m^2
-  temp = c(15, 20, 18)           # example temperature values in Celsius
-)
+# Apply the CO2 consumption calculation across the entire dataframe in one step
+drivers_df <- drivers_df %>%
+  mutate(CO2_consumption = mapply(calculate_CO2, runoff, mapped_lithology, temp_K))
 
-# Apply the CO2 consumption calculation for each row
-df <- df %>%
-  rowwise() %>%
-  mutate(CO2_consumption = calculate_CO2(Runoff, Lithology, temp))
 
-# View results
-print(df)
+# Export the dataframe to a CSV file
+write.csv(drivers_df, "AllDrivers_Harmonized_20241025_WRTDS_MD_KG_NP_CO2_cons.csv", row.names = FALSE)
+
+
+

@@ -58,18 +58,14 @@ remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit =
 # Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
-drivers_df <- read.csv("AllDrivers_Harmonized_20241017_WRTDS_MD_KG_NP.csv") %>%
+drivers_df <- read.csv("AllDrivers_Harmonized_20241025_WRTDS_MD_KG_NP_CO2_cons.csv") %>%
   distinct(Stream_ID, .keep_all = TRUE) %>%
   select(-Use_WRTDS, -cycle1, -X, -X.1, -Name, -ClimateZ, -Latitude, -Longitude, -LTER, -major_soil, -contains("soil"),
          -rndCoord.lat, -rndCoord.lon, -Min_Daylength, -elevation_min_m, 
          -elevation_max_m, -elevation_median_m, -basin_slope_median_degree, -basin_slope_min_degree, -basin_slope_max_degree,
          -num_days, -mean_si, -sd_si, -min_Si, -max_Si, -CV_C, -mean_q, -med_q, -sd_q, -CV_Q, -min_Q, -max_Q,
-         -cvc_cvq, -C_Q_slope, -major_land, -major_soil, -major_rock, -contains("flux")) %>%
-  # Rename specific columns
-  dplyr::rename(drainage_area = drainSqKm,
-                snow_cover = prop_area,
-                green_up_day = cycle0,
-                max_daylength = Max_Daylength) %>%
+         -cvc_cvq, -C_Q_slope, -major_land, -major_soil, -major_rock, -temp_K, -mapped_lithology,
+         -lithology_description, -runoff, -contains("flux")) %>%
   # Filter to retain complete cases for snow_cover
   filter(!is.na(snow_cover))
 
@@ -138,7 +134,7 @@ drivers_df <- drivers_df %>% mutate(across(where(is.integer), as.numeric))
 sapply(drivers_df, function(x) sum(is.na(x)))
 
 # Plot correlation between driver variables ----
-numeric_drivers <- 2:32  # Indices for numeric drivers
+numeric_drivers <- 2:33  # Indices for numeric drivers
 driver_cor <- cor(drivers_df[, numeric_drivers])
 corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = F)
 
