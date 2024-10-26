@@ -69,6 +69,7 @@ drivers_df <- read.csv("AllDrivers_Harmonized_20241025_WRTDS_MD_KG_NP_CO2_cons.c
   # Filter to retain complete cases for snow_cover
   filter(!is.na(snow_cover))
 
+
 # Export a list of stream names with NA values for basin slope
 streams_with_na_slope <- drivers_df %>%
   filter(is.na(basin_slope_mean_degree)) %>%
@@ -112,9 +113,7 @@ drivers_df <- drivers_df %>%
 drivers_df <- drivers_df %>%
   dplyr::mutate_at(vars(14:29), ~replace(., is.na(.), 0)) %>%
   # Replace NA values in the "permafrost" column with 0
-  mutate(permafrost = replace(permafrost, is.na(permafrost), 0)) %>%
-  # Remove Stream_Name and Stream_ID columns
-  select(-Stream_Name, -Stream_ID)
+  mutate(permafrost = replace(permafrost, is.na(permafrost), 0)) 
   
 
 # Testing which drivers we want to keep based on the # of sites it leaves us with
@@ -124,8 +123,13 @@ cols_to_check <- c("P", "basin_slope_mean_degree", "green_up_day", "drainage_are
 # Use complete.cases() on those columns
 drivers_df <- drivers_df[complete.cases(drivers_df[, cols_to_check]), ]
 
+# Export the dataframe to a CSV file
+write.csv(drivers_df, "Final_Sites.csv", row.names = FALSE)
+
 # Convert all integer columns to numeric in one step
-drivers_df <- drivers_df %>% mutate(across(where(is.integer), as.numeric))
+drivers_df <- drivers_df %>% mutate(across(where(is.integer), as.numeric))%>%
+  # Remove Stream_Name and Stream_ID columns
+  select(-Stream_Name, -Stream_ID)
 
 # Remove outliers using custom function
 # drivers_df <- remove_outlier_rows(drivers_df)
