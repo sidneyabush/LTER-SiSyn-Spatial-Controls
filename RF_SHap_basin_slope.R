@@ -229,25 +229,25 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE)) + geom_point() + geom_line() +
 # Global seed before re-tuning mtry
 set.seed(123)
 kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
-tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 600, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 2000, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
-rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 600, mtry = 4)
+rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 5)
 
 # Visualize output for rf_model2
 print(rf_model2)
 randomForest::varImpPlot(rf_model2)
 
-# # Generate plots comparing predicted vs observed ----
-# lm_plot <- plot(rf_model2$predicted, drivers_df$med_si, pch = 16, cex = 1.5,
-#                 xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers",
-#                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) + 
-#   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) + 
-#   theme(text = element_text(size = 40), face = "bold")
-# legend("topleft", bty = "n", cex = 1.5, legend = paste("R2 =", format(mean(rf_model2$rsq), digits = 3))) 
-# legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(rf_model2$mse), digits = 3)))
-# 
+# Generate plots comparing predicted vs observed ----
+lm_plot <- plot(rf_model2$predicted, drivers_df$med_si, pch = 16, cex = 1.5,
+                xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers",
+                cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
+  abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
+  theme(text = element_text(size = 40), face = "bold")
+legend("topleft", bty = "n", cex = 1.5, legend = paste("R2 =", format(mean(rf_model2$rsq), digits = 3)))
+legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(rf_model2$mse), digits = 3)))
+
 # # Generate partial dependence plots ----
 # plot_partial_dependence <- function(model, variable) {
 #   par.Long <- partial(model, pred.var = variable)
@@ -370,7 +370,18 @@ create_shap_dependence_plot <- function(data, feature_name, color_var = NULL) {
 }
 
 # Step 14: Iterate through the top 5 most important features and create a plot for each one, with optional coloring
-color_variable <- "elevation_mean_m"  # Example: Color by 'med_si', or replace with any variable in shapley_plot_data
+color_variable <- "CO2_consumption" 
+
+# Plot histogram of CO2_consumption values
+hist(shapley_plot_data$CO2_consumption, 
+     main = "Histogram of CO2 Consumption",
+     xlab = "CO2 Consumption",
+     ylab = "Frequency",
+     col = "lightblue",
+     border = "black")
+
+# Filter out rows where CO2_consumption is over 20
+# shapley_plot_data <- shapley_plot_data[shapley_plot_data$CO2_consumption <= 20, ]
 
 for (feature in top_5_features) {
   print(create_shap_dependence_plot(shapley_plot_data, feature, color_var = color_variable))  
