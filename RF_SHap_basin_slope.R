@@ -386,3 +386,66 @@ hist(shapley_plot_data$CO2_consumption,
 for (feature in top_5_features) {
   print(create_shap_dependence_plot(shapley_plot_data, feature, color_var = color_variable))  
 }
+
+
+# Load required packages
+library(dplyr)
+library(ggplot2)
+library(viridis)
+library(reshape2)
+
+# Define the function
+subset_shapley_plot <- function(shap_data, feature_name, threshold = 50, above_threshold = TRUE, color_var = NULL) {
+  
+  # Step 1: Subset the data based on the threshold
+  filtered_data <- shap_data %>%
+    filter(if (above_threshold) .data[[feature_name]] >= threshold else .data[[feature_name]] < threshold)
+  
+  # Step 2: Calculate feature importance based on the mean absolute SHAP values
+  feature_importance <- filtered_data %>%
+    group_by(feature) %>%
+    summarise(importance = mean(abs(phi))) %>%
+    arrange(desc(importance))  # Order by importance (descending)
+  
+  # Step 3: Reorder features by importance for the summary plot
+  filtered_data <- filtered_data %>%
+    mutate(feature = factor(feature, levels = rev(feature_importance$feature)))  # Reorder factor levels
+  
+  # Step 4: SHAP Summary Plot
+  shap_summary_plot <- ggplot(filtered_data, aes(x = phi, y = feature, color = .data[[feature_name]])) + 
+    geom_point(alpha = 0.6) + 
+    scale_color_viridis_c(option = "C") + 
+    labs(x = "SHAP value (impact on model output)", y = "Features", title = paste("SHAP Summary Plot for", feature_name)) + 
+    theme_bw() + 
+    theme(axis.text.y = element_text(size = 12), axis.text.x = element_text(size = 12), 
+          plot.title = element_text(size = 16, face = "bold"))
+  print(shap_summary_plot)
+  
+  # Step 5: Feature Importance Plot
+  feature_importance_plot <- ggplot(feature_importance, aes(x = reorder(feature, importance), y = importance)) +
+    geom_bar(stat = "identity", fill = "steelblue") +
+    coord_flip() +  
+    labs(x = "Feature", y = "Mean Absolute SHAP Value", title = "Feature Importance") +
+    theme_minimal()
+  print(feature_importance_plot)
+  
+  # Step 6: Optional SHAP Dependence Plot for Specific Feature
+  if (!is.null(color_var)) {
+    for (top_feature in feature_importance$feature[1:5]) {
+      dependence_plot <- ggplot(filtered_data[filtered_data$feature == top_feature, ], 
+                                aes_string(x = "value", y = "phi", color = color_var)) +
+        geom_point(alpha = 0.6) + 
+        scale_color_viridis_c(option = "C") + 
+        labs(x = paste("Value of", top_feature), 
+             y = "SHAP Value", 
+             title = paste("SHAP Dependence Plot for", top_feature)) + 
+        theme_minimal() +
+        theme(plot.title = element_text(size = 16, face = "bold"))
+      print(dependence_plot)
+    }
+  }
+}
+
+# Example usage:
+subset_shapley_plot(shapley_plot_data, "land_shrubland_grassland", threshold = 50, above_threshold = TRUE, color_var = "CO2_consumption")
+subset_shapley_plot(shapley_plot_data, "land_shrubland_grassland", threshold = 50, above_threshold = FALSE, color_var = "CO2_consumption")
