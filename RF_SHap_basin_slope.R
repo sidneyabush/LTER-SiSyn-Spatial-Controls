@@ -401,6 +401,10 @@ subset_shapley_plot <- function(shap_data, feature_name, threshold = 50, above_t
   filtered_data <- shap_data %>%
     filter(if (above_threshold) .data[[feature_name]] >= threshold else .data[[feature_name]] < threshold)
   
+  # Generate the threshold condition text for the title
+  threshold_condition <- if (above_threshold) "above" else "below"
+  title_threshold <- paste(feature_name, threshold_condition, threshold)
+  
   # Step 2: Calculate feature importance based on the mean absolute SHAP values
   feature_importance <- filtered_data %>%
     group_by(feature) %>%
@@ -415,7 +419,8 @@ subset_shapley_plot <- function(shap_data, feature_name, threshold = 50, above_t
   shap_summary_plot <- ggplot(filtered_data, aes(x = phi, y = feature, color = .data[[feature_name]])) + 
     geom_point(alpha = 0.6) + 
     scale_color_viridis_c(option = "C") + 
-    labs(x = "SHAP value (impact on model output)", y = "Features", title = paste("SHAP Summary Plot for", feature_name)) + 
+    labs(x = "SHAP value (impact on model output)", y = "Features", 
+         title = paste("SHAP Summary Plot for", title_threshold)) + 
     theme_bw() + 
     theme(axis.text.y = element_text(size = 12), axis.text.x = element_text(size = 12), 
           plot.title = element_text(size = 16, face = "bold"))
@@ -425,7 +430,8 @@ subset_shapley_plot <- function(shap_data, feature_name, threshold = 50, above_t
   feature_importance_plot <- ggplot(feature_importance, aes(x = reorder(feature, importance), y = importance)) +
     geom_bar(stat = "identity", fill = "steelblue") +
     coord_flip() +  
-    labs(x = "Feature", y = "Mean Absolute SHAP Value", title = "Feature Importance") +
+    labs(x = "Feature", y = "Mean Absolute SHAP Value", 
+         title = paste("Feature Importance for", title_threshold)) +
     theme_minimal()
   print(feature_importance_plot)
   
@@ -438,7 +444,7 @@ subset_shapley_plot <- function(shap_data, feature_name, threshold = 50, above_t
         scale_color_viridis_c(option = "C") + 
         labs(x = paste("Value of", top_feature), 
              y = "SHAP Value", 
-             title = paste("SHAP Dependence Plot for", top_feature)) + 
+             title = paste("SHAP Dependence Plot for", top_feature, "for", title_threshold)) + 
         theme_minimal() +
         theme(plot.title = element_text(size = 16, face = "bold"))
       print(dependence_plot)
@@ -446,6 +452,13 @@ subset_shapley_plot <- function(shap_data, feature_name, threshold = 50, above_t
   }
 }
 
+
 # Example usage:
 subset_shapley_plot(shapley_plot_data, "land_shrubland_grassland", threshold = 50, above_threshold = TRUE, color_var = "CO2_consumption")
 subset_shapley_plot(shapley_plot_data, "land_shrubland_grassland", threshold = 50, above_threshold = FALSE, color_var = "CO2_consumption")
+
+subset_shapley_plot(shapley_plot_data, "rocks_volcanic", threshold = 50, above_threshold = TRUE, color_var = "precip")
+subset_shapley_plot(shapley_plot_data, "rocks_volcanic", threshold = 50, above_threshold = TRUE, color_var = "precip")
+
+subset_shapley_plot(shapley_plot_data, "max_daylength", threshold = 17, above_threshold = TRUE, color_var = "precip")
+subset_shapley_plot(shapley_plot_data, "max_daylength", threshold = 17, above_threshold = FALSE, color_var = "precip")
