@@ -10,7 +10,7 @@ library(dplyr)
 # Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
-drivers_df <- read.csv("AllDrivers_Harmonized_20241018_WRTDS_MD_KG_rawNP.csv") %>%
+drivers_df <- read.csv("AllDrivers_Harmonized_20241106_WRTDS_MD_KG_rawNP_Conc.csv") %>%
   distinct(Stream_ID, .keep_all = TRUE) %>%
   # Rename specific columns
   dplyr::rename(drainage_area = drainSqKm,
@@ -95,4 +95,4 @@ drivers_df <- drivers_df %>%
   mutate(silicate_weathering = mapply(calculate_weathering, runoff, mapped_lithology, temp_K))
 
 # Export the dataframe to a CSV file
-write.csv(drivers_df, "AllDrivers_Harmonized_20241105_WRTDS_MD_KG_NP_silicate_weathering.csv", row.names = FALSE)
+write.csv(drivers_df, "AllDrivers_Harmonized_20241106_WRTDS_MD_KG_NP_Conc_silicate_weathering.csv", row.names = FALSE)
