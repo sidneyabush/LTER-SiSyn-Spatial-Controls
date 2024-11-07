@@ -70,21 +70,21 @@ drivers_df <- read.csv("AllDrivers_Harmonized_20241105_WRTDS_MD_KG_NP_silicate_w
   filter(!is.na(snow_cover))
 
 
-# Export a list of stream names with NA values for basin slope
-streams_with_na_slope <- drivers_df %>%
-  filter(is.na(basin_slope_mean_degree)) %>%
-  select(Stream_ID, Stream_Name)
-
-# Save the list to a CSV file
-write.csv(streams_with_na_slope, "streams_with_na_slope.csv", row.names = FALSE)
-
-# Export a list of stream names with NA values for permafrost
-streams_with_na_permafrost <- drivers_df %>%
-  filter(is.na(permafrost)) %>%
-  select(Stream_ID, Stream_Name)
-
-# Save the list to a CSV file
-write.csv(streams_with_na_permafrost, "streams_with_na_permafrost.csv", row.names = FALSE)
+# # Export a list of stream names with NA values for basin slope
+# streams_with_na_slope <- drivers_df %>%
+#   filter(is.na(basin_slope_mean_degree)) %>%
+#   select(Stream_ID, Stream_Name)
+# 
+# # Save the list to a CSV file
+# write.csv(streams_with_na_slope, "streams_with_na_slope.csv", row.names = FALSE)
+# 
+# # Export a list of stream names with NA values for permafrost
+# streams_with_na_permafrost <- drivers_df %>%
+#   filter(is.na(permafrost)) %>%
+#   select(Stream_ID, Stream_Name)
+# 
+# # Save the list to a CSV file
+# write.csv(streams_with_na_permafrost, "streams_with_na_permafrost.csv", row.names = FALSE)
 
 # Now import raw P data and merge it for sites in drivers_df where there are NA P values
 raw_P <- read.csv("AllDrivers_Harmonized_20241018_WRTDS_MD_KG_rawNP.csv") %>%
@@ -108,6 +108,94 @@ drivers_df <- drivers_df %>%
   left_join(drivers_df_with_raw_P %>% select(Stream_ID, P), by = "Stream_ID", suffix = c("", "_new")) %>%
   mutate(P = ifelse(is.na(P_new), P, P_new)) %>%  # Replace P with P_new where P_new is not NA
   select(-P_new)  # Remove the temporary P_new column
+
+## Now import streams with na slopes
+# Load and process Krycklan slopes
+Krycklan_slopes <- transform(read.csv("Krycklan_basin_slopes.csv"), 
+                             basin_slope_mean_degree = atan(gradient_pct / 100) * (180 / pi))
+
+# Load and process US slopes
+US_slopes <- read.csv("DSi_Basin_Slope_missing_sites.csv", header = FALSE)
+colnames(US_slopes) <- US_slopes[1, ]
+US_slopes <- US_slopes[-1, ]
+US_slopes <- US_slopes %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "Stream_Name",
+    values_to = "basin_slope_mean_degree"
+  ) %>%
+  mutate(basin_slope_mean_degree = as.numeric(basin_slope_mean_degree))
+
+# Upload the Stream_Name to Stream_ID key file
+stream_key <- read.csv("basin_stream_id_conversions.csv", header = TRUE)
+
+# Merge stream key with Krycklan_slopes and US_slopes to add Stream_ID
+Krycklan_slopes <- left_join(Krycklan_slopes, stream_key, by = "Stream_Name") %>%
+  filter(!is.na(basin_slope_mean_degree))  # Remove rows with NA values after merging with key
+
+US_slopes <- left_join(US_slopes, stream_key, by = "Stream_Name") %>%
+  filter(!is.na(basin_slope_mean_degree))  # Remove rows with NA values after merging with key
+
+# Filter drivers_df for rows with NA basin slope values
+drivers_df_with_na_slope <- drivers_df %>%
+  filter(is.na(basin_slope_mean_degree)) %>%
+  select(Stream_Name, Stream_ID)
+
+# Merge drivers_df_with_na_slope with US_slopes and Krycklan_slopes to fill missing values
+drivers_df_with_slope_filled <- drivers_df_with_na_slope %>%
+  left_join(US_slopes %>% select(Stream_ID, basin_slope_mean_degree), by = "Stream_ID") %>%
+  left_join(Krycklan_slopes %>% select(Stream_ID, basin_slope_mean_degree), by = "Stream_ID", suffix = c("_US", "_Krycklan")) %>%
+  mutate(
+    basin_slope_mean_degree = coalesce(basin_slope_mean_degree_US, basin_slope_mean_degree_Krycklan)
+  ) %>%
+  select(Stream_ID, basin_slope_mean_degree)
+
+# Update drivers_df with the filled values
+drivers_df <- drivers_df %>%
+  left_join(drivers_df_with_slope_filled, by = "Stream_ID", suffix = c("", "_filled")) %>%
+  mutate(
+    basin_slope_mean_degree = coalesce(basin_slope_mean_degree_filled, basin_slope_mean_degree)
+  ) %>%
+  select(-basin_slope_mean_degree_filled)
+
+# Load the US elevation data without headers
+US_elev <- read.csv("DSi_Basin_Elevation_missing_sites.csv", header = FALSE)
+
+# Set the first row as column names and remove it from the data
+colnames(US_elev) <- US_elev[1, ]
+US_elev <- US_elev[-1, ]
+
+# Convert the dataframe from wide to long format
+US_elev <- US_elev %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "Stream_Name",
+    values_to = "elevation_mean_m"
+  )
+
+# Convert elevation_mean_m to numeric
+US_elev$elevation_mean_m <- as.numeric(US_elev$elevation_mean_m)
+
+# Merge with the stream key and remove rows with NA in elevation_mean_m after the merge
+US_elev <- left_join(US_elev, stream_key, by = "Stream_Name") %>%
+  filter(!is.na(elevation_mean_m))
+
+# Filter drivers_df for rows with NA elevation values
+drivers_df_with_na_elev <- drivers_df %>%
+  filter(is.na(elevation_mean_m)) %>%
+  select(Stream_Name, Stream_ID)
+
+# Merge drivers_df_with_na_elev with US_elev to fill missing elevation values
+drivers_df_with_elev_filled <- drivers_df_with_na_elev %>%
+  left_join(US_elev %>% select(Stream_ID, elevation_mean_m), by = "Stream_ID")
+
+# Update drivers_df with the filled elevation values
+drivers_df <- drivers_df %>%
+  left_join(drivers_df_with_elev_filled, by = "Stream_ID", suffix = c("", "_filled")) %>%
+  mutate(
+    elevation_mean_m = coalesce(elevation_mean_m_filled, elevation_mean_m)
+  ) %>%
+  select(-elevation_mean_m_filled, -Stream_Name_filled)  # Remove Stream_Name_filled from final output
 
 # Replace NA values in the specified column range with 0
 drivers_df <- drivers_df %>%
