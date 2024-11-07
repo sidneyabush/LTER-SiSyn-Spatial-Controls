@@ -382,206 +382,162 @@ save_lm_plot(rf_model2, drivers_df$med_si, output_dir)
 
 
 ### MAKE INTO A FUNCTION ---- 
+# Set the output directory for plots
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/FN_Conc"
 
-# Function to calculate Shapley values and generate shapley_plot_data
-create_shapley_plot_data <- function(model, kept_drivers, drivers_df) {
-  # Step 1: Create the predictor object for the iml package using rf_model2
+# Required libraries
+library(parallel)
+library(doParallel)
+library(foreach)
+library(iml)
+library(dplyr)
+library(reshape2)
+library(ggplot2)
+
+# Set up a parallel backend for speed (adjust cores as needed)
+num_cores <- detectCores() - 1  # Leave one core free for other tasks
+registerDoParallel(cores = num_cores)
+
+# Function to create shapley_plot_data without any subsetting
+create_shapley_plot_data <- function(model, kept_drivers, drivers_df, sample_size = 30) {
+  # Create the predictor object for the full dataset
   predictor <- Predictor$new(model = model, data = kept_drivers, y = drivers_df$med_si)
   
-  # Step 2: Calculate Shapley values for all observations
+  # Parallel Shapley calculations for each observation
   set.seed(123)  # For reproducibility
-  shapley_list <- lapply(1:nrow(kept_drivers), function(i) {
-    shap <- Shapley$new(predictor, x.interest = kept_drivers[i, ], sample.size = 100)  # Adjust sample size as needed
-    shap$results  # Extract the Shapley results
-  })
+  shapley_list <- foreach(i = 1:nrow(kept_drivers), .packages = 'iml') %dopar% {
+    shap <- Shapley$new(predictor, x.interest = kept_drivers[i, ], sample.size = sample_size)
+    shap$results
+  }
   
-  # Combine all Shapley results into a single dataframe
-  shapley_df <- do.call(rbind, shapley_list)
-  
-  # Step 3: Add row_id to shapley_df for joining with the original data
-  shapley_df <- shapley_df %>%
+  # Combine Shapley results into a single dataframe
+  shapley_df <- do.call(rbind, shapley_list) %>%
     mutate(row_id = rep(1:nrow(kept_drivers), each = ncol(kept_drivers)))
   
-  # Reshape kept_drivers to match the structure of shapley_df
+  # Reshape kept_drivers for merging with Shapley values
   kept_drivers_melted <- melt(kept_drivers)
   kept_drivers_melted$row_id <- rep(1:nrow(kept_drivers), ncol(kept_drivers))
   
-  # Step 4: Merge Shapley values with feature values from kept_drivers
+  # Merge Shapley values with feature values and drivers_df metadata
   shapley_plot_data <- shapley_df %>%
-    left_join(kept_drivers_melted, by = c("feature" = "variable", "row_id"))
-  
-  # Step 5: Add metadata from drivers_df for additional information
-  drivers_df$row_id <- 1:nrow(drivers_df)
-  shapley_plot_data <- shapley_plot_data %>%
-    left_join(drivers_df, by = "row_id")
+    left_join(kept_drivers_melted, by = c("feature" = "variable", "row_id")) %>%
+    left_join(drivers_df %>% mutate(row_id = 1:nrow(.)), by = "row_id")
   
   return(shapley_plot_data)
 }
 
-# Generate shapley_plot_data using rf_model2 and kept_drivers
+# Generate shapley_plot_data for the entire dataset
 shapley_plot_data <- create_shapley_plot_data(rf_model2, kept_drivers, drivers_df)
 
-# Function to calculate and plot overall summary and top 5 important features
-create_overall_summary_and_top_plots <- function(shap_data, output_dir) {
-  # Calculate overall feature importance for all data (no threshold filtering)
+# Create and save all required plots for full Shapley data, with optional color variable for dependence plots
+create_all_shapley_plots <- function(shap_data, output_dir, color_var = NULL) {  # Add color_var as an argument
+  
+  # 1. Overall Feature Importance Plot (based on mean absolute SHAP values)
   overall_feature_importance <- shap_data %>%
     group_by(feature) %>%
     summarise(importance = mean(abs(phi))) %>%
     arrange(desc(importance))
   
-  # Create the overall summary plot
-  overall_summary_plot <- ggplot(overall_feature_importance, aes(x = reorder(feature, importance), y = importance)) +
+  overall_importance_plot <- ggplot(overall_feature_importance, aes(x = reorder(feature, importance), y = importance)) +
     geom_bar(stat = "identity", fill = "steelblue") +
     coord_flip() +
-    labs(x = NULL, y = "Mean Absolute SHAP Value", title = "Overall Feature Importance (FN_Conc)") +
+    labs(x = "Feature", y = "Mean Absolute SHAP Value", title = "Overall Feature Importance") +
     theme_minimal()
   
-  # Save the overall summary plot as a PDF
-  pdf(sprintf("%s/overall_summary_plot.pdf", output_dir), width = 8, height = 6)
-  print(overall_summary_plot)
+  pdf(sprintf("%s/overall_importance_plot.pdf", output_dir), width = 8, height = 6)
+  print(overall_importance_plot)
   dev.off()
   
-  # Identify top 5 most important features
-  top_features <- overall_feature_importance %>%
-    slice_head(n = 5) %>%
-    pull(feature)
+  # Reorder feature levels for the SHAP Summary Plot based on importance
+  shap_data <- shap_data %>%
+    mutate(feature = factor(feature, levels = rev(overall_feature_importance$feature)))
   
-  # Generate and save plots for each of the top 5 features
-  for (feature in top_features) {
-    subset_shapley_plot(
-      shap_data = shap_data,
-      feature_name = feature,
-      threshold = 0,
-      above_threshold = TRUE,
-      color_var = NULL,
-      output_dir = output_dir
-    )
-  }
-}
-
-# Main subset_shapley_plot function
-subset_shapley_plot <- function(shap_data, feature_name, threshold = 50, above_threshold = TRUE, color_var = NULL, output_dir) {
-  # Subset the data based on the threshold
-  filtered_data <- shap_data %>%
-    filter(if (above_threshold) .data[[feature_name]] >= threshold else .data[[feature_name]] < threshold)
-  
-  # Remove the thresholding feature from filtered_data
-  filtered_data <- filtered_data %>%
-    filter(feature != feature_name)
-  
-  # Generate the threshold condition text for the title
-  threshold_condition <- if (above_threshold) "above" else "below"
-  title_threshold <- paste(feature_name, threshold_condition, threshold)
-  
-  # Calculate feature importance based on the mean absolute SHAP values
-  feature_importance <- filtered_data %>%
+  # 2. SHAP Summary Plot with low-to-high coloring (normalized for each feature)
+  shap_data_normalized <- shap_data %>%
     group_by(feature) %>%
-    summarise(importance = mean(abs(phi))) %>%
-    arrange(desc(importance))
+    mutate(normalized_value = (value - min(value, na.rm = TRUE)) / (max(value, na.rm = TRUE) - min(value, na.rm = TRUE)))
   
-  # Reorder features by importance for the summary plot
-  filtered_data <- filtered_data %>%
-    mutate(feature = factor(feature, levels = rev(feature_importance$feature)))
-  
-  # Scale the feature values if color_var is provided
-  if (!is.null(color_var)) {
-    filtered_data <- filtered_data %>%
-      mutate(scaled_feature_value = (get(color_var) - min(get(color_var), na.rm = TRUE)) / 
-               (max(get(color_var), na.rm = TRUE) - min(get(color_var), na.rm = TRUE)))
-  }
-  
-  # SHAP Summary Plot
-  shap_summary_plot <- ggplot(filtered_data, aes(x = phi, y = feature)) + 
-    geom_point(aes(color = if (!is.null(color_var)) scaled_feature_value else NULL), alpha = 0.6) + 
-    scale_color_gradient(low = "blue", high = "red", name = "Value", breaks = c(0, 1), labels = c("Low", "High")) +
-    labs(x = "SHAP Value", y = NULL, title = paste(title_threshold)) + 
+  shap_summary_plot <- ggplot(shap_data_normalized, aes(x = phi, y = feature)) + 
+    geom_point(aes(color = normalized_value), alpha = 0.6) + 
+    scale_color_gradient(low = "blue", high = "red", name = "Feature Value", breaks = c(0, 1), labels = c("Low", "High")) +
+    labs(x = "SHAP Value", y = NULL, title = "SHAP Summary Plot (Ordered by Importance)") + 
     theme_bw() + 
     theme(axis.text.y = element_text(size = 12), axis.text.x = element_text(size = 12), 
           plot.title = element_text(size = 16, face = "bold"))
   
-  # Feature Importance Plot
-  feature_importance_plot <- ggplot(feature_importance, aes(x = reorder(feature, importance), y = importance)) +
-    geom_bar(stat = "identity", fill = "steelblue") +
-    coord_flip() +  
-    labs(x = NULL, y = "Mean Absolute SHAP Value", title = paste(title_threshold)) +
-    theme_minimal()
+  pdf(sprintf("%s/shap_summary_plot.pdf", output_dir), width = 8, height = 6)
+  print(shap_summary_plot)
+  dev.off()
   
-  # Positive/Negative SHAP Impact Plot
-  pos_neg_summary <- filtered_data %>%
+  # 3. Positive/Negative SHAP Impact Plot
+  pos_neg_summary <- shap_data %>%
     group_by(feature) %>%
     summarise(mean_phi = mean(phi)) %>%
-    mutate(feature = factor(feature, levels = rev(feature_importance$feature)))
+    mutate(feature = factor(feature, levels = rev(overall_feature_importance$feature)))
   
   pos_neg_plot <- ggplot(pos_neg_summary, aes(x = feature, y = mean_phi, fill = mean_phi > 0)) +
     geom_bar(stat = "identity") +
     scale_fill_manual(values = c("red", "blue"), labels = c("Negative Impact", "Positive Impact")) +
-    labs(x = "Feature", y = "Mean SHAP Value", title = "Overall SHAP Impact by Feature (FN_Conc)") +
+    labs(x = "Feature", y = "Mean SHAP Value", title = "Overall SHAP Impact by Feature") +
     coord_flip() +
     theme_minimal()
   
-  # SHAP Dependence Plot for Specific Feature
-  dependence_plots <- list()
-  for (top_feature in feature_importance$feature[1:5]) {
-    aes_mapping <- if (!is.null(color_var)) {
-      aes(x = value, y = phi, color = get(color_var))
+  pdf(sprintf("%s/pos_neg_shap_plot.pdf", output_dir), width = 8, height = 6)
+  print(pos_neg_plot)
+  dev.off()
+  
+  # 4. SHAP Dependence Plot for each feature with optional coloring by another variable
+  for (feature_name in unique(shap_data$feature)) {
+    # Define color mapping based on color_var if specified
+    aes_mapping <- if (!is.null(color_var) && color_var %in% names(shap_data)) {
+      aes(x = value, y = phi, color = .data[[color_var]])
     } else {
       aes(x = value, y = phi)
     }
     
-    dependence_plot <- ggplot(filtered_data[filtered_data$feature == top_feature, ], aes_mapping) +
+    dependence_plot <- ggplot(shap_data[shap_data$feature == feature_name, ], aes_mapping) +
       geom_point(alpha = 0.6) + 
-      (if (!is.null(color_var)) scale_color_gradient(low = "blue", high = "red", name = color_var) else NULL) +
-      labs(x = paste("Value of", top_feature), y = "SHAP Value", title = paste("Dependence Plot for", top_feature)) + 
-      theme_minimal()
+      labs(x = paste("Value of", feature_name), y = "SHAP Value", title = paste("SHAP Dependence Plot for", feature_name)) + 
+      theme_minimal() +
+      (if (!is.null(color_var) && color_var %in% names(shap_data)) scale_color_viridis_c(name = color_var) else NULL)
     
-    dependence_plots <- c(dependence_plots, list(dependence_plot))
+    pdf(sprintf("%s/dependence_plot_%s.pdf", output_dir, feature_name), width = 8, height = 6)
+    print(dependence_plot)
+    dev.off()
   }
-  
-  # Save all plots to PDF
-  pdf_filename <- sprintf("%s/%s_%s_threshold_%s_above_%s.pdf",
-                          output_dir, feature_name, ifelse(is.null(color_var), "shap", color_var),
-                          threshold, ifelse(above_threshold, "above", "below"))
-  
-  pdf(pdf_filename, width = 8, height = 6)
-  
-  print(shap_summary_plot)
-  print(feature_importance_plot)
-  print(pos_neg_plot)
-  
-  for (plot in dependence_plots) {
-    print(plot)
-  }
-  
-  dev.off()
 }
 
-# Generate overall summary and top 5 feature plots
-create_overall_summary_and_top_plots(shapley_plot_data, output_dir)
+# Run the function to create all plots, coloring dependence plots by a specified variable (e.g., "precip")
+color_var <- "precip"  # Replace with desired feature to color by
+create_all_shapley_plots(shapley_plot_data, output_dir, color_var)
 
+# BASEMENT -------------------
 
-# Define plot parameters for specific features
-plot_parameters <- list(
-  list(var = "P", threshold = 0.1, above_threshold = FALSE, color_var = "precip"),
-  list(var = "P", threshold = 0.1, above_threshold = TRUE, color_var = "precip"),
-  list(var = "max_daylength", threshold = 17, above_threshold = FALSE, color_var = "precip"),
-  list(var = "max_daylength", threshold = 17, above_threshold = TRUE, color_var = "precip"),
-  list(var = "land_shrubland_grassland", threshold = 50, above_threshold = FALSE, color_var = "precip"),
-  list(var = "land_shrubland_grassland", threshold = 50, above_threshold = TRUE, color_var = "precip"),
-  list(var = "silicate_weathering", threshold = 0.25, above_threshold = FALSE, color_var = "precip"),
-  list(var = "silicate_weathering", threshold = 0.25, above_threshold = TRUE, color_var = "precip")
-)
+# # Define plot parameters for specific features
+# plot_parameters <- list(
+#   list(var = "P", threshold = 0.1, above_threshold = FALSE, color_var = "precip"),
+#   list(var = "P", threshold = 0.1, above_threshold = TRUE, color_var = "precip"),
+#   list(var = "max_daylength", threshold = 17, above_threshold = FALSE, color_var = "precip"),
+#   list(var = "max_daylength", threshold = 17, above_threshold = TRUE, color_var = "precip"),
+#   list(var = "land_shrubland_grassland", threshold = 50, above_threshold = FALSE, color_var = "precip"),
+#   list(var = "land_shrubland_grassland", threshold = 50, above_threshold = TRUE, color_var = "precip"),
+#   list(var = "silicate_weathering", threshold = 0.25, above_threshold = FALSE, color_var = "precip"),
+#   list(var = "silicate_weathering", threshold = 0.25, above_threshold = TRUE, color_var = "precip")
+# )
+# 
+# 
+# 
+# # Generate plots based on specified plot parameters
+# for (params in plot_parameters) {
+#   subset_shapley_plot(
+#     shap_data = shapley_plot_data,
+#     feature_name = params$var,
+#     threshold = params$threshold,
+#     above_threshold = params$above_threshold,
+#     color_var = params$color_var,
+#     output_dir = output_dir
+#   )
+# }
+# 
 
-
-
-# Generate plots based on specified plot parameters
-for (params in plot_parameters) {
-  subset_shapley_plot(
-    shap_data = shapley_plot_data,
-    feature_name = params$var,
-    threshold = params$threshold,
-    above_threshold = params$above_threshold,
-    color_var = params$color_var,
-    output_dir = output_dir
-  )
-}
 
