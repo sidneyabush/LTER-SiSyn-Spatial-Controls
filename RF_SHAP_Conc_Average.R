@@ -233,8 +233,8 @@ cols_to_check <- c("P", "basin_slope_mean_degree", "green_up_day", "drainage_are
 # Use complete.cases() on those columns
 drivers_df <- drivers_df[complete.cases(drivers_df[, cols_to_check]), ]
 
-# Export the dataframe to a CSV file
-write.csv(drivers_df, "Final_Sites.csv", row.names = FALSE)
+# # Export the dataframe to a CSV file
+# write.csv(drivers_df, "Final_Sites.csv", row.names = FALSE)
 
 # Convert all integer columns to numeric in one step
 drivers_df <- drivers_df %>% mutate(across(where(is.integer), as.numeric))%>%
@@ -279,11 +279,11 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE)) + geom_point() + geom_line() + theme_c
 
 # Global seed before tuning mtry based on optimized ntree ----
 set.seed(123)
-tuneRF(drivers_df[, numeric_drivers], drivers_df[, 1], ntreeTry = 200, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(drivers_df[, numeric_drivers], drivers_df[, 1], ntreeTry = 2000, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
-rf_model1 <- randomForest(med_si ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 200, mtry = 10)
+rf_model1 <- randomForest(med_si ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 10)
 
 # Visualize output for rf_model1
 print(rf_model1)
@@ -347,7 +347,7 @@ tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 2000, stepFactor = 1, improve =
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
-rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 2000, mtry = )
+rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 2)
 
 # Visualize output for rf_model2
 print(rf_model2)
@@ -441,7 +441,7 @@ create_all_shapley_plots <- function(shap_data, output_dir, color_var = NULL) { 
   overall_importance_plot <- ggplot(overall_feature_importance, aes(x = reorder(feature, importance), y = importance)) +
     geom_bar(stat = "identity", fill = "steelblue") +
     coord_flip() +
-    labs(x = "Feature", y = "Mean Absolute SHAP Value", title = "Overall Feature Importance") +
+    labs(x = "Feature", y = "Mean Absolute SHAP Value", title = "Overall Feature Importance (Conc)") +
     theme_minimal()
   
   pdf(sprintf("%s/overall_importance_plot.pdf", output_dir), width = 8, height = 6)
@@ -460,7 +460,7 @@ create_all_shapley_plots <- function(shap_data, output_dir, color_var = NULL) { 
   shap_summary_plot <- ggplot(shap_data_normalized, aes(x = phi, y = feature)) + 
     geom_point(aes(color = normalized_value), alpha = 0.6) + 
     scale_color_gradient(low = "blue", high = "red", name = "Feature Value", breaks = c(0, 1), labels = c("Low", "High")) +
-    labs(x = "SHAP Value", y = NULL, title = "SHAP Summary Plot (Ordered by Importance)") + 
+    labs(x = "SHAP Value", y = NULL, title = "SHAP Summary Plot (Conc)") + 
     theme_bw() + 
     theme(axis.text.y = element_text(size = 12), axis.text.x = element_text(size = 12), 
           plot.title = element_text(size = 16, face = "bold"))
@@ -478,7 +478,7 @@ create_all_shapley_plots <- function(shap_data, output_dir, color_var = NULL) { 
   pos_neg_plot <- ggplot(pos_neg_summary, aes(x = feature, y = mean_phi, fill = mean_phi > 0)) +
     geom_bar(stat = "identity") +
     scale_fill_manual(values = c("red", "blue"), labels = c("Negative Impact", "Positive Impact")) +
-    labs(x = "Feature", y = "Mean SHAP Value", title = "Overall SHAP Impact by Feature") +
+    labs(x = "Feature", y = "Mean SHAP Value", title = "Overall SHAP Impact by Feature (Conc)") +
     coord_flip() +
     theme_minimal()
   
@@ -497,7 +497,7 @@ create_all_shapley_plots <- function(shap_data, output_dir, color_var = NULL) { 
     
     dependence_plot <- ggplot(shap_data[shap_data$feature == feature_name, ], aes_mapping) +
       geom_point(alpha = 0.6) + 
-      labs(x = paste("Value of", feature_name), y = "SHAP Value", title = paste("SHAP Dependence Plot for", feature_name)) + 
+      labs(x = paste("Value of", feature_name), y = "SHAP Value", title = paste("Conc SHAP Dependence Plot for", feature_name)) + 
       theme_minimal() +
       (if (!is.null(color_var) && color_var %in% names(shap_data)) scale_color_viridis_c(name = color_var) else NULL)
     
@@ -510,7 +510,6 @@ create_all_shapley_plots <- function(shap_data, output_dir, color_var = NULL) { 
 # Run the function to create all plots, coloring dependence plots by a specified variable (e.g., "precip")
 color_var <- "precip"  # Replace with desired feature to color by
 create_all_shapley_plots(shapley_plot_data, output_dir, color_var)
-
 
 # BASEMENT -------------------
 

@@ -1,4 +1,4 @@
-# Calculating Weathering Rates: 
+# Calculating Weathering Rates: AVERAGE
 
 # Clear environment
 rm(list = ls())
