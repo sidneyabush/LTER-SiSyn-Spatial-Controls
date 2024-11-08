@@ -56,14 +56,14 @@ remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit =
 
 # Define a function to save RF variable importance plot as a PDF
 save_rf_importance_plot <- function(rf_model, output_dir) {
-  pdf(sprintf("%s/rf_variable_importance.pdf", output_dir), width = 8, height = 6)
+  pdf(sprintf("%s/RF_variable_importance.pdf", output_dir), width = 8, height = 6)
   randomForest::varImpPlot(rf_model, main = "Tuned Random Forest Variable Importance (Conc)", col = "darkblue")
   dev.off()
 }
 
 # Define a function to save the linear model (LM) plot as a PDF
 save_lm_plot <- function(rf_model, observed, output_dir) {
-  pdf(sprintf("%s/lm_plot_rf.pdf", output_dir), width = 8, height = 6)
+  pdf(sprintf("%s/RF_lm_plot.pdf", output_dir), width = 8, height = 8)
   plot(rf_model$predicted, observed, pch = 16, cex = 1.5,
        xlab = "Predicted", ylab = "Observed", main = "Observed vs Predicted (Conc)",
        cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5)
@@ -74,7 +74,7 @@ save_lm_plot <- function(rf_model, observed, output_dir) {
 }
 
 # Set the output directory path for saving PDFs
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Conc"
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/Conc"
 
 # Read in and tidy data ----
 # Set working directory
@@ -383,7 +383,7 @@ save_lm_plot(rf_model2, drivers_df$med_si, output_dir)
 
 ### MAKE INTO A FUNCTION ---- 
 # Set the output directory for plots
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Conc"
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/Conc"
 
 # Required libraries
 library(parallel)
@@ -429,8 +429,15 @@ create_shapley_plot_data <- function(model, kept_drivers, drivers_df, sample_siz
 # Generate shapley_plot_data for the entire dataset
 shapley_plot_data <- create_shapley_plot_data(rf_model2, kept_drivers, drivers_df)
 
-# Create and save all required plots for full Shapley data, with optional color variable for dependence plots
-create_all_shapley_plots <- function(shap_data, output_dir, color_var = NULL) {  # Add color_var as an argument
+# Create and save all required plots for full Shapley data, with optional color combinations for dependence plots
+create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) {  # Accept color_vars as an argument
+  # Filter out silicate_weathering values > 20
+  shap_data <- shap_data %>%
+    filter(silicate_weathering <= 20)
+  dev.off()
+  
+  # Open a single PDF file for all plots
+  pdf(output_file, width = 8, height = 8)
   
   # 1. Overall Feature Importance Plot (based on mean absolute SHAP values)
   overall_feature_importance <- shap_data %>%
@@ -444,9 +451,8 @@ create_all_shapley_plots <- function(shap_data, output_dir, color_var = NULL) { 
     labs(x = "Feature", y = "Mean Absolute SHAP Value", title = "Overall Feature Importance (Conc)") +
     theme_minimal()
   
-  pdf(sprintf("%s/overall_importance_plot.pdf", output_dir), width = 8, height = 6)
+  # Print plot to the PDF
   print(overall_importance_plot)
-  dev.off()
   
   # Reorder feature levels for the SHAP Summary Plot based on importance
   shap_data <- shap_data %>%
@@ -465,9 +471,8 @@ create_all_shapley_plots <- function(shap_data, output_dir, color_var = NULL) { 
     theme(axis.text.y = element_text(size = 12), axis.text.x = element_text(size = 12), 
           plot.title = element_text(size = 16, face = "bold"))
   
-  pdf(sprintf("%s/shap_summary_plot.pdf", output_dir), width = 8, height = 6)
+  # Print plot to the PDF
   print(shap_summary_plot)
-  dev.off()
   
   # 3. Positive/Negative SHAP Impact Plot
   pos_neg_summary <- shap_data %>%
@@ -482,34 +487,40 @@ create_all_shapley_plots <- function(shap_data, output_dir, color_var = NULL) { 
     coord_flip() +
     theme_minimal()
   
-  pdf(sprintf("%s/pos_neg_shap_plot.pdf", output_dir), width = 8, height = 6)
+  # Print plot to the PDF
   print(pos_neg_plot)
-  dev.off()
   
-  # 4. SHAP Dependence Plot for each feature with optional coloring by another variable
+  # 4. SHAP Dependence Plots for each feature with all combinations of coloring variables
   for (feature_name in unique(shap_data$feature)) {
-    # Define color mapping based on color_var if specified
-    aes_mapping <- if (!is.null(color_var) && color_var %in% names(shap_data)) {
-      aes(x = value, y = phi, color = .data[[color_var]])
-    } else {
-      aes(x = value, y = phi)
+    for (color_var in color_vars) {
+      aes_mapping <- if (color_var %in% names(shap_data)) {
+        aes(x = value, y = phi, color = .data[[color_var]])
+      } else {
+        aes(x = value, y = phi)
+      }
+      
+      dependence_plot <- ggplot(shap_data[shap_data$feature == feature_name, ], aes_mapping) +
+        geom_point(alpha = 0.6) + 
+        labs(x = paste("Value of", feature_name), y = "SHAP Value", title = paste("Conc SHAP Dependence Plot for", feature_name)) + 
+        theme_minimal() +
+        (if (color_var %in% names(shap_data)) scale_color_viridis_c(name = color_var) else NULL)
+      
+      # Print plot to the PDF
+      print(dependence_plot)
     }
-    
-    dependence_plot <- ggplot(shap_data[shap_data$feature == feature_name, ], aes_mapping) +
-      geom_point(alpha = 0.6) + 
-      labs(x = paste("Value of", feature_name), y = "SHAP Value", title = paste("Conc SHAP Dependence Plot for", feature_name)) + 
-      theme_minimal() +
-      (if (!is.null(color_var) && color_var %in% names(shap_data)) scale_color_viridis_c(name = color_var) else NULL)
-    
-    pdf(sprintf("%s/dependence_plot_%s.pdf", output_dir, feature_name), width = 8, height = 6)
-    print(dependence_plot)
-    dev.off()
   }
+  
+  # Close the PDF file
+  dev.off()
 }
 
-# Run the function to create all plots, coloring dependence plots by a specified variable (e.g., "precip")
-color_var <- "precip"  # Replace with desired feature to color by
-create_all_shapley_plots(shapley_plot_data, output_dir, color_var)
+# Run the function to create all plots in a single PDF file, coloring dependence plots by specified variables (e.g., "precip", "temp")
+color_vars <- c("drainage_area", "snow_cover", "precip", 
+                "evapotrans", "temp", "npp", "permafrost", "green_up_day",
+                "rocks_volcanic", "NOx", "P", "max_daylength", "silicate_weathering", "q_95", "q_5")  # List of features to color by
+output_file <- sprintf("%s/all_shapley_plots.pdf", output_dir)  # Specify the output file path
+create_all_shapley_plots(shapley_plot_data, output_file, color_vars)
+
 
 # BASEMENT -------------------
 
