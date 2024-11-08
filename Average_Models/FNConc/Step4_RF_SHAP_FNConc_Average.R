@@ -347,7 +347,7 @@ tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 2000, stepFactor = 1, improve =
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
-rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 6)
+rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 7)
 
 # Visualize output for rf_model2
 print(rf_model2)

@@ -448,7 +448,7 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) 
   overall_importance_plot <- ggplot(overall_feature_importance, aes(x = reorder(feature, importance), y = importance)) +
     geom_bar(stat = "identity", fill = "steelblue") +
     coord_flip() +
-    labs(x = "Feature", y = "Mean Absolute SHAP Value", title = "Overall Feature Importance - Average Concentration") +
+    labs(x = "Feature", y = "Mean Absolute SHAP Value", title = "Overall Feature Importance - Average Gen Concentration") +
     theme_minimal()
   
   # Print plot to the PDF
@@ -466,7 +466,7 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) 
   shap_summary_plot <- ggplot(shap_data_normalized, aes(x = phi, y = feature)) + 
     geom_point(aes(color = normalized_value), alpha = 0.6) + 
     scale_color_gradient(low = "blue", high = "red", name = "Feature Value", breaks = c(0, 1), labels = c("Low", "High")) +
-    labs(x = "SHAP Value", y = NULL, title = "SHAP Summary Plot - Average Concentration") + 
+    labs(x = "SHAP Value", y = NULL, title = "SHAP Summary Plot - Average Gen Concentration") + 
     theme_bw() + 
     theme(axis.text.y = element_text(size = 12), axis.text.x = element_text(size = 12), 
           plot.title = element_text(size = 16, face = "bold"))
@@ -483,7 +483,7 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) 
   pos_neg_plot <- ggplot(pos_neg_summary, aes(x = feature, y = mean_phi, fill = mean_phi > 0)) +
     geom_bar(stat = "identity") +
     scale_fill_manual(values = c("red", "blue"), labels = c("Negative Impact", "Positive Impact")) +
-    labs(x = "Feature", y = "Mean SHAP Value", title = "Overall SHAP Impact by Feature - Average Concentration") +
+    labs(x = "Feature", y = "Mean SHAP Value", title = "Overall SHAP Impact by Feature - Average Gen Concentration") +
     coord_flip() +
     theme_minimal()
   
@@ -501,7 +501,7 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) 
       
       dependence_plot <- ggplot(shap_data[shap_data$feature == feature_name, ], aes_mapping) +
         geom_point(alpha = 0.6) + 
-        labs(x = paste("Value of", feature_name), y = "SHAP Value", title = paste("Average Concentration SHAP Dependence Plot for", feature_name)) + 
+        labs(x = paste("Value of", feature_name), y = "SHAP Value", title = paste("Average Gen Concentration SHAP Dependence Plot for", feature_name)) + 
         theme_minimal() +
         (if (color_var %in% names(shap_data)) scale_color_viridis_c(name = color_var) else NULL)
       
