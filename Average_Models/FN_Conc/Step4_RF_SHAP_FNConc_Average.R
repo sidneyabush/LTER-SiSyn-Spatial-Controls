@@ -57,7 +57,7 @@ remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit =
 # Define a function to save RF variable importance plot as a PDF
 save_rf_importance_plot <- function(rf_model, output_dir) {
   pdf(sprintf("%s/RF_variable_importance.pdf", output_dir), width = 8, height = 6)
-  randomForest::varImpPlot(rf_model, main = "RF Variable Importance - Average Concentration", col = "darkblue")
+  randomForest::varImpPlot(rf_model, main = "RF Variable Importance - Average FN Concentration", col = "darkblue")
   dev.off()
 }
 
@@ -65,7 +65,7 @@ save_rf_importance_plot <- function(rf_model, output_dir) {
 save_lm_plot <- function(rf_model, observed, output_dir) {
   pdf(sprintf("%s/RF_lm_plot.pdf", output_dir), width = 8, height = 8)
   plot(rf_model$predicted, observed, pch = 16, cex = 1.5,
-       xlab = "Predicted", ylab = "Observed", main = "Observed vs Predicted - Average Concentration",
+       xlab = "Predicted", ylab = "Observed", main = "Observed vs Predicted - Average FN Concentration",
        cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5)
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2)
   legend("topleft", bty = "n", cex = 1.5, legend = paste("R² =", format(mean(rf_model$rsq), digits = 3)))
@@ -74,13 +74,13 @@ save_lm_plot <- function(rf_model, observed, output_dir) {
 }
 
 # Set the output directory path for saving PDFs
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/GenConc"
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/FNConc"
 
 # Read in and tidy data ----
 # Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
-drivers_df <- read.csv("AllDrivers_Harmonized_20241108_WRTDS_MD_KG_NP_GenConc_silicate_weathering.csv") %>%
+drivers_df <- read.csv("AllDrivers_Harmonized_20241108_WRTDS_MD_KG_NP_FNConc_silicate_weathering.csv") %>%
   distinct(Stream_ID, .keep_all = TRUE) %>%
   select(-Use_WRTDS, -cycle1, -X, -X.1, -Name, -ClimateZ, -Latitude, -Longitude, -LTER, -major_soil, -contains("soil"),
          -rndCoord.lat, -rndCoord.lon, -Min_Daylength, -elevation_min_m, 
@@ -109,7 +109,7 @@ drivers_df <- read.csv("AllDrivers_Harmonized_20241108_WRTDS_MD_KG_NP_GenConc_si
 # write.csv(streams_with_na_permafrost, "streams_with_na_permafrost.csv", row.names = FALSE)
 
 # Now import raw P data and merge it for sites in drivers_df where there are NA P values
-raw_P <- read.csv("AllDrivers_Harmonized_20241108_WRTDS_MD_KG_rawNP_GenConc.csv") %>%
+raw_P <- read.csv("AllDrivers_Harmonized_20241108_WRTDS_MD_KG_rawNP_FNConc.csv") %>%
   distinct(Stream_ID, .keep_all = TRUE) %>%
   filter(!is.na(num_days)) %>%
   select(Stream_Name, P) %>%
@@ -355,7 +355,7 @@ randomForest::varImpPlot(rf_model2)
 
 # Generate plots comparing predicted vs observed ----
 lm_plot <- plot(rf_model2$predicted, drivers_df$med_si, pch = 16, cex = 1.5,
-                xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers",
+                xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers - FN Concentration",
                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
   theme(text = element_text(size = 40), face = "bold")
@@ -383,7 +383,7 @@ save_lm_plot(rf_model2, drivers_df$med_si, output_dir)
 
 ### MAKE INTO A FUNCTION ---- 
 # Set the output directory for plots
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/GenConc"
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/FNConc"
 
 # Required libraries
 library(parallel)
@@ -448,7 +448,7 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) 
   overall_importance_plot <- ggplot(overall_feature_importance, aes(x = reorder(feature, importance), y = importance)) +
     geom_bar(stat = "identity", fill = "steelblue") +
     coord_flip() +
-    labs(x = "Feature", y = "Mean Absolute SHAP Value", title = "Overall Feature Importance - Average Concentration") +
+    labs(x = "Feature", y = "Mean Absolute SHAP Value", title = "Overall Feature Importance - Average FN Concentration") +
     theme_minimal()
   
   # Print plot to the PDF
@@ -466,7 +466,7 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) 
   shap_summary_plot <- ggplot(shap_data_normalized, aes(x = phi, y = feature)) + 
     geom_point(aes(color = normalized_value), alpha = 0.6) + 
     scale_color_gradient(low = "blue", high = "red", name = "Feature Value", breaks = c(0, 1), labels = c("Low", "High")) +
-    labs(x = "SHAP Value", y = NULL, title = "SHAP Summary Plot - Average Concentration") + 
+    labs(x = "SHAP Value", y = NULL, title = "SHAP Summary Plot - Average FN Concentration") + 
     theme_bw() + 
     theme(axis.text.y = element_text(size = 12), axis.text.x = element_text(size = 12), 
           plot.title = element_text(size = 16, face = "bold"))
@@ -483,7 +483,7 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) 
   pos_neg_plot <- ggplot(pos_neg_summary, aes(x = feature, y = mean_phi, fill = mean_phi > 0)) +
     geom_bar(stat = "identity") +
     scale_fill_manual(values = c("red", "blue"), labels = c("Negative Impact", "Positive Impact")) +
-    labs(x = "Feature", y = "Mean SHAP Value", title = "Overall SHAP Impact by Feature - Average Concentration") +
+    labs(x = "Feature", y = "Mean SHAP Value", title = "Overall SHAP Impact by Feature - Average FN Concentration") +
     coord_flip() +
     theme_minimal()
   
@@ -501,7 +501,7 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) 
       
       dependence_plot <- ggplot(shap_data[shap_data$feature == feature_name, ], aes_mapping) +
         geom_point(alpha = 0.6) + 
-        labs(x = paste("Value of", feature_name), y = "SHAP Value", title = paste("Average Concentration SHAP Dependence Plot for", feature_name)) + 
+        labs(x = paste("Value of", feature_name), y = "SHAP Value", title = paste("Average FN Concentration SHAP Dependence Plot for", feature_name)) + 
         theme_minimal() +
         (if (color_var %in% names(shap_data)) scale_color_viridis_c(name = color_var) else NULL)
       
