@@ -95,4 +95,4 @@ drivers_df <- drivers_df %>%
   mutate(silicate_weathering = mapply(calculate_weathering, runoff, mapped_lithology, temp_K))
 
 # Export the dataframe to a CSV file
-write.csv(drivers_df, "AllDrivers_Harmonized_20241108_WRTDS_MD_KG_NP_FNFlux_silicate_weathering.csv", row.names = FALSE)
+write.csv(drivers_df, "AllDrivers_Harmonized_20241108_WRTDS_MD_KG_NP_FNFlux_silicate_weathering_Average.csv", row.names = FALSE)
