@@ -187,9 +187,61 @@ monthly_drivers <- spatial_drivers[,c(361,which(colnames(spatial_drivers) %like%
 # Remove monthly drivers from spatial drivers
 spatial_drivers <- spatial_drivers[,-c(which(colnames(spatial_drivers) %like% months_abb))]
 
-# These are the categorical variables like "major_land", "major_soil", and "major_rock" and the numerical % of each
-major_cat_vars <- which(colnames(spatial_drivers) %like% c("soil|land|rock"))
-cat_vars <- spatial_drivers[,c(major_cat_vars)]
+
+
+# Identify columns with any numbers in the header
+year_columns <- grep("[0-9]", colnames(spatial_drivers), value = TRUE)
+# Identify columns without numbers, ensuring Stream_ID is included
+non_year_columns <- colnames(spatial_drivers)[!colnames(spatial_drivers) %in% year_columns]
+
+# Separate columns with numbers from those without using base R indexing
+spatial_drivers_with_years <- spatial_drivers[, year_columns, drop = FALSE]  # Columns with numbers in the header
+# Retain Stream_ID and columns with years in spatial_drivers_with_years
+spatial_drivers_with_years <- spatial_drivers %>%
+  select(Stream_ID, all_of(year_columns))
+
+# Remove "MMDD" from column names to standardize the format
+colnames(spatial_drivers_with_years) <- sub("MMDD$", "", colnames(spatial_drivers_with_years))
+
+# Convert all columns except Stream_ID to numeric where possible, coercing characters to NA
+spatial_drivers_with_years <- spatial_drivers_with_years %>%
+  mutate(across(-Stream_ID, as.numeric))
+
+# Reshape to long format, separating year and driver_type from column names
+spatial_drivers_long <- spatial_drivers_with_years %>%
+  pivot_longer(
+    cols = -Stream_ID,  # Keep Stream_ID as an identifier
+    names_to = "variable",  # Temporary name for the reshaped column names
+    values_to = "value"
+  ) %>%
+  # Extract driver_type and year using regex
+  mutate(
+    driver_type = sub("_[0-9]{4}.*$", "", variable),  # Extracts the part before the year
+    year = sub(".*_([0-9]{4}).*", "\\1", variable)   # Extracts the year
+  ) %>%
+  select(Stream_ID, driver_type, year, value)  # Reorder columns for readability
+
+# Check for duplicates without removing them
+spatial_drivers_distinct <- spatial_drivers_long %>%
+  arrange(Stream_ID, year, driver_type)
+
+spatial_drivers_no_years <- spatial_drivers[, !colnames(spatial_drivers) %in% year_columns, drop = FALSE]  # Columns without numbers
+# Retain Stream_ID and columns without numbers in spatial_drivers_no_years
+spatial_drivers_no_years <- spatial_drivers %>%
+  select(Stream_ID, all_of(non_year_columns))
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Combine spatial drivers and categorical variables
 spatial_vars <- cbind(spatial_drivers, cat_vars)
@@ -204,6 +256,7 @@ elevation_basin_cols <- grep(paste(relevant_columns, collapse = "|"), colnames(s
 
 # Combine major categorical columns with elevation and basin slope
 cat_vars <- spatial_drivers[, c(major_cat_vars, elevation_basin_cols)]
+
 
 # Add Stream_ID back to the resulting data
 cat_vars$Stream_ID <- spatial_drivers$Stream_ID
@@ -272,7 +325,7 @@ N_P_conc_raw_cast <- dcast(N_P_conc_raw, Stream_Name~solute_simplified,
 tot <- merge(tot, N_P_conc_raw_cast, by="Stream_Name")
 
 ## ------------------------------------------------------- ##
-# Import Daylength ----
+          # Import Daylength ----
 ## ------------------------------------------------------- ##
 daylen<-read.csv("Monthly_Daylength_2.csv")
 daylen<-daylen[,-1]
