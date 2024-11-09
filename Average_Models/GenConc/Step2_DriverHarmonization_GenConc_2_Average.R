@@ -320,26 +320,21 @@ tot <- merge(tot, mean_df, by="Stream_ID")
 # ## ------------------------------------------------------- ##
 #           # Import WRTDS N_P Conc & Flux ---- 
 # ## ------------------------------------------------------- ##
-# Load N and P data -- concentrations, can be Raw or WRTDS
-N_P_conc <- read.csv("Median_NP_WRTDS_Conc_2.csv")
-N_P_conc_cast <- dcast(N_P_conc, Stream_Name~solute_simplified, value.var = "median_Conc", fun.aggregate = mean)
+# # Load N and P data -- concentrations, can be Raw or WRTDS
+# N_P_conc <- read.csv("Median_NP_WRTDS_Conc_2.csv")
+# N_P_conc_cast <- dcast(N_P_conc, Stream_Name~solute_simplified, value.var = "median_Conc", fun.aggregate = mean)
+# 
+# tot <- merge(tot, N_P_conc_cast, by="Stream_Name")
 
-tot <- merge(tot, N_P_conc_cast, by="Stream_Name")
-
-## Load N and P data -- yields
-N_P_flux <- read.csv("Median_NP_WRTDS_Flux_2.csv")
-N_P_flux_cast <- dcast(N_P_flux, Stream_Name~solute_simplified, value.var = "median_Flux", fun.aggregate = mean)
-
-tot <- merge(tot, N_P_flux_cast, by="Stream_Name")
 
 # ## ------------------------------------------------------- ##
 #           # Import RAW N_P Conc ---- 
 # ## ------------------------------------------------------- ##
-# N_P_conc_raw <- read.csv("Median_NP_Raw_Conc_2.csv")
-# N_P_conc_raw_cast <- dcast(N_P_conc_raw, Stream_Name~solute_simplified,
-#                            value.var = "median_val", fun.aggregate = mean)
-# 
-# tot <- merge(tot, N_P_conc_raw_cast, by="Stream_Name")
+N_P_conc_raw <- read.csv("Median_NP_Raw_Conc_2.csv")
+N_P_conc_raw_cast <- dcast(N_P_conc_raw, Stream_Name~solute_simplified,
+                           value.var = "median_val", fun.aggregate = mean)
+
+tot <- merge(tot, N_P_conc_raw_cast, by="Stream_Name")
 
 ## ------------------------------------------------------- ##
 # Import Daylength ----
@@ -371,5 +366,5 @@ daylen_range <- bind_rows(daylen_range, missing_sites)
 tot <-merge(tot, daylen_range, by="Stream_Name")
 tot <- tot[!duplicated(tot$Stream_Name),]
 
-# write.csv(tot, "AllDrivers_Harmonized_20241108_WRTDS_MD_KG_rawNP_GenConc.csv")
-write.csv(tot, "AllDrivers_Harmonized_20241108_WRTDS_MD_KG_NP_GenConc_Average.csv")
+write.csv(tot, "AllDrivers_Harmonized_20241108_WRTDS_MD_KG_rawNP_GenConc.csv")
+# write.csv(tot, "AllDrivers_Harmonized_20241108_WRTDS_MD_KG_NP_GenConc_Average.csv")

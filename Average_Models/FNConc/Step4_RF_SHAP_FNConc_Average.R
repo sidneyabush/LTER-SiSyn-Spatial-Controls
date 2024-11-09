@@ -112,13 +112,13 @@ drivers_df <- read.csv("AllDrivers_Harmonized_20241108_WRTDS_MD_KG_NP_FNConc_sil
 raw_P <- read.csv("AllDrivers_Harmonized_20241108_WRTDS_MD_KG_rawNP_FNConc.csv") %>%
   distinct(Stream_ID, .keep_all = TRUE) %>%
   filter(!is.na(num_days)) %>%
-  select(Stream_Name, P) %>%
+  dplyr::select(Stream_Name, P) %>%
   dplyr::rename(raw_P = P)  # Rename the P column to distinguish raw P from WRTDS P
 
 # Identify rows in drivers_df where P is NA
 drivers_df_with_na_P <- drivers_df %>%
-  filter(is.na(P)) %>%
-  select(Stream_Name, Stream_ID, P)
+  dplyr::filter(is.na(P)) %>%
+  dplyr::select(Stream_Name, Stream_ID, P)
 
 # Merge raw P data for sites where P is NA in drivers_df
 drivers_df_with_raw_P <- drivers_df_with_na_P %>%
