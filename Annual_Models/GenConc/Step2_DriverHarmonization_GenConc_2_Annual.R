@@ -187,8 +187,6 @@ monthly_drivers <- spatial_drivers[,c(361,which(colnames(spatial_drivers) %like%
 # Remove monthly drivers from spatial drivers
 spatial_drivers <- spatial_drivers[,-c(which(colnames(spatial_drivers) %like% months_abb))]
 
-
-
 # Identify columns with any numbers in the header
 year_columns <- grep("[0-9]", colnames(spatial_drivers), value = TRUE)
 # Identify columns without numbers, ensuring Stream_ID is included
@@ -207,23 +205,40 @@ colnames(spatial_drivers_with_years) <- sub("MMDD$", "", colnames(spatial_driver
 spatial_drivers_with_years <- spatial_drivers_with_years %>%
   mutate(across(-Stream_ID, as.numeric))
 
-# Reshape to long format, separating year and driver_type from column names
-spatial_drivers_long <- spatial_drivers_with_years %>%
-  pivot_longer(
-    cols = -Stream_ID,  # Keep Stream_ID as an identifier
-    names_to = "variable",  # Temporary name for the reshaped column names
-    values_to = "value"
-  ) %>%
-  # Extract driver_type and year using regex
-  mutate(
-    driver_type = sub("_[0-9]{4}.*$", "", variable),  # Extracts the part before the year
-    year = sub(".*_([0-9]{4}).*", "\\1", variable)   # Extracts the year
-  ) %>%
-  select(Stream_ID, driver_type, year, value)  # Reorder columns for readability
 
-# Check for duplicates without removing them
-spatial_drivers_distinct <- spatial_drivers_long %>%
-  arrange(Stream_ID, year, driver_type)
+
+
+# Step 1: Remove rows with NA values in relevant columns (Stream_ID, year, driver_type, or value)
+spatial_drivers_long_clean <- spatial_drivers_long %>%
+  filter(!is.na(Stream_ID) & !is.na(year) & !is.na(driver_type) & !is.na(value))
+
+# Step 2: Confirm `year` is treated consistently as an integer
+spatial_drivers_long_clean <- spatial_drivers_long_clean %>%
+  mutate(year = as.integer(year))
+
+# Step 3: Create the unique identifier column
+spatial_drivers_long_clean <- spatial_drivers_long_clean %>%
+  mutate(unique_id = paste(Stream_ID, year, driver_type, sep = "_"))
+
+# Step 4: Confirm data structure before pivoting
+print("Data structure after cleaning:")
+str(spatial_drivers_long_clean)
+
+# Step 5: Pivot to wide format using unique_id as the key
+spatial_drivers_wide <- spatial_drivers_long_clean %>%
+  pivot_wider(
+    id_cols = c(Stream_ID, year),   # Keep Stream_ID and year as identifiers
+    names_from = unique_id,         # Use unique_id for each driver_type and year combination
+    values_from = value             # Fill values from the value column
+  )
+
+
+
+
+
+
+
+
 
 spatial_drivers_no_years <- spatial_drivers[, !colnames(spatial_drivers) %in% year_columns, drop = FALSE]  # Columns without numbers
 # Retain Stream_ID and columns without numbers in spatial_drivers_no_years
