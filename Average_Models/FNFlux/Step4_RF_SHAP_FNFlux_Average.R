@@ -87,7 +87,7 @@ drivers_df <- read.csv("AllDrivers_Harmonized_20241108_WRTDS_MD_KG_NP_FNFlux_sil
          -elevation_max_m, -elevation_median_m, -basin_slope_median_degree, -basin_slope_min_degree, -basin_slope_max_degree,
          -num_days, -mean_si, -sd_si, -min_Si, -max_Si, -CV_C, -mean_q, -med_q, -sd_q, -CV_Q, -min_Q, -max_Q,
          -cvc_cvq, -C_Q_slope, -major_land, -major_soil, -major_rock, -temp_K, -mapped_lithology,
-         -lithology_description, -runoff, -contains("flux")) %>%
+         -lithology_description, -runoff, -contains("_si")) %>%
   # Filter to retain complete cases for snow_cover
   filter(!is.na(snow_cover))
 
@@ -108,30 +108,32 @@ drivers_df <- read.csv("AllDrivers_Harmonized_20241108_WRTDS_MD_KG_NP_FNFlux_sil
 # # Save the list to a CSV file
 # write.csv(streams_with_na_permafrost, "streams_with_na_permafrost.csv", row.names = FALSE)
 
-# Import raw P data, renaming P column and calculating flux
-raw_P <- read.csv("AllDrivers_Harmonized_20241108_WRTDS_MD_KG_rawNP_FNFlux.csv") %>%
-  distinct(Stream_ID, .keep_all = TRUE) %>%
-  filter(!is.na(num_days)) %>%
-  select(Stream_Name, Stream_ID, med_q, drainSqKm, P) %>%
-  mutate(raw_flux = P * med_q / drainSqKm,   # Calculate flux as concentration * discharge * drainage area
-         raw_P = P) %>%                      # Rename P for clarity
-  select(Stream_Name, Stream_ID, raw_P, raw_flux)
 
-# Identify rows in drivers_df where P (flux) is NA
-drivers_df_with_na_P <- drivers_df %>%
-  filter(is.na(P)) %>%
-  select(Stream_Name, Stream_ID, P)
-
-# Merge raw P and flux data for sites where P is NA in drivers_df
-drivers_df_with_raw_P <- drivers_df_with_na_P %>%
-  left_join(raw_P, by = "Stream_Name") %>%
-  mutate(P = ifelse(is.na(P), raw_flux, P))  # Replace NA values in P with calculated raw_flux values
-
-# Update the original drivers_df with the new P (flux) values
-drivers_df <- drivers_df %>%
-  left_join(drivers_df_with_raw_P %>% select(Stream_Name, P), by = "Stream_Name", suffix = c("", "_new")) %>%
-  mutate(P = ifelse(is.na(P_new), P, P_new)) %>%  # Update P with P_new where available
-  select(-P_new)  # Remove the temporary P_new column
+## INCORPORATING THE RAW FLUX DATA HERE ----
+# # Import raw P data, renaming P column and calculating flux
+# raw_P <- read.csv("AllDrivers_Harmonized_20241108_WRTDS_MD_KG_rawNP_FNFlux.csv") %>%
+#   distinct(Stream_ID, .keep_all = TRUE) %>%
+#   filter(!is.na(num_days)) %>%
+#   select(Stream_Name, Stream_ID, med_q, drainSqKm, P) %>%
+#   mutate(raw_flux = P * med_q / drainSqKm,   # Calculate flux as concentration * discharge * drainage area
+#          raw_P = P) %>%                      # Rename P for clarity
+#   select(Stream_Name, Stream_ID, raw_P, raw_flux)
+# 
+# # Identify rows in drivers_df where P (flux) is NA
+# drivers_df_with_na_P <- drivers_df %>%
+#   filter(is.na(P)) %>%
+#   select(Stream_Name, Stream_ID, P)
+# 
+# # Merge raw P and flux data for sites where P is NA in drivers_df
+# drivers_df_with_raw_P <- drivers_df_with_na_P %>%
+#   left_join(raw_P, by = "Stream_Name") %>%
+#   mutate(P = ifelse(is.na(P), raw_flux, P))  # Replace NA values in P with calculated raw_flux values
+# 
+# # Update the original drivers_df with the new P (flux) values
+# drivers_df <- drivers_df %>%
+#   left_join(drivers_df_with_raw_P %>% select(Stream_Name, P), by = "Stream_Name", suffix = c("", "_new")) %>%
+#   mutate(P = ifelse(is.na(P_new), P, P_new)) %>%  # Update P with P_new where available
+#   select(-P_new)  # Remove the temporary P_new column
 
 
 ## Now import streams with na slopes
