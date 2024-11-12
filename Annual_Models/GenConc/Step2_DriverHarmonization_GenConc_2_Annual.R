@@ -12,7 +12,7 @@
 # Housekeeping ----
 ## ------------------------------------------------------- ##
 # Load needed libraries
-librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate)
+librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridatem, tidyr)
 
 # Clear environment
 rm(list = ls())
@@ -198,127 +198,153 @@ spatial_drivers_with_years <- spatial_drivers[, year_columns, drop = FALSE]  # C
 spatial_drivers_with_years <- spatial_drivers %>%
   select(Stream_ID, all_of(year_columns))
 
-# Remove "MMDD" from column names to standardize the format
-colnames(spatial_drivers_with_years) <- sub("MMDD$", "", colnames(spatial_drivers_with_years))
-
 # Convert all columns except Stream_ID to numeric where possible, coercing characters to NA
 spatial_drivers_with_years <- spatial_drivers_with_years %>%
   mutate(across(-Stream_ID, as.numeric))
 
+# Reshape spatial drivers to long format
+spatial_drivers_long <- spatial_drivers_with_years %>%
+  pivot_longer(
+    cols = -Stream_ID,
+    names_to = "variable",
+    values_to = "value"
+  ) %>%
+  mutate(
+    driver_type = sub("_[0-9]{4}.*$", "", variable),
+    year = sub(".*_([0-9]{4}).*", "\\1", variable)
+  ) %>%
+  select(Stream_ID, driver_type, year, value)
 
+# Step 1: Create the unique identifier column
+# Here we create a unique column by combining Stream_ID, year, and driver_type
+spatial_drivers_long <- spatial_drivers_long %>%
+  mutate(unique_column = paste(Stream_ID, year, driver_type, sep = "_"))
 
-
-# Step 1: Remove rows with NA values in relevant columns (Stream_ID, year, driver_type, or value)
+# Step 2: Remove rows with any NA values in the relevant columns
+# We ensure Stream_ID, year, driver_type, unique_column, and value are all non-NA
 spatial_drivers_long_clean <- spatial_drivers_long %>%
-  filter(!is.na(Stream_ID) & !is.na(year) & !is.na(driver_type) & !is.na(value))
+  filter(!is.na(Stream_ID) & !is.na(year) & !is.na(driver_type) & !is.na(unique_column) & !is.na(value))
 
-# Step 2: Confirm `year` is treated consistently as an integer
+# Step 3: Convert `value` to a consistent type (e.g., numeric) if applicable
+# This step ensures there are no type conflicts in the value column
 spatial_drivers_long_clean <- spatial_drivers_long_clean %>%
-  mutate(year = as.integer(year))
+  mutate(value = as.numeric(value))
 
-# Step 3: Create the unique identifier column
-spatial_drivers_long_clean <- spatial_drivers_long_clean %>%
-  mutate(unique_id = paste(Stream_ID, year, driver_type, sep = "_"))
+# Step 4: Pivot to wide format using the unique_column as the column headers
+# Split data by driver type and pivot each separately
+wide_data_list <- list()
 
-# Step 4: Confirm data structure before pivoting
-print("Data structure after cleaning:")
-str(spatial_drivers_long_clean)
+for(driver in unique(spatial_drivers_long_clean$driver_type)) {
+  # Subset the data for the current driver type
+  driver_data <- spatial_drivers_long_clean %>%
+    filter(driver_type == driver) %>%
+    select(Stream_ID, year, value) %>%
+    rename(!!driver := value)
+  
+  # Store each driver type as a separate wide dataframe
+  wide_data_list[[driver]] <- driver_data
+}
 
-# Step 5: Pivot to wide format using unique_id as the key
-spatial_drivers_wide <- spatial_drivers_long_clean %>%
-  pivot_wider(
-    id_cols = c(Stream_ID, year),   # Keep Stream_ID and year as identifiers
-    names_from = unique_id,         # Use unique_id for each driver_type and year combination
-    values_from = value             # Fill values from the value column
-  )
-
-### Need to revisit this later
-
-
-
-
-
-
+# Merge all wide dataframes by Stream_ID and year
+spatial_drivers_wide <- Reduce(function(x, y) merge(x, y, by = c("Stream_ID", "year"), all = TRUE), 
+                               wide_data_list)
 
 spatial_drivers_no_years <- spatial_drivers[, !colnames(spatial_drivers) %in% year_columns, drop = FALSE]  # Columns without numbers
 # Retain Stream_ID and columns without numbers in spatial_drivers_no_years
 spatial_drivers_no_years <- spatial_drivers %>%
   select(Stream_ID, all_of(non_year_columns))
 
+# Perform a left join to combine the wide annual data with the non-annual data
+combined_spatial_drivers <- spatial_drivers_wide %>%
+  left_join(spatial_drivers_no_years, by = "Stream_ID")
 
+## ADD IN GREENUP DAY: ----
 
+# Define greenup cycles
+greenup_cycles <- c("cycle0", "cycle1")
 
+# Step 1: Standardize column names by removing "MMDD" if present
+colnames(spatial_drivers) <- sub("MMDD$", "", colnames(spatial_drivers))
 
-
-
-
-
-
-
-
-
-
-# Combine spatial drivers and categorical variables
-spatial_vars <- cbind(spatial_drivers, cat_vars)
-
-# Define the pattern to search for elevation and basin slope columns
-relevant_columns <- c("elevation", "basin")
-
-# Use grep to locate elevation and basin slope columns
-elevation_basin_cols <- grep(paste(relevant_columns, collapse = "|"), colnames(spatial_drivers))
-
-## Now need to add in basin slope and elevation for missing sites: 
-
-# Combine major categorical columns with elevation and basin slope
-cat_vars <- spatial_drivers[, c(major_cat_vars, elevation_basin_cols)]
-
-
-# Add Stream_ID back to the resulting data
-cat_vars$Stream_ID <- spatial_drivers$Stream_ID
-
-# These are the quantitative drivers
-drivers_list_quant <- c("num_days", "prop_area", "precip", "evapotrans", "temp", "npp", "permafrost")
-
-# Add in Greenup day
-greenup <- c("cycle0", "cycle1")
-site_mean <- list()
-
-for (i in 1:length(drivers_list_quant)) {
-  drive_cols <- grep(drivers_list_quant[i], colnames(spatial_drivers))
-  one_driver <- spatial_drivers[,c(301, drive_cols)]
-  site_mean[[i]] <- rowMeans(one_driver[,c(2:length(one_driver))], na.rm = TRUE)
+# Convert date columns to day-of-year values
+for (cycle in greenup_cycles) {
+  # Identify `greenup` columns for each cycle
+  cycle_cols <- grep(paste0("greenup_", cycle), colnames(spatial_drivers), value = TRUE)
+  
+  # Loop through each column in the cycle
+  for (col in cycle_cols) {
+    # Convert date to day-of-year if it’s in the correct format
+    spatial_drivers[[paste0(col, "_doy")]] <- ifelse(
+      !is.na(as.Date(spatial_drivers[[col]], format = "%Y-%m-%d")),
+      yday(as.Date(spatial_drivers[[col]], format = "%Y-%m-%d")),
+      NA_real_
+    )
+  }
 }
 
-mean_df <- as.data.frame(do.call(cbind, site_mean))
-colnames(mean_df) <- drivers_list_quant
-mean_df$Stream_ID <- spatial_drivers$Stream_ID
+# Step 3: Reshape `greenup` data for each cycle
+greenup_long <- list()
 
-## Get mean greenup day
-greenup_mean <- list()
-stream_id <- c("Stream_ID")
-for (i in 1:length(greenup)) {
-  drive_cols <- grep(greenup[i], colnames(spatial_drivers))
-  one_driver <- spatial_drivers[,c(301, drive_cols)]
-  one_driver <- one_driver[!duplicated(one_driver$Stream_ID),]
+for (cycle in greenup_cycles) {
+  # Select columns starting with `greenup` and ending with `_doy` that match the current cycle
+  cycle_doy_cols <- grep(paste0("greenup_", cycle, ".*_doy$"), colnames(spatial_drivers), value = TRUE)
   
-  driver_melt <- melt(one_driver, id.vars=stream_id)
+  # Print selected columns to verify the correct ones are being used
+  print(paste("Selected columns for", cycle, ":"))
+  print(cycle_doy_cols)
   
-  driver_melt$doy <- yday(as.Date(driver_melt$value, "%Y-%m-%d"))
-  one_driver <- dcast(driver_melt, Stream_ID~variable, value.var = "doy")
-  greenup_mean[[i]] <- rowMeans(one_driver[,c(2:length(one_driver))], na.rm = TRUE)
+  # Proceed with reshaping if there are matching columns
+  if (length(cycle_doy_cols) > 0) {
+    greenup_long[[cycle]] <- spatial_drivers %>%
+      select(Stream_ID, all_of(cycle_doy_cols)) %>%
+      pivot_longer(
+        cols = all_of(cycle_doy_cols),
+        names_to = "variable",
+        values_to = "greenup_day"
+      ) %>%
+      mutate(
+        year = as.integer(sub(".*_(\\d{4}).*", "\\1", variable)),  # Extract year
+        cycle = cycle
+      ) %>%
+      select(Stream_ID, year, cycle, greenup_day)
+  } else {
+    warning(paste("No matching columns found for cycle:", cycle))
+  }
 }
 
-green_df <- as.data.frame(do.call(cbind, greenup_mean))
+# Combine `greenup_long` data for each cycle
+greenup_df <- bind_rows(greenup_long$cycle0, greenup_long$cycle1)
 
-colnames(green_df) <- greenup
-green_df$Stream_ID <- one_driver$Stream_ID
+# Convert `year` to integer in `combined_spatial_drivers`
+combined_spatial_drivers <- combined_spatial_drivers %>%
+  mutate(year = as.integer(year))
 
-mean_df <- merge(mean_df, green_df, by="Stream_ID", all = TRUE)
-mean_df <- merge(mean_df, cat_vars, by="Stream_ID", all=TRUE)
+# Convert `year` to integer in `greenup_df` (if not already done)
+greenup_df <- greenup_df %>%
+  mutate(year = as.integer(year))
 
-tot <- merge(tot, mean_df, by="Stream_ID")
+# Combine data frames:
 
-# unique(tot$Stream_ID)
+# Step 1: Merge the `greenup` long data with the wide numerical driver data to create `tot`
+tot <- combined_spatial_drivers %>%
+  left_join(greenup_df, by = c("Stream_ID", "year"))
+
+# Step 2: Select columns without year-based values (non-annual data)
+non_year_columns <- colnames(spatial_drivers)[!colnames(spatial_drivers) %in% year_columns]
+spatial_drivers_no_years <- spatial_drivers %>%
+  select(Stream_ID, all_of(non_year_columns))
+
+# Perform the join with `relationship = "many-to-many"`
+tot <- spatial_drivers_no_years %>%
+  left_join(tot, by = c("Stream_ID", "year"), relationship = "many-to-many")
+
+# Step 2: Identify and handle .x and .y suffixes, ensuring uniqueness
+# Coalesce each .x and .y pair, then rename .x columns and drop .y columns
+tot <- tot %>%
+  mutate(across(ends_with(".x"), ~ coalesce(.x, get(sub("\\.x$", ".y", cur_column()))))) %>%
+  rename_with(~ sub("\\.x$", "", .), ends_with(".x")) %>%  # Rename .x columns
+  select(-matches("\\.y$"))  # Drop all .y columns after coalescing
+
 
 # ## ------------------------------------------------------- ##
 #           # Import WRTDS N_P Conc & Flux ---- 
