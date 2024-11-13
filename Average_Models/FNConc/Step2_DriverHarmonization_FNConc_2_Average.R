@@ -73,17 +73,17 @@ wrtds_df <- subset(wrtds_df, chemical == "DSi")
 si_stats <- wrtds_df %>%
   dplyr::group_by(Stream_ID) %>%
   dplyr::summarise(mean_si = mean(FNConc), med_si=median(FNConc), sd_si=sd(FNConc), 
-                   min_Si=min(FNConc), max_Si=max(FNConc))
+                   min_si=min(FNConc), max_Si=max(FNConc))
 
 si_stats$CV_C <- si_stats$sd_si/si_stats$mean_si
 
 ## Using Flow Normalized Si Fluxes
 flux_stats <- wrtds_df %>%
   dplyr::group_by(Stream_ID) %>%
-  dplyr::summarise(mean_flux = mean(FNFlux), med_flux=median(FNFlux), 
-                   sd_flux=sd(FNFlux), min_flux=min(FNFlux), max_flux=max(FNFlux))
+  dplyr::summarise(FNConc=median(FNConc), 
+                   FNFlux=median(FNFlux))
 
-flux_stats$CV_C_flux <- flux_stats$sd_flux/flux_stats$mean_flux
+# flux_stats$CV_C_flux <- flux_stats$sd_flux/flux_stats$mean_flux
 
 # si_stats_annual <- wrtds_df %>%
 #   dplyr::group_by(Stream_ID, year(as.Date(Date))) %>%
@@ -321,20 +321,20 @@ tot <- merge(tot, mean_df, by="Stream_ID")
 #           # Import WRTDS N_P Conc ---- 
 # ## ------------------------------------------------------- ##
 # Load N and P data -- concentrations, can be Raw or WRTDS
-# N_P_conc <- read.csv("Median_NP_WRTDS_Conc_2.csv")
-# N_P_conc_cast <- dcast(N_P_conc, Stream_Name~solute_simplified, value.var = "median_Conc", fun.aggregate = mean)
-# 
-# tot <- merge(tot, N_P_conc_cast, by="Stream_Name")
+N_P_conc <- read.csv("Median_NP_WRTDS_Conc_2.csv")
+N_P_conc_cast <- dcast(N_P_conc, Stream_Name~solute_simplified, value.var = "median_Conc", fun.aggregate = mean)
+
+tot <- merge(tot, N_P_conc_cast, by="Stream_Name")
 
 
 # ## ------------------------------------------------------- ##
 #           # Import RAW N_P Conc ---- 
 # ## ------------------------------------------------------- ##
-N_P_conc_raw <- read.csv("Median_NP_Raw_Conc_2.csv")
-N_P_conc_raw_cast <- dcast(N_P_conc_raw, Stream_Name~solute_simplified,
-                           value.var = "median_val", fun.aggregate = mean)
-
-tot <- merge(tot, N_P_conc_raw_cast, by="Stream_Name")
+# N_P_conc_raw <- read.csv("Median_NP_Raw_Conc_2.csv")
+# N_P_conc_raw_cast <- dcast(N_P_conc_raw, Stream_Name~solute_simplified,
+#                            value.var = "median_val", fun.aggregate = mean)
+# 
+# tot <- merge(tot, N_P_conc_raw_cast, by="Stream_Name")
 
 ## ------------------------------------------------------- ##
 # Import Daylength ----
@@ -366,5 +366,5 @@ daylen_range <- bind_rows(daylen_range, missing_sites)
 tot <-merge(tot, daylen_range, by="Stream_Name")
 tot <- tot[!duplicated(tot$Stream_Name),]
 
-write.csv(tot, "AllDrivers_Harmonized_20241108_WRTDS_MD_KG_rawNP_FNConc.csv")
-# write.csv(tot, "AllDrivers_Harmonized_20241108_WRTDS_MD_KG_NP_FNConc_Average.csv")
+# write.csv(tot, "AllDrivers_Harmonized_20241108_WRTDS_MD_KG_rawNP_FNConc.csv")
+write.csv(tot, "AllDrivers_Harmonized_20241108_WRTDS_MD_KG_NP_FNConc_Average.csv")
