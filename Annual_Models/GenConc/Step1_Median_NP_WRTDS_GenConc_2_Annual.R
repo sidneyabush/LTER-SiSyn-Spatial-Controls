@@ -37,6 +37,11 @@ chem_NP_avg <- chem_NP %>%
     .groups = 'drop'
   )
 
+num_unique_streams <- chem_NP_avg %>% 
+  summarise(unique_streams = n_distinct(Stream_Name)) %>%
+  pull(unique_streams)
+
+print(num_unique_streams)
 
 # Convert only NOx and NO3 to NOx, leave other solutes unchanged
 chem_NP_avg$solute_simplified <- ifelse(chem_NP_avg$chemical %in% c("NOx", "NO3"),

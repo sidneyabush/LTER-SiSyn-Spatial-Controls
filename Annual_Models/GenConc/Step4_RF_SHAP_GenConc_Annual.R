@@ -85,7 +85,13 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 drivers_df <- read.csv("AllDrivers_Harmonized_20241112_WRTDS_MD_KG_NP_GenConc_silicate_weathering_Annual.csv") %>%
   select(Stream_Name, Stream_ID, Year, GenConc, basin_slope_mean_degree, q_95, q_5, drainage_area, max_prop_area, 
          evapotrans, npp, temp, precip, permafrost_mean_m, elevation_mean_m, basin_slope_mean_degree,
-         contains("rocks"), contains("land_"), green_up_day, -NOx, -P, silicate_weathering)
+         contains("rocks"), contains("land_"), green_up_day, NOx, P, silicate_weathering)
+
+num_unique_streams <- drivers_df %>% 
+  summarise(unique_streams = n_distinct(Stream_Name)) %>%
+  pull(unique_streams)
+
+print(num_unique_streams) 
 
 
 # # Export a list of stream names with NA values for basin slope
@@ -106,21 +112,42 @@ drivers_df <- read.csv("AllDrivers_Harmonized_20241112_WRTDS_MD_KG_NP_GenConc_si
 
 # Now import raw P data and merge it for sites in drivers_df where there are NA P values
 # Ensure raw_P has Stream_Name, Stream_ID, and Year as unique identifiers
-# raw_P <- fread("AllDrivers_Harmonized_20241108_WRTDS_MD_KG_rawNP_GenConc_Average.csv")
-# 
-# # Ensure drivers_df and raw_P are explicitly converted to data.table
+# Load raw P and NOx data
+raw_P <- fread("AllDrivers_Harmonized_20241108_WRTDS_MD_KG_rawNP_GenConc_Average.csv")
+
+# Ensure drivers_df and raw_P are explicitly converted to data.table
 drivers_df <- as.data.table(drivers_df)
-# raw_P <- as.data.table(raw_P)
-# 
-# # Rename P column in raw_P to distinguish it
-# setnames(raw_P, "P", "raw_P")
-# 
-# # Set keys on Stream_Name and Year for both data.tables
-# setkey(drivers_df, Stream_Name)
-# setkey(raw_P, Stream_Name)
-# 
-# # In-place update: replace NA in P only where there's a corresponding raw_P
-# drivers_df[raw_P, P := ifelse(is.na(P), i.raw_P, P), on = .(Stream_Name)]
+raw_P <- as.data.table(raw_P)
+
+# Rename P and NOx columns in raw_P to distinguish them
+setnames(raw_P, c("P", "NOx"), c("raw_P", "raw_NOx"))
+
+# Set keys on Stream_Name and Year for both data.tables
+setkey(drivers_df, Stream_Name)
+setkey(raw_P, Stream_Name)
+
+# Count NA values in P and NOx before merging
+na_count_P_before <- sum(is.na(drivers_df$P))
+na_count_NOx_before <- sum(is.na(drivers_df$NOx))
+print(paste("Number of NA values in P before merging:", na_count_P_before))
+print(paste("Number of NA values in NOx before merging:", na_count_NOx_before))
+
+# Perform the merge for P and NOx
+# In-place update: replace NA in P and NOx only where there's a corresponding raw_P and raw_NOx
+drivers_df[raw_P, `:=`(
+  P = fifelse(is.na(P), i.raw_P, P),
+  NOx = fifelse(is.na(NOx), i.raw_NOx, NOx)
+)]
+
+# Count NA values in P and NOx after merging
+na_count_P_after <- sum(is.na(drivers_df$P))
+na_count_NOx_after <- sum(is.na(drivers_df$NOx))
+print(paste("Number of NA values in P after merging:", na_count_P_after))
+print(paste("Number of NA values in NOx after merging:", na_count_NOx_after))
+
+# Count the number of unique Stream_Name values
+num_unique_streams <- drivers_df[, .N, by = Stream_Name][, .N]
+print(paste("Number of unique Stream_Name values:", num_unique_streams))
 
 ## Now import streams with na slopes
 # Load and process Krycklan slopes
@@ -220,8 +247,23 @@ drivers_df <- drivers_df %>%
   mutate(max_prop_area = replace(max_prop_area, is.na(max_prop_area), 0)) 
 
 ## FIND WHERE NA VALUES ARE REDUCING STREAM COUNT: ----
-drivers_df <- drivers_df %>%
-  filter(!is.na(evapotrans), !is.na(basin_slope_mean_degree), !is.na(green_up_day))
+
+# Optionally, check distribution of NAs across all columns
+sapply(drivers_df, function(x) sum(is.na(x)))
+
+
+drivers_df_test <- drivers_df %>%
+  filter(!is.na(evapotrans), !is.na(basin_slope_mean_degree), !is.na(green_up_day),
+         !is.na(P), !is.na(NOx))
+
+drivers_df_test <- na.omit(drivers_df)
+
+num_unique_streams <- drivers_df_test %>% 
+  summarise(unique_streams = n_distinct(Stream_Name)) %>%
+  pull(unique_streams)
+
+print(num_unique_streams) 
+
 
 # # Export the dataframe to a CSV file
 # write.csv(drivers_df, "Final_Sites.csv", row.names = FALSE)
@@ -233,9 +275,6 @@ drivers_df <- drivers_df %>% mutate(across(where(is.integer), as.numeric))%>%
 
 # Remove outliers using custom function
 # drivers_df <- remove_outlier_rows(drivers_df)
-
-# Optionally, check distribution of NAs across all columns
-sapply(drivers_df, function(x) sum(is.na(x)))
 
 setDF(drivers_df)
 

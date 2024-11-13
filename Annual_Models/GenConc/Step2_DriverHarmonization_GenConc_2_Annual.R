@@ -347,24 +347,42 @@ tot <- tot %>%
   dplyr::select(-ends_with(".y"), -ends_with(".x.x"), -ends_with(".y.x")) %>%
   dplyr::select(-44, -"cycle") %>%
   rename_with(~ str_replace(., "\\.x$", ""), ends_with(".x")) 
-  
 
+## Check how many unique streams we have before merging with N and P (403 streams)
+num_unique_streams <- tot %>% 
+  summarise(unique_streams = n_distinct(Stream_Name)) %>%
+  pull(unique_streams)
+
+print(num_unique_streams)  
+
+## total is 395 going into N and P merge
 
 # ## ------------------------------------------------------- ##
 #           # Import WRTDS N_P Conc & Flux ---- 
 # ## ------------------------------------------------------- ##
-# # Load N and P data -- concentrations, can be Raw or WRTDS
-# N_P_conc <- read.csv("Median_NP_WRTDS_GenConc_2_Annual.csv") %>%
-#   dplyr::select(-"X", -"chemical")
-# 
-# N_P_conc_wide <- N_P_conc %>%
-#   pivot_wider(names_from = solute_simplified, values_from = median_Conc) %>%
-#   mutate(across(everything(), ~ na_if(as.character(.), "NULL"))) %>%
-#   # Optionally, convert back to numeric where appropriate
-#   mutate(across(where(is.character), ~ type.convert(., as.is = TRUE)))
-# 
-# tot <- merge(tot, N_P_conc_wide, by = c("Stream_Name", "Year"), all.x = TRUE)
+# Load N and P data -- concentrations, can be Raw or WRTDS
+N_P_conc <- read.csv("Median_NP_WRTDS_GenConc_2_Annual.csv") %>%
+  dplyr::select(-"X", -"chemical")
 
+num_unique_streams <- N_P_conc %>% 
+  summarise(unique_streams = n_distinct(Stream_Name)) %>%
+  pull(unique_streams)
+
+print(num_unique_streams)  
+
+N_P_conc_wide <- N_P_conc %>%
+  pivot_wider(names_from = solute_simplified, values_from = median_Conc) %>%
+  mutate(across(everything(), ~ na_if(as.character(.), "NULL"))) %>%
+  # Optionally, convert back to numeric where appropriate
+  mutate(across(where(is.character), ~ type.convert(., as.is = TRUE)))
+
+tot <- merge(tot, N_P_conc_wide, by = c("Stream_Name", "Year"), all.x = TRUE)
+
+num_unique_streams <- tot %>% 
+  summarise(unique_streams = n_distinct(Stream_Name)) %>%
+  pull(unique_streams)
+
+print(num_unique_streams)  
 
 # ## ------------------------------------------------------- ##
 #           # Import RAW N_P Conc ---- 
@@ -375,6 +393,12 @@ N_P_conc_raw <- read.csv("Median_NP_Raw_Conc_2_Annual.csv") %>%
 # Reshape data using pivot_wider
 N_P_conc_raw_cast <- N_P_conc_raw %>%
   pivot_wider(names_from = solute_simplified, values_from = annual_median_Conc)
+
+num_unique_streams <- N_P_conc_raw_cast %>% 
+  summarise(unique_streams = n_distinct(Stream_Name)) %>%
+  pull(unique_streams)
+
+print(num_unique_streams)  
 
 tot <- merge(tot, N_P_conc_raw_cast, by= c("Stream_Name", "Year"), all.x = TRUE)
 

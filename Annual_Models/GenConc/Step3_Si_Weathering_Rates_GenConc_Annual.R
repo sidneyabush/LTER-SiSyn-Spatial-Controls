@@ -82,5 +82,11 @@ drivers_df <- drivers_df %>%
   mutate(silicate_weathering = mapply(calculate_weathering, runoff, mapped_lithology, temp_K)) %>%
   ungroup()
 
+num_unique_streams <- drivers_df %>% 
+  summarise(unique_streams = n_distinct(Stream_Name)) %>%
+  pull(unique_streams)
+
+print(num_unique_streams) 
+
 # Export the dataframe to a CSV file
 write.csv(drivers_df, "AllDrivers_Harmonized_20241112_WRTDS_MD_KG_NP_GenConc_silicate_weathering_Annual.csv", row.names = FALSE)
