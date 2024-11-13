@@ -12,7 +12,7 @@
 # Housekeeping ----
 ## ------------------------------------------------------- ##
 # Load needed libraries
-librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridatem, tidyr, stringr)
+librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr, stringr)
 
 # Clear environment
 rm(list = ls())
@@ -353,29 +353,30 @@ tot <- tot %>%
 # ## ------------------------------------------------------- ##
 #           # Import WRTDS N_P Conc & Flux ---- 
 # ## ------------------------------------------------------- ##
-# Load N and P data -- concentrations, can be Raw or WRTDS
-N_P_conc <- read.csv("Median_NP_WRTDS_GenConc_2_Annual.csv") %>%
-  dplyr::select(-"X", -"chemical")
+# # Load N and P data -- concentrations, can be Raw or WRTDS
+# N_P_conc <- read.csv("Median_NP_WRTDS_GenConc_2_Annual.csv") %>%
+#   dplyr::select(-"X", -"chemical")
+# 
+# N_P_conc_wide <- N_P_conc %>%
+#   pivot_wider(names_from = solute_simplified, values_from = median_Conc) %>%
+#   mutate(across(everything(), ~ na_if(as.character(.), "NULL"))) %>%
+#   # Optionally, convert back to numeric where appropriate
+#   mutate(across(where(is.character), ~ type.convert(., as.is = TRUE)))
+# 
+# tot <- merge(tot, N_P_conc_wide, by = c("Stream_Name", "Year"), all.x = TRUE)
 
-N_P_conc_wide <- N_P_conc %>%
-  pivot_wider(names_from = solute_simplified, values_from = median_Conc) %>%
-  mutate(across(everything(), ~ na_if(as.character(.), "NULL"))) %>%
-  # Optionally, convert back to numeric where appropriate
-  mutate(across(where(is.character), ~ type.convert(., as.is = TRUE)))
-
-tot <- merge(tot, N_P_conc_wide, by= c("Stream_Name", "Year"))
 
 # ## ------------------------------------------------------- ##
 #           # Import RAW N_P Conc ---- 
-# ## ------------------------------------------------------- ##
-# N_P_conc_raw <- read.csv("Median_NP_Raw_Conc_2_Annual.csv") %>%
-#   dplyr::select(-"X")
-#   
-# # Reshape data using pivot_wider
-# N_P_conc_raw_cast <- N_P_conc_raw %>%
-#   pivot_wider(names_from = solute_simplified, values_from = annual_median_Conc)
-# 
-# tot <- merge(tot, N_P_conc_raw_cast, by= c("Stream_Name", "Year"))
+# # ## ------------------------------------------------------- ##
+N_P_conc_raw <- read.csv("Median_NP_Raw_Conc_2_Annual.csv") %>%
+  dplyr::select(-"X")
+
+# Reshape data using pivot_wider
+N_P_conc_raw_cast <- N_P_conc_raw %>%
+  pivot_wider(names_from = solute_simplified, values_from = annual_median_Conc)
+
+tot <- merge(tot, N_P_conc_raw_cast, by= c("Stream_Name", "Year"), all.x = TRUE)
 
 ## ------------------------------------------------------- ##
           # Import Daylength ----
@@ -407,5 +408,5 @@ daylen_range <- bind_rows(daylen_range, missing_sites)
 tot <-merge(tot, daylen_range, by="Stream_Name")
 # tot <- tot[!duplicated(tot$Stream_Name),]
 
-# write.csv(tot, "AllDrivers_Harmonized_20241112_WRTDS_MD_KG_rawNP_GenConc_Annual.csv")
-write.csv(tot, "AllDrivers_Harmonized_20241112_WRTDS_MD_KG_NP_GenConc_Annual.csv")
+write.csv(tot, "AllDrivers_Harmonized_20241112_WRTDS_MD_KG_rawNP_GenConc_Annual.csv")
+# write.csv(tot, "AllDrivers_Harmonized_20241112_WRTDS_MD_KG_NP_GenConc_Annual.csv")
