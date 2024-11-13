@@ -12,7 +12,7 @@
 # Housekeeping ----
 ## ------------------------------------------------------- ##
 # Load needed libraries
-librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridatem, tidyr)
+librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridatem, tidyr, stringr)
 
 # Clear environment
 rm(list = ls())
@@ -315,46 +315,45 @@ for (cycle in greenup_cycles) {
 # Combine `greenup_long` data for each cycle
 greenup_df <- bind_rows(greenup_long$cycle0, greenup_long$cycle1)
 
-# Convert `year` to integer in `combined_spatial_drivers`
-combined_spatial_drivers <- combined_spatial_drivers %>%
-  mutate(year = as.integer(year))
+## ------------------------------------------------------- ##
+# Final Merge with Combined Data ----
+## ------------------------------------------------------- ##
 
-# Convert `year` to integer in `greenup_df` (if not already done)
-greenup_df <- greenup_df %>%
-  mutate(year = as.integer(year))
-
-# Combine data frames:
-
-# Step 1: Merge the `greenup` long data with the wide numerical driver data to create `tot`
-tot <- combined_spatial_drivers %>%
-  left_join(greenup_df, by = c("Stream_ID", "year"))
-
-# Step 2: Select columns without year-based values (non-annual data)
-non_year_columns <- colnames(spatial_drivers)[!colnames(spatial_drivers) %in% year_columns]
-spatial_drivers_no_years <- spatial_drivers %>%
-  select(Stream_ID, all_of(non_year_columns))
-
-# Perform the join with `relationship = "many-to-many"`
-tot <- spatial_drivers_no_years %>%
-  left_join(tot, by = c("Stream_ID", "year"), relationship = "many-to-many")
-
-# Step 2: Identify and handle .x and .y suffixes, ensuring uniqueness
-# Coalesce each .x and .y pair, then rename .x columns and drop .y columns
+# Convert `Year` in `tot` to integer and rename if necessary
 tot <- tot %>%
-  mutate(across(ends_with(".x"), ~ coalesce(.x, get(sub("\\.x$", ".y", cur_column()))))) %>%
-  rename_with(~ sub("\\.x$", "", .), ends_with(".x")) %>%  # Rename .x columns
-  select(-matches("\\.y$"))  # Drop all .y columns after coalescing
+  mutate(Year = as.integer(Year))  # Ensure `Year` is integer
+
+# Rename `year` to `Year` in `combined_spatial_drivers` to match `tot`
+combined_spatial_drivers <- combined_spatial_drivers %>%
+  rename(Year = year)
+
+# Merge `tot` with `combined_spatial_drivers`
+final_combined_data <- tot %>%
+  left_join(combined_spatial_drivers, by = c("Stream_ID", "Year"))
+
+# Merge `greenup_df`, renaming `year` to `Year` if needed
+greenup_df <- greenup_df %>%
+  rename(Year = year)  # Ensure column names match
+
+tot <- final_combined_data %>%
+  left_join(greenup_df, by = c("Stream_ID", "Year"))
+
+## Need to clean after all this mergin: 
+# Remove columns ending with ".y" in `tot`
+tot <- tot %>%
+  dplyr::select(-ends_with(".y"), -ends_with(".x.x"), -ends_with(".y.x")) %>%
+  rename_with(~ str_replace(., "\\.x$", ""), ends_with(".x")) %>%
+  dplyr::select(-44)
 
 
 # ## ------------------------------------------------------- ##
 #           # Import WRTDS N_P Conc & Flux ---- 
 # ## ------------------------------------------------------- ##
-# # Load N and P data -- concentrations, can be Raw or WRTDS
-# N_P_conc <- read.csv("Median_NP_WRTDS_Conc_2.csv")
-# N_P_conc_cast <- dcast(N_P_conc, Stream_Name~solute_simplified, value.var = "median_Conc", fun.aggregate = mean)
-# 
-# tot <- merge(tot, N_P_conc_cast, by="Stream_Name")
+# Load N and P data -- concentrations, can be Raw or WRTDS
+N_P_conc <- read.csv("Median_NP_WRTDS_GenConc_2_Annual.csv")
 
+tot <- tot %>%
+  left_join(N_P_conc, by = c("Stream_Name", "Year"))
 
 # ## ------------------------------------------------------- ##
 #           # Import RAW N_P Conc ---- 
