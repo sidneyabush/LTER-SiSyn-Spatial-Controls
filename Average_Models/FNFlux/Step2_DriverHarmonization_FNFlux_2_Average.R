@@ -72,10 +72,9 @@ wrtds_df <- subset(wrtds_df, chemical == "DSi")
 ## Using Flow Normalized Si Fluxes
 flux_stats <- wrtds_df %>%
   dplyr::group_by(Stream_ID) %>%
-  dplyr::summarise(mean_flux = mean(FNFlux), med_flux=median(FNFlux), 
-                   sd_flux=sd(FNFlux), min_flux=min(FNFlux), max_flux=max(FNFlux))
+  dplyr::summarise(FNFlux=median(FNFlux))
 
-flux_stats$CV_C_flux <- flux_stats$sd_flux/flux_stats$mean_flux
+# flux_stats$CV_C_flux <- flux_stats$sd_flux/flux_stats$mean_flux
 
 # si_stats_annual <- wrtds_df %>%
 #   dplyr::group_by(Stream_ID, year(as.Date(Date))) %>%
@@ -89,13 +88,13 @@ q_stats <- wrtds_df %>%
   dplyr::summarise(mean_q = mean(Q), med_q=median(Q), sd_q=sd(Q), min_Q=min(Q), max_Q=max(Q),
                    q_95=quantile(Q, 0.95), q_5=quantile(Q, 0.05))
 
-q_min_stats <- wrtds_df %>%
-  dplyr::group_by(Stream_ID, Year) %>%
-  dplyr::slice_min(Q)
-
-q_max_stats <- wrtds_df %>%
-  dplyr::group_by(Stream_ID, Year) %>%
-  dplyr::slice_max(Q)
+# q_min_stats <- wrtds_df %>%
+#   dplyr::group_by(Stream_ID, Year) %>%
+#   dplyr::slice_min(Q)
+# 
+# q_max_stats <- wrtds_df %>%
+#   dplyr::group_by(Stream_ID, Year) %>%
+#   dplyr::slice_max(Q)
 
 ## Can use this only when using daily data:
 # q_min_stats$doy <- format(as.Date(q_min_stats$Date),"%j")
@@ -114,7 +113,9 @@ q_max_stats <- wrtds_df %>%
 #   dplyr::group_by(Stream_ID, year(as.Date(Date))) %>%
 #   dplyr::summarise(an_mean_q = mean(Q), an_med_q=median(Q), an_sd_q=sd(Q))
 
-q_stats$CV_Q <- q_stats$sd_q/q_stats$mean_q
+# q_stats$CV_Q <- q_stats$sd_q/q_stats$mean_q
+
+cv_tot <- merge(flux_stats, q_stats, by = "Stream_ID")
 
 ## ------------------------------------------------------- ##
 #           Combine to get C-Q Stats ----
@@ -125,57 +126,57 @@ cv_tot <- merge(cv_tot, flux_stats, by= "Stream_ID")
 # cv_tot <- merge(cv_tot, min_day, by="Stream_ID")
 
 #calculate CVC/CVQ
-cv_tot$cvc_cvq <- (cv_tot$CV_C)*(cv_tot$CV_Q)
+# cv_tot$cvc_cvq <- (cv_tot$CV_C)*(cv_tot$CV_Q)
 
 ## remove any NA values: 
 cv_tot <- na.omit(cv_tot)
 
-## This is dumb, but doing this for now to keep current workflow: 
-## Split between C and Q datasets: 
-#extract needed columns
-chem_df <- wrtds_df[,c("LTER.x", "Stream_ID", "chemical", "DecYear","FNFlux", "FNFlux")]
-q_df <- wrtds_df[,c("LTER.x", "Stream_ID", "chemical", "DecYear","Q")]
-
-#get list of streams
-streams <- unique(cv_tot$Stream_ID)
-
-#open list to calculate slope and r2 of each stream
-slope_list <- list()
-rsquared_list <- list()
-
-#calculate CQ slope and CQ r2 for Si-Q for each stream
-for (i in 1:length(streams)) {
-  si <- subset(chem_df, chem_df$Stream_ID == streams[i])
-  si$Date <- as.Date(si$DecYear)
-  q <- subset(q_df, q_df$Stream_ID == streams[i])
-  q$Date <- as.Date(q$DecYear)
-  # combine silica and discharge data
-  tot <- merge(si, q, by="DecYear")
-  # remove zero values for flow and Si FNFlux
-  tot <- tot[tot$Q > 0,]
-  tot <- tot[tot$FNFlux > 0,]
-  # calculate CQ
-  lm1 <- lm(log(FNFlux)~log(Q), tot)
-  sum <- summary(lm1)
-  # create list for slopes
-  slope_list[[i]] <- sum$coefficients[2,1]
-  # create list for r squared values
-  rsquared_list[[i]] <- sum$r.squared
-  
-}
-
-#put slopes into df
-slope_df <- as.data.frame(do.call(rbind, slope_list))
-slope_df$Stream_ID <- streams
-colnames(slope_df)[1] <- "C_Q_slope"
-
-#put r2 into df
-r2_df <- as.data.frame(do.call(rbind, rsquared_list))
-r2_df$Stream_ID <- streams
-colnames(r2_df)[1]<-"r2"
-
-# add slope dataframe to cv_tot dataframe
-cv_tot <- merge(cv_tot, slope_df)
+# ## This is dumb, but doing this for now to keep current workflow: 
+# ## Split between C and Q datasets: 
+# #extract needed columns
+# chem_df <- wrtds_df[,c("LTER.x", "Stream_ID", "chemical", "DecYear","FNFlux", "FNFlux")]
+# q_df <- wrtds_df[,c("LTER.x", "Stream_ID", "chemical", "DecYear","Q")]
+# 
+# #get list of streams
+# streams <- unique(cv_tot$Stream_ID)
+# 
+# #open list to calculate slope and r2 of each stream
+# slope_list <- list()
+# rsquared_list <- list()
+# 
+# #calculate CQ slope and CQ r2 for Si-Q for each stream
+# for (i in 1:length(streams)) {
+#   si <- subset(chem_df, chem_df$Stream_ID == streams[i])
+#   si$Date <- as.Date(si$DecYear)
+#   q <- subset(q_df, q_df$Stream_ID == streams[i])
+#   q$Date <- as.Date(q$DecYear)
+#   # combine silica and discharge data
+#   tot <- merge(si, q, by="DecYear")
+#   # remove zero values for flow and Si FNFlux
+#   tot <- tot[tot$Q > 0,]
+#   tot <- tot[tot$FNFlux > 0,]
+#   # calculate CQ
+#   lm1 <- lm(log(FNFlux)~log(Q), tot)
+#   sum <- summary(lm1)
+#   # create list for slopes
+#   slope_list[[i]] <- sum$coefficients[2,1]
+#   # create list for r squared values
+#   rsquared_list[[i]] <- sum$r.squared
+#   
+# }
+# 
+# #put slopes into df
+# slope_df <- as.data.frame(do.call(rbind, slope_list))
+# slope_df$Stream_ID <- streams
+# colnames(slope_df)[1] <- "C_Q_slope"
+# 
+# #put r2 into df
+# r2_df <- as.data.frame(do.call(rbind, rsquared_list))
+# r2_df$Stream_ID <- streams
+# colnames(r2_df)[1]<-"r2"
+# 
+# # add slope dataframe to cv_tot dataframe
+# cv_tot <- merge(cv_tot, slope_df)
 
 # cv_tot <- merge(cv_tot, si_stats_annual, by="Stream_ID")
 # colnames(cv_tot)[12]<-"Year"
@@ -314,23 +315,23 @@ tot <- merge(tot, mean_df, by="Stream_ID")
 # Load N and P data -- concentrations, can be Raw or WRTDS
 # N_P_conc <- read.csv("Median_NP_WRTDS_FNConc_2.csv")
 # N_P_conc_cast <- dcast(N_P_conc, Stream_Name~solute_simplified, value.var = "median_Conc", fun.aggregate = mean)
-# 
+#
 # tot <- merge(tot, N_P_conc_cast, by="Stream_Name")
 
 ## Load N and P data -- yields
-# N_P_flux <- read.csv("Median_NP_WRTDS_FNFlux_2.csv")
-# N_P_flux_cast <- dcast(N_P_flux, Stream_Name~solute_simplified, value.var = "median_Flux", fun.aggregate = mean)
-# 
-# tot <- merge(tot, N_P_flux_cast, by="Stream_Name")
+N_P_flux <- read.csv("Median_NP_WRTDS_FNFlux_2.csv")
+N_P_flux_cast <- dcast(N_P_flux, Stream_Name~solute_simplified, value.var = "median_Flux", fun.aggregate = mean)
+
+tot <- merge(tot, N_P_flux_cast, by="Stream_Name")
 
 # ## ------------------------------------------------------- ##
 #           # Import RAW N_P Conc ---- 
 # ## ------------------------------------------------------- ##
-N_P_flux_raw <- read.csv("Median_NP_Raw_Conc_2.csv")
-N_P_flux_raw_cast <- dcast(N_P_flux_raw, Stream_Name~solute_simplified,
-                           value.var = "median_val", fun.aggregate = mean)
-
-tot <- merge(tot, N_P_flux_raw_cast, by="Stream_Name")
+# N_P_flux_raw <- read.csv("Median_NP_Raw_Conc_2.csv")
+# N_P_flux_raw_cast <- dcast(N_P_flux_raw, Stream_Name~solute_simplified,
+#                            value.var = "median_val", fun.aggregate = mean)
+# 
+# tot <- merge(tot, N_P_flux_raw_cast, by="Stream_Name")
 
 ## ------------------------------------------------------- ##
 # Import Daylength ----
@@ -362,5 +363,5 @@ daylen_range <- bind_rows(daylen_range, missing_sites)
 tot <-merge(tot, daylen_range, by="Stream_Name")
 tot <- tot[!duplicated(tot$Stream_Name),]
 
-write.csv(tot, "AllDrivers_Harmonized_20241108_WRTDS_MD_KG_rawNP_FNFlux.csv")
-# write.csv(tot, "AllDrivers_Harmonized_20241108_WRTDS_MD_KG_NP_FNFlux_Average.csv")
+# write.csv(tot, "AllDrivers_Harmonized_20241108_WRTDS_MD_KG_rawNP_FNFlux.csv")
+write.csv(tot, "AllDrivers_Harmonized_20241108_WRTDS_MD_KG_NP_FNFlux_Average.csv")

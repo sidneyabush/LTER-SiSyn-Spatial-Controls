@@ -28,7 +28,7 @@ test_numtree_average <- function(ntree_list) {
   for (i in 1:length(ntree_list)) {
     # Set seed for each model training step within the loop
     set.seed(123)
-    rf_model <- randomForest(med_flux ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = ntree_list[[i]])
+    rf_model <- randomForest(FNFlux ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = ntree_list[[i]])
     MSE[[i]] <- rf_model$mse
   }
   return(MSE)
@@ -47,7 +47,7 @@ test_numtree_optimized <- function(ntree_list) {
 }
 
 # Function to remove outliers based on Z-scores
-cols_to_consider <- c("med_flux")
+cols_to_consider <- c("FNFlux")
 sd_limit <- 1.5
 remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit = sd_limit) {
   z_scores <- sapply(data_to_filter[cols], function(data) abs((data - mean(data, na.rm = TRUE)) / sd(data, na.rm = TRUE)))
@@ -81,97 +81,50 @@ output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 drivers_df <- read.csv("AllDrivers_Harmonized_20241108_WRTDS_MD_KG_NP_FNFlux_silicate_weathering_Average.csv") %>%
+  dplyr::rename(FNFlux = FNFlux.x) %>%
+  select(Stream_Name, Stream_ID, FNFlux, basin_slope_mean_degree, snow_cover, 
+         evapotrans, npp, temp, precip, permafrost, elevation_mean_m, basin_slope_mean_degree,
+         contains("rocks"), contains("land_"), green_up_day, NOx, P, silicate_weathering) %>%
   distinct(Stream_ID, .keep_all = TRUE) %>%
-  select(-Use_WRTDS, -cycle1, -X, -X.1, -Name, -ClimateZ, -Latitude, -Longitude, -LTER, -major_soil, -contains("soil"),
-         -rndCoord.lat, -rndCoord.lon, -Min_Daylength, -elevation_min_m, 
-         -elevation_max_m, -elevation_median_m, -basin_slope_median_degree, -basin_slope_min_degree, -basin_slope_max_degree,
-         -num_days, -mean_si, -sd_si, -min_Si, -max_Si, -CV_C, -CV_C_flux, -mean_q, -med_q, -sd_q, -CV_Q, -min_Q, -max_Q,
-         -cvc_cvq, -C_Q_slope, -major_land, -major_soil, -major_rock, -temp_K, -mapped_lithology,
-         -mean_flux, -sd_flux, -min_flux, -max_flux,
-         -lithology_description, -runoff, -contains("_si"), -contains("q"), -contains("Q"), -drainage_area) %>%
-  # Filter to retain complete cases for snow_cover
   filter(!is.na(snow_cover))
 
-
-# # Export a list of stream names with NA values for basin slope
-# streams_with_na_slope <- drivers_df %>%
-#   filter(is.na(basin_slope_mean_degree)) %>%
-#   select(Stream_ID, Stream_Name)
-# 
-# # Save the list to a CSV file
-# write.csv(streams_with_na_slope, "streams_with_na_slope.csv", row.names = FALSE)
-# 
-# # Export a list of stream names with NA values for permafrost
-# streams_with_na_permafrost <- drivers_df %>%
-#   filter(is.na(permafrost)) %>%
-#   select(Stream_ID, Stream_Name)
-# 
-# # Save the list to a CSV file
-# write.csv(streams_with_na_permafrost, "streams_with_na_permafrost.csv", row.names = FALSE)
-
-
-## INCORPORATING THE RAW FLUX DATA HERE ----
-# # Import raw P data, renaming P column and calculating flux
-# raw_P <- read.csv("AllDrivers_Harmonized_20241108_WRTDS_MD_KG_rawNP_FNFlux.csv") %>%
-#   distinct(Stream_ID, .keep_all = TRUE) %>%
-#   filter(!is.na(num_days)) %>%
-#   select(Stream_Name, Stream_ID, med_q, drainSqKm, P) %>%
-#   mutate(raw_flux = P * med_q / drainSqKm,   # Calculate flux as concentration * discharge * drainage area
-#          raw_P = P) %>%                      # Rename P for clarity
-#   select(Stream_Name, Stream_ID, raw_P, raw_flux)
-# 
-# # Identify rows in drivers_df where P (flux) is NA
-# drivers_df_with_na_P <- drivers_df %>%
-#   filter(is.na(P)) %>%
-#   select(Stream_Name, Stream_ID, P)
-# 
-# # Merge raw P and flux data for sites where P is NA in drivers_df
-# drivers_df_with_raw_P <- drivers_df_with_na_P %>%
-#   left_join(raw_P, by = "Stream_Name") %>%
-#   mutate(P = ifelse(is.na(P), raw_flux, P))  # Replace NA values in P with calculated raw_flux values
-# 
-# # Update the original drivers_df with the new P (flux) values
-# drivers_df <- drivers_df %>%
-#   left_join(drivers_df_with_raw_P %>% select(Stream_Name, P), by = "Stream_Name", suffix = c("", "_new")) %>%
-#   mutate(P = ifelse(is.na(P_new), P, P_new)) %>%  # Update P with P_new where available
-#   select(-P_new)  # Remove the temporary P_new column
-
-# Import raw P data and prepare it
-raw_P <- read.csv("AllDrivers_Harmonized_20241108_WRTDS_MD_KG_rawNP_GenConc.csv") %>%
-  distinct(Stream_ID, .keep_all = TRUE) %>%
-  filter(!is.na(num_days)) %>%
-  select(Stream_Name, P) %>%
-  dplyr::rename(raw_P = P)  # Rename the P column to distinguish raw P from WRTDS P
-
-# Identify rows in drivers_df where P is NA
-drivers_df_with_na_P <- drivers_df %>%
-  filter(is.na(P)) %>%
-  select(Stream_Name, Stream_ID, P)
-
-# Import Median NP data with NOx and P columns
+## INCORPORATING THE RAW NP DATA HERE ----
+# Step 1: Replace NOx and P in drivers_df with values from Median_NP
 Median_NP <- read.csv("AllDrivers_Harmonized_20241108_WRTDS_MD_KG_NP_GenConc_silicate_weathering.csv") %>%
   distinct(Stream_ID, .keep_all = TRUE) %>%
   select(Stream_ID, Stream_Name, NOx, P)  # Select relevant columns
 
-# Merge raw P data for sites where P is NA in drivers_df
-drivers_df_with_raw_P <- drivers_df_with_na_P %>%
-  left_join(raw_P, by = "Stream_Name") %>%
-  mutate(P = ifelse(is.na(P), raw_P, P))  # Replace NA values in P with raw P values
-
-# Merge Median NP data into drivers_df and replace NOx and P columns
 drivers_df <- drivers_df %>%
   left_join(Median_NP %>% select(Stream_ID, NOx, P), by = "Stream_ID", suffix = c("", "_median")) %>%
   mutate(
-    P = ifelse(!is.na(P_median), P_median, P),  # Replace P with P from Median_NP where available
-    NOx = ifelse(!is.na(NOx_median), NOx_median, NOx)  # Replace NOx with NOx from Median_NP where available
+    P = ifelse(!is.na(P_median), P_median, P),  # Replace P with Median_NP's P where available
+    NOx = ifelse(!is.na(NOx_median), NOx_median, NOx)  # Replace NOx with Median_NP's NOx where available
   ) %>%
   select(-P_median, -NOx_median)  # Remove temporary columns
 
-# Incorporate the updated P values from raw_P for rows where P is NA
+# Step 2: Import raw P data and add it where P is NA in drivers_df
+raw_P <- read.csv("AllDrivers_Harmonized_20241108_WRTDS_MD_KG_rawNP_FNFlux.csv") %>%
+  distinct(Stream_ID, .keep_all = TRUE) %>%
+  filter(!is.na(num_days)) %>%
+  select(Stream_Name, P) %>%
+  dplyr::rename(raw_P = P)  # Rename P column to distinguish raw P from WRTDS P
+
+# Identify rows in drivers_df where P is NA and fill those with raw_P data
+drivers_df_with_na_P <- drivers_df %>%
+  filter(is.na(P)) %>%
+  select(Stream_Name, Stream_ID, P)
+
+# Merge raw_P data for rows with NA in P
+drivers_df_with_raw_P <- drivers_df_with_na_P %>%
+  left_join(raw_P, by = "Stream_Name") %>%
+  mutate(P = ifelse(is.na(P), raw_P, P))  # Replace NA values in P with raw_P values
+
+# Update drivers_df with the new P values from raw_P where applicable
 drivers_df <- drivers_df %>%
   left_join(drivers_df_with_raw_P %>% select(Stream_ID, P), by = "Stream_ID", suffix = c("", "_new")) %>%
   mutate(P = ifelse(is.na(P_new), P, P_new)) %>%  # Update P with P_new where available
   select(-P_new)  # Remove the temporary P_new column
+
 
 
 ## Now import streams with na slopes
@@ -264,7 +217,7 @@ drivers_df <- drivers_df %>%
 
 # Replace NA values in the specified column range with 0
 drivers_df <- drivers_df %>%
-  dplyr::mutate_at(vars(11:26), ~replace(., is.na(.), 0)) %>%
+  dplyr::mutate_at(vars(12:27), ~replace(., is.na(.), 0)) %>%
   # Replace NA values in the "permafrost" column with 0
   mutate(permafrost = replace(permafrost, is.na(permafrost), 0)) 
 
@@ -290,8 +243,12 @@ drivers_df <- drivers_df %>% mutate(across(where(is.integer), as.numeric))%>%
 # Optionally, check distribution of NAs across all columns
 sapply(drivers_df, function(x) sum(is.na(x)))
 
+## Try removing outliers to see model performance: 
+drivers_df <- remove_outlier_rows(drivers_df, cols = cols_to_consider, limit = sd_limit)
+
+
 # Plot correlation between driver variables ----
-numeric_drivers <- 2:30  # Indices for numeric drivers
+numeric_drivers <- 2:29  # Indices for numeric drivers
 driver_cor <- cor(drivers_df[, numeric_drivers])
 corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = F)
 
@@ -326,7 +283,7 @@ tuneRF(drivers_df[, numeric_drivers], drivers_df[, 1], ntreeTry = 2000, stepFact
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
-rf_model1 <- randomForest(med_flux ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 9)
+rf_model1 <- randomForest(FNFlux ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 9)
 
 # Visualize output for rf_model1
 print(rf_model1)
@@ -347,8 +304,8 @@ seeds[[total_repeats]] <- 123
 control <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = cv_repeats, number = cv_number, seeds = seeds, verbose = TRUE)
 
 # Divide data into predictor variables (x) and response variable (y)
-x <- drivers_df[, !(colnames(drivers_df) == "med_flux")]
-y <- drivers_df$med_flux
+x <- drivers_df[, !(colnames(drivers_df) == "FNFlux")]
+y <- drivers_df$FNFlux
 
 # Run RFE to select the best features ----
 set.seed(123)
@@ -361,7 +318,7 @@ print(result_rfe)
 new_rf_input <- paste(predictors(result_rfe), collapse = "+")
 
 # Format those features into a formula for the optimized random forest model
-rf_formula <- formula(paste("med_flux ~", new_rf_input))
+rf_formula <- formula(paste("FNFlux ~", new_rf_input))
 
 # Global seed before re-tuning RF after RFE optimization ----
 set.seed(123)
@@ -386,19 +343,19 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE)) + geom_point() + geom_line() +
 # Global seed before re-tuning mtry
 set.seed(123)
 kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
-tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 1400, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 300, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
-rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 1400, mtry = 2)
+rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 300, mtry = 1)
 
 # Visualize output for rf_model2
 print(rf_model2)
 randomForest::varImpPlot(rf_model2)
 
 # Generate plots comparing predicted vs observed ----
-lm_plot <- plot(rf_model2$predicted, drivers_df$med_flux, pch = 16, cex = 1.5,
+lm_plot <- plot(rf_model2$predicted, drivers_df$FNFlux, pch = 16, cex = 1.5,
                 xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers",
                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
@@ -408,7 +365,7 @@ legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(
 
 # Save RF variable importance plot and LM plot for rf_model2
 save_rf_importance_plot(rf_model2, output_dir)
-save_lm_plot(rf_model2, drivers_df$med_flux, output_dir)
+save_lm_plot(rf_model2, drivers_df$FNFlux, output_dir)
 
 # # Generate partial dependence plots ----
 # plot_partial_dependence <- function(model, variable) {
@@ -445,7 +402,7 @@ registerDoParallel(cores = num_cores)
 # Function to create shapley_plot_data without any subsetting
 create_shapley_plot_data <- function(model, kept_drivers, drivers_df, sample_size = 30) {
   # Create the predictor object for the full dataset
-  predictor <- Predictor$new(model = model, data = kept_drivers, y = drivers_df$med_flux)
+  predictor <- Predictor$new(model = model, data = kept_drivers, y = drivers_df$FNFlux)
   
   # Parallel Shapley calculations for each observation
   set.seed(123)  # For reproducibility
@@ -559,9 +516,9 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) 
 }
 
 # Run the function to create all plots in a single PDF file, coloring dependence plots by specified variables (e.g., "precip", "temp")
-color_vars <- c("drainage_area", "snow_cover", "precip", 
+color_vars <- c("snow_cover", "precip", 
                 "evapotrans", "temp", "npp", "permafrost", "green_up_day",
-                "rocks_volcanic", "NOx", "P", "max_daylength", "silicate_weathering", "q_95", "q_5")  # List of features to color by
+                "rocks_volcanic", "NOx", "P", "max_daylength", "silicate_weathering")  # List of features to color by
 output_file <- sprintf("%s/all_shapley_plots.pdf", output_dir)  # Specify the output file path
 create_all_shapley_plots(shapley_plot_data, output_file, color_vars)
 

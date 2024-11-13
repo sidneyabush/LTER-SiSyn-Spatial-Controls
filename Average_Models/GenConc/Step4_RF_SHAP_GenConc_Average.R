@@ -28,7 +28,7 @@ test_numtree_average <- function(ntree_list) {
   for (i in 1:length(ntree_list)) {
     # Set seed for each model training step within the loop
     set.seed(123)
-    rf_model <- randomForest(med_si ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = ntree_list[[i]])
+    rf_model <- randomForest(GenConc ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = ntree_list[[i]])
     MSE[[i]] <- rf_model$mse
   }
   return(MSE)
@@ -47,7 +47,7 @@ test_numtree_optimized <- function(ntree_list) {
 }
 
 # Function to remove outliers based on Z-scores
-cols_to_consider <- c("med_si")
+cols_to_consider <- c("GenConc")
 sd_limit <- 1.5
 remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit = sd_limit) {
   z_scores <- sapply(data_to_filter[cols], function(data) abs((data - mean(data, na.rm = TRUE)) / sd(data, na.rm = TRUE)))
@@ -82,31 +82,11 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 drivers_df <- read.csv("AllDrivers_Harmonized_20241108_WRTDS_MD_KG_NP_GenConc_silicate_weathering.csv") %>%
   distinct(Stream_ID, .keep_all = TRUE) %>%
-  select(-Use_WRTDS, -cycle1, -X, -X.1, -Name, -ClimateZ, -Latitude, -Longitude, -LTER, -major_soil, -contains("soil"),
-         -rndCoord.lat, -rndCoord.lon, -Min_Daylength, -elevation_min_m, 
-         -elevation_max_m, -elevation_median_m, -basin_slope_median_degree, -basin_slope_min_degree, -basin_slope_max_degree,
-         -num_days, -mean_si, -sd_si, -min_Si, -max_Si, -CV_C, -mean_q, -med_q, -sd_q, -CV_Q, -min_Q, -max_Q,
-         -cvc_cvq, -C_Q_slope, -major_land, -major_soil, -major_rock, -temp_K, -mapped_lithology,
-         -lithology_description, -runoff, -contains("flux")) %>%
-  # Filter to retain complete cases for snow_cover
+  select(Stream_Name, Stream_ID, GenConc, basin_slope_mean_degree, snow_cover, 
+           evapotrans, npp, temp, precip, permafrost, elevation_mean_m, basin_slope_mean_degree,
+           contains("rocks"), contains("land_"), green_up_day, NOx, P, silicate_weathering, drainage_area, q_5, q_95) %>%
+  distinct(Stream_ID, .keep_all = TRUE) %>%
   filter(!is.na(snow_cover))
-
-
-# # Export a list of stream names with NA values for basin slope
-# streams_with_na_slope <- drivers_df %>%
-#   filter(is.na(basin_slope_mean_degree)) %>%
-#   select(Stream_ID, Stream_Name)
-# 
-# # Save the list to a CSV file
-# write.csv(streams_with_na_slope, "streams_with_na_slope.csv", row.names = FALSE)
-# 
-# # Export a list of stream names with NA values for permafrost
-# streams_with_na_permafrost <- drivers_df %>%
-#   filter(is.na(permafrost)) %>%
-#   select(Stream_ID, Stream_Name)
-# 
-# # Save the list to a CSV file
-# write.csv(streams_with_na_permafrost, "streams_with_na_permafrost.csv", row.names = FALSE)
 
 # Now import raw P data and merge it for sites in drivers_df where there are NA P values
 raw_P <- read.csv("AllDrivers_Harmonized_20241108_WRTDS_MD_KG_rawNP_GenConc.csv") %>%
@@ -221,7 +201,7 @@ drivers_df <- drivers_df %>%
 
 # Replace NA values in the specified column range with 0
 drivers_df <- drivers_df %>%
-  dplyr::mutate_at(vars(14:29), ~replace(., is.na(.), 0)) %>%
+  dplyr::mutate_at(vars(11:27), ~replace(., is.na(.), 0)) %>%
   # Replace NA values in the "permafrost" column with 0
   mutate(permafrost = replace(permafrost, is.na(permafrost), 0)) 
 
@@ -248,7 +228,7 @@ drivers_df <- drivers_df %>% mutate(across(where(is.integer), as.numeric))%>%
 sapply(drivers_df, function(x) sum(is.na(x)))
 
 # Plot correlation between driver variables ----
-numeric_drivers <- 2:33  # Indices for numeric drivers
+numeric_drivers <- 2:32  # Indices for numeric drivers
 driver_cor <- cor(drivers_df[, numeric_drivers])
 corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = F)
 
@@ -279,11 +259,11 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE)) + geom_point() + geom_line() + theme_c
 
 # Global seed before tuning mtry based on optimized ntree ----
 set.seed(123)
-tuneRF(drivers_df[, numeric_drivers], drivers_df[, 1], ntreeTry = 1500, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(drivers_df[, numeric_drivers], drivers_df[, 1], ntreeTry = 2000, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
-rf_model1 <- randomForest(med_si ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 1500, mtry = 10)
+rf_model1 <- randomForest(GenConc ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 10)
 
 # Visualize output for rf_model1
 print(rf_model1)
@@ -304,8 +284,8 @@ seeds[[total_repeats]] <- 123
 control <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = cv_repeats, number = cv_number, seeds = seeds, verbose = TRUE)
 
 # Divide data into predictor variables (x) and response variable (y)
-x <- drivers_df[, !(colnames(drivers_df) == "med_si")]
-y <- drivers_df$med_si
+x <- drivers_df[, !(colnames(drivers_df) == "GenConc")]
+y <- drivers_df$GenConc
 
 # Run RFE to select the best features ----
 set.seed(123)
@@ -318,7 +298,7 @@ print(result_rfe)
 new_rf_input <- paste(predictors(result_rfe), collapse = "+")
 
 # Format those features into a formula for the optimized random forest model
-rf_formula <- formula(paste("med_si ~", new_rf_input))
+rf_formula <- formula(paste("GenConc ~", new_rf_input))
 
 # Global seed before re-tuning RF after RFE optimization ----
 set.seed(123)
@@ -343,18 +323,18 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE)) + geom_point() + geom_line() +
 # Global seed before re-tuning mtry
 set.seed(123)
 kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
-tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 1200, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 2000, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
-rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 1200, mtry = 6)
+rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 5)
 
 # Visualize output for rf_model2
 print(rf_model2)
 randomForest::varImpPlot(rf_model2)
 
 # Generate plots comparing predicted vs observed ----
-lm_plot <- plot(rf_model2$predicted, drivers_df$med_si, pch = 16, cex = 1.5,
+lm_plot <- plot(rf_model2$predicted, drivers_df$GenConc, pch = 16, cex = 1.5,
                 xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers - GenConc Average",
                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
@@ -364,7 +344,7 @@ legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(
 
 # Save RF variable importance plot and LM plot for rf_model2
 save_rf_importance_plot(rf_model2, output_dir)
-save_lm_plot(rf_model2, drivers_df$med_si, output_dir)
+save_lm_plot(rf_model2, drivers_df$GenConc, output_dir)
 
 # # Generate partial dependence plots ----
 # plot_partial_dependence <- function(model, variable) {
@@ -401,7 +381,7 @@ registerDoParallel(cores = num_cores)
 # Function to create shapley_plot_data without any subsetting
 create_shapley_plot_data <- function(model, kept_drivers, drivers_df, sample_size = 30) {
   # Create the predictor object for the full dataset
-  predictor <- Predictor$new(model = model, data = kept_drivers, y = drivers_df$med_si)
+  predictor <- Predictor$new(model = model, data = kept_drivers, y = drivers_df$GenConc)
   
   # Parallel Shapley calculations for each observation
   set.seed(123)  # For reproducibility

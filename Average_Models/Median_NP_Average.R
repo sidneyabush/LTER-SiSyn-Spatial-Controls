@@ -54,4 +54,4 @@ chem_NP_avg$solute_simplified <- ifelse(chem_NP_avg$chemical %in% c("NOx", "NO3"
                                         chem_NP_avg$chemical)
 
 # Export .csv:
-write.csv(chem_NP_avg, "Median_NP_WRTDS_FNConc_2.csv")
+write.csv(chem_NP_avg, "Median_NP_Average.csv")

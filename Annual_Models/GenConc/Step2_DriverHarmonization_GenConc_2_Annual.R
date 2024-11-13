@@ -373,7 +373,6 @@ print(num_unique_streams)
 N_P_conc_wide <- N_P_conc %>%
   pivot_wider(names_from = solute_simplified, values_from = median_Conc) %>%
   mutate(across(everything(), ~ na_if(as.character(.), "NULL"))) %>%
-  # Optionally, convert back to numeric where appropriate
   mutate(across(where(is.character), ~ type.convert(., as.is = TRUE)))
 
 tot <- merge(tot, N_P_conc_wide, by = c("Stream_Name", "Year"), all.x = TRUE)
