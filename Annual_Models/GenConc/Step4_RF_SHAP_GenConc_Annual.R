@@ -59,7 +59,7 @@ remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit =
 # Define a function to save RF variable importance plot as a PDF
 save_rf_importance_plot <- function(rf_model, output_dir) {
   pdf(sprintf("%s/RF_variable_importance.pdf", output_dir), width = 8, height = 6)
-  randomForest::varImpPlot(rf_model, main = "RF Variable Importance - Average Concentration", col = "darkblue")
+  randomForest::varImpPlot(rf_model, main = "RF Variable Importance - Annual Concentration", col = "darkblue")
   dev.off()
 }
 
@@ -67,7 +67,7 @@ save_rf_importance_plot <- function(rf_model, output_dir) {
 save_lm_plot <- function(rf_model, observed, output_dir) {
   pdf(sprintf("%s/RF_lm_plot.pdf", output_dir), width = 8, height = 8)
   plot(rf_model$predicted, observed, pch = 16, cex = 1.5,
-       xlab = "Predicted", ylab = "Observed", main = "Observed vs Predicted - Average Concentration",
+       xlab = "Predicted", ylab = "Observed", main = "Observed vs Predicted - Annual Concentration",
        cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5)
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2)
   legend("topleft", bty = "n", cex = 1.5, legend = paste("R² =", format(mean(rf_model$rsq), digits = 3)))
@@ -83,15 +83,9 @@ output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 drivers_df <- read.csv("AllDrivers_Harmonized_20241112_WRTDS_MD_KG_NP_GenConc_silicate_weathering_Annual.csv") %>%
-  select(-Use_WRTDS, -X, -X.1, -Name, -ClimateZ, -Latitude, -Longitude, -LTER, -major_soil, -contains("soil"),
-         -rndCoord.lat, -rndCoord.lon, -Min_Daylength, -elevation_min_m, -chemical, -DecYear, -Conc,
-         -FNConc, -PeriodLong, -PeriodStart, -min_date, -max_date, -min_month, -max_month,
-         -min_year, -max_year, -duration, -Year, -year, -Shapefile_Name, -Discharge_File_Name,
-         -elevation_max_m, -elevation_median_m, -basin_slope_median_degree, -basin_slope_min_degree, -basin_slope_max_degree,
-         -num_days, -mean_q, -med_q, -sd_q, -CV_Q, -min_Q, -max_Q,
-         -major_land, -major_soil, -major_rock, -temp_K, -mapped_lithology, -Q,
-         -lithology_description, -runoff, -permafrost_median_m, -permafrost_min_m, -permafrost_max_m, 
-         -contains("si"), -contains("Flux")) 
+  select(Stream_Name, Stream_ID, Year, GenConc, basin_slope_mean_degree, q_95, q_5, drainage_area, max_prop_area, 
+         evapotrans, npp, temp, precip, permafrost_mean_m, elevation_mean_m, basin_slope_mean_degree,
+         contains("rocks"), contains("land_"), green_up_day, -NOx, -P, silicate_weathering)
 
 
 # # Export a list of stream names with NA values for basin slope
@@ -111,27 +105,22 @@ drivers_df <- read.csv("AllDrivers_Harmonized_20241112_WRTDS_MD_KG_NP_GenConc_si
 # write.csv(streams_with_na_permafrost, "streams_with_na_permafrost.csv", row.names = FALSE)
 
 # Now import raw P data and merge it for sites in drivers_df where there are NA P values
-raw_P <- read.csv("AllDrivers_Harmonized_20241112_WRTDS_MD_KG_rawNP_GenConc_Annual.csv") %>%
-  # distinct(Stream_ID, .keep_all = TRUE) %>%
-  filter(!is.na(num_days)) %>%
-  select(Stream_Name, P) %>%
-  dplyr::rename(raw_P = P)  # Rename the P column to distinguish raw P from WRTDS P
-
-# Identify rows in drivers_df where P is NA
-drivers_df_with_na_P <- drivers_df %>%
-  filter(is.na(P)) %>%
-  select(Stream_Name, Stream_ID, P)
-
-# Merge raw P data for sites where P is NA in drivers_df
-drivers_df_with_raw_P <- drivers_df_with_na_P %>%
-  left_join(raw_P, by = "Stream_Name") %>%
-  mutate(P = ifelse(is.na(P), raw_P, P))  # Replace NA values in P with raw P values
-
-# Update the original drivers_df with the new P values
-drivers_df <- drivers_df %>%
-  left_join(drivers_df_with_raw_P %>% select(Stream_ID, P), by = "Stream_ID", suffix = c("", "_new")) %>%
-  mutate(P = ifelse(is.na(P_new), P, P_new)) %>%  # Replace P with P_new where P_new is not NA
-  select(-P_new)  # Remove the temporary P_new column
+# Ensure raw_P has Stream_Name, Stream_ID, and Year as unique identifiers
+# raw_P <- fread("AllDrivers_Harmonized_20241108_WRTDS_MD_KG_rawNP_GenConc_Average.csv")
+# 
+# # Ensure drivers_df and raw_P are explicitly converted to data.table
+drivers_df <- as.data.table(drivers_df)
+# raw_P <- as.data.table(raw_P)
+# 
+# # Rename P column in raw_P to distinguish it
+# setnames(raw_P, "P", "raw_P")
+# 
+# # Set keys on Stream_Name and Year for both data.tables
+# setkey(drivers_df, Stream_Name)
+# setkey(raw_P, Stream_Name)
+# 
+# # In-place update: replace NA in P only where there's a corresponding raw_P
+# drivers_df[raw_P, P := ifelse(is.na(P), i.raw_P, P), on = .(Stream_Name)]
 
 ## Now import streams with na slopes
 # Load and process Krycklan slopes
@@ -174,13 +163,14 @@ drivers_df_with_slope_filled <- drivers_df_with_na_slope %>%
   ) %>%
   select(Stream_ID, basin_slope_mean_degree)
 
-# Update drivers_df with the filled values
-drivers_df <- drivers_df %>%
-  left_join(drivers_df_with_slope_filled, by = "Stream_ID", suffix = c("", "_filled")) %>%
-  mutate(
-    basin_slope_mean_degree = coalesce(basin_slope_mean_degree_filled, basin_slope_mean_degree)
-  ) %>%
-  select(-basin_slope_mean_degree_filled)
+drivers_df_with_slope_filled <- as.data.table(drivers_df_with_slope_filled)
+
+# Set keys on Stream_ID for both tables
+setkey(drivers_df, Stream_ID)
+setkey(drivers_df_with_slope_filled, Stream_ID)
+
+# Update in-place: replace NA values in basin_slope_mean_degree only
+drivers_df[drivers_df_with_slope_filled, basin_slope_mean_degree := i.basin_slope_mean_degree, on = .(Stream_ID)]
 
 # Load the US elevation data without headers
 US_elev <- read.csv("DSi_Basin_Elevation_missing_sites.csv", header = FALSE)
@@ -223,17 +213,15 @@ drivers_df <- drivers_df %>%
 
 # Replace NA values in the specified column range with 0
 drivers_df <- drivers_df %>%
-  dplyr::mutate_at(vars(15:30), ~replace(., is.na(.), 0)) %>%
+  dplyr::mutate_at(vars(16:31), ~replace(., is.na(.), 0)) %>%
   # Replace NA values in the "permafrost_mean_m" column with 0
-  mutate(permafrost_mean_m = replace(permafrost_mean_m, is.na(permafrost_mean_m), 0)) 
+  mutate(permafrost_mean_m = replace(permafrost_mean_m, is.na(permafrost_mean_m), 0))  %>%
+  # Replace NA values in the "max_prop_area" column with 0
+  mutate(max_prop_area = replace(max_prop_area, is.na(max_prop_area), 0)) 
 
-
-# Testing which drivers we want to keep based on the # of sites it leaves us with
-# Assuming drivers_df is your data frame, and you want to check for complete cases in specific columns
-cols_to_check <- c("P", "basin_slope_mean_degree", "green_up_day", "drainage_area", "NOx")
-
-# Use complete.cases() on those columns
-drivers_df <- drivers_df[complete.cases(drivers_df[, cols_to_check]), ]
+## FIND WHERE NA VALUES ARE REDUCING STREAM COUNT: ----
+drivers_df <- drivers_df %>%
+  filter(!is.na(evapotrans), !is.na(basin_slope_mean_degree), !is.na(green_up_day))
 
 # # Export the dataframe to a CSV file
 # write.csv(drivers_df, "Final_Sites.csv", row.names = FALSE)
@@ -241,7 +229,7 @@ drivers_df <- drivers_df[complete.cases(drivers_df[, cols_to_check]), ]
 # Convert all integer columns to numeric in one step
 drivers_df <- drivers_df %>% mutate(across(where(is.integer), as.numeric))%>%
   # Remove Stream_Name and Stream_ID columns
-  select(-Stream_Name, -Stream_ID)
+  select(-Stream_Name, -Stream_ID, -Year)
 
 # Remove outliers using custom function
 # drivers_df <- remove_outlier_rows(drivers_df)
@@ -249,8 +237,10 @@ drivers_df <- drivers_df %>% mutate(across(where(is.integer), as.numeric))%>%
 # Optionally, check distribution of NAs across all columns
 sapply(drivers_df, function(x) sum(is.na(x)))
 
+setDF(drivers_df)
+
 # Plot correlation between driver variables ----
-numeric_drivers <- 2:33  # Indices for numeric drivers
+numeric_drivers <- 2:30  # Indices for numeric drivers
 driver_cor <- cor(drivers_df[, numeric_drivers])
 corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = F)
 
@@ -281,11 +271,11 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE)) + geom_point() + geom_line() + theme_c
 
 # Global seed before tuning mtry based on optimized ntree ----
 set.seed(123)
-tuneRF(drivers_df[, numeric_drivers], drivers_df[, 1], ntreeTry = 1500, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(drivers_df[, numeric_drivers], drivers_df[, 1], ntreeTry = 2000, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
-rf_model1 <- randomForest(GenConc ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 1500, mtry = 10)
+rf_model1 <- randomForest(GenConc ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 9)
 
 # Visualize output for rf_model1
 print(rf_model1)
@@ -345,7 +335,7 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE)) + geom_point() + geom_line() +
 # Global seed before re-tuning mtry
 set.seed(123)
 kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
-tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 1200, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 2000, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
@@ -357,7 +347,7 @@ randomForest::varImpPlot(rf_model2)
 
 # Generate plots comparing predicted vs observed ----
 lm_plot <- plot(rf_model2$predicted, drivers_df$GenConc, pch = 16, cex = 1.5,
-                xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers - GenConc Average",
+                xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers - GenConc Annual",
                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
   theme(text = element_text(size = 40), face = "bold")
@@ -450,7 +440,7 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) 
   overall_importance_plot <- ggplot(overall_feature_importance, aes(x = reorder(feature, importance), y = importance)) +
     geom_bar(stat = "identity", fill = "steelblue") +
     coord_flip() +
-    labs(x = "Feature", y = "Mean Absolute SHAP Value", title = "Overall Feature Importance - Average Gen Concentration") +
+    labs(x = "Feature", y = "Mean Absolute SHAP Value", title = "Overall Feature Importance - Annual Gen Concentration") +
     theme_minimal()
   
   # Print plot to the PDF
@@ -468,7 +458,7 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) 
   shap_summary_plot <- ggplot(shap_data_normalized, aes(x = phi, y = feature)) + 
     geom_point(aes(color = normalized_value), alpha = 0.6) + 
     scale_color_gradient(low = "blue", high = "red", name = "Feature Value", breaks = c(0, 1), labels = c("Low", "High")) +
-    labs(x = "SHAP Value", y = NULL, title = "SHAP Summary Plot - Average Gen Concentration") + 
+    labs(x = "SHAP Value", y = NULL, title = "SHAP Summary Plot - Annual Gen Concentration") + 
     theme_bw() + 
     theme(axis.text.y = element_text(size = 12), axis.text.x = element_text(size = 12), 
           plot.title = element_text(size = 16, face = "bold"))
@@ -485,7 +475,7 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) 
   pos_neg_plot <- ggplot(pos_neg_summary, aes(x = feature, y = mean_phi, fill = mean_phi > 0)) +
     geom_bar(stat = "identity") +
     scale_fill_manual(values = c("red", "blue"), labels = c("Negative Impact", "Positive Impact")) +
-    labs(x = "Feature", y = "Mean SHAP Value", title = "Overall SHAP Impact by Feature - Average Gen Concentration") +
+    labs(x = "Feature", y = "Mean SHAP Value", title = "Overall SHAP Impact by Feature - Annual Gen Concentration") +
     coord_flip() +
     theme_minimal()
   
@@ -503,7 +493,7 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) 
       
       dependence_plot <- ggplot(shap_data[shap_data$feature == feature_name, ], aes_mapping) +
         geom_point(alpha = 0.6) + 
-        labs(x = paste("Value of", feature_name), y = "SHAP Value", title = paste("Average Gen Concentration SHAP Dependence Plot for", feature_name)) + 
+        labs(x = paste("Value of", feature_name), y = "SHAP Value", title = paste("Annual Gen Concentration SHAP Dependence Plot for", feature_name)) + 
         theme_minimal() +
         (if (color_var %in% names(shap_data)) scale_color_viridis_c(name = color_var) else NULL)
       
