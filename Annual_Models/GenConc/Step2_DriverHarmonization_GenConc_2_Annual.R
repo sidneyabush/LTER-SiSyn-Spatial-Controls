@@ -210,7 +210,10 @@ spatial_drivers_long <- spatial_drivers_with_years %>%
     values_to = "value"
   ) %>%
   mutate(
-    driver_type = sub("_[0-9]{4}.*$", "", variable),
+    # Conditionally extract suffix after the year only for variables that start with "snow"
+    driver_type = ifelse(grepl("^snow", variable),
+                         sub("^[^_]+_[0-9]{4}_", "", variable),  # Extract suffix for "snow" variables
+                         sub("_[0-9]{4}.*$", "", variable)),     # Standard extraction for other variables
     year = sub(".*_([0-9]{4}).*", "\\1", variable)
   ) %>%
   select(Stream_ID, driver_type, year, value)
@@ -325,7 +328,7 @@ tot <- tot %>%
 
 # Rename `year` to `Year` in `combined_spatial_drivers` to match `tot`
 combined_spatial_drivers <- combined_spatial_drivers %>%
-  rename(Year = year)
+  dplyr::mutate(Year = as.integer(year))
 
 # Merge `tot` with `combined_spatial_drivers`
 final_combined_data <- tot %>%
@@ -342,27 +345,37 @@ tot <- final_combined_data %>%
 # Remove columns ending with ".y" in `tot`
 tot <- tot %>%
   dplyr::select(-ends_with(".y"), -ends_with(".x.x"), -ends_with(".y.x")) %>%
-  rename_with(~ str_replace(., "\\.x$", ""), ends_with(".x")) %>%
-  dplyr::select(-44)
+  dplyr::select(-44, -"cycle") %>%
+  rename_with(~ str_replace(., "\\.x$", ""), ends_with(".x")) 
+  
 
 
 # ## ------------------------------------------------------- ##
 #           # Import WRTDS N_P Conc & Flux ---- 
 # ## ------------------------------------------------------- ##
 # Load N and P data -- concentrations, can be Raw or WRTDS
-N_P_conc <- read.csv("Median_NP_WRTDS_GenConc_2_Annual.csv")
+N_P_conc <- read.csv("Median_NP_WRTDS_GenConc_2_Annual.csv") %>%
+  dplyr::select(-"X", -"chemical")
 
-tot <- tot %>%
-  left_join(N_P_conc, by = c("Stream_Name", "Year"))
+N_P_conc_wide <- N_P_conc %>%
+  pivot_wider(names_from = solute_simplified, values_from = median_Conc) %>%
+  mutate(across(everything(), ~ na_if(as.character(.), "NULL"))) %>%
+  # Optionally, convert back to numeric where appropriate
+  mutate(across(where(is.character), ~ type.convert(., as.is = TRUE)))
+
+tot <- merge(tot, N_P_conc_wide, by= c("Stream_Name", "Year"))
 
 # ## ------------------------------------------------------- ##
 #           # Import RAW N_P Conc ---- 
 # ## ------------------------------------------------------- ##
-N_P_conc_raw <- read.csv("Median_NP_Raw_Conc_2.csv")
-N_P_conc_raw_cast <- dcast(N_P_conc_raw, Stream_Name~solute_simplified,
-                           value.var = "median_val", fun.aggregate = mean)
-
-tot <- merge(tot, N_P_conc_raw_cast, by="Stream_Name")
+# N_P_conc_raw <- read.csv("Median_NP_Raw_Conc_2_Annual.csv") %>%
+#   dplyr::select(-"X")
+#   
+# # Reshape data using pivot_wider
+# N_P_conc_raw_cast <- N_P_conc_raw %>%
+#   pivot_wider(names_from = solute_simplified, values_from = annual_median_Conc)
+# 
+# tot <- merge(tot, N_P_conc_raw_cast, by= c("Stream_Name", "Year"))
 
 ## ------------------------------------------------------- ##
           # Import Daylength ----
@@ -392,7 +405,7 @@ missing_sites <- daylen_range %>%
 daylen_range <- bind_rows(daylen_range, missing_sites)
 
 tot <-merge(tot, daylen_range, by="Stream_Name")
-tot <- tot[!duplicated(tot$Stream_Name),]
+# tot <- tot[!duplicated(tot$Stream_Name),]
 
-write.csv(tot, "AllDrivers_Harmonized_20241108_WRTDS_MD_KG_rawNP_GenConc.csv")
-# write.csv(tot, "AllDrivers_Harmonized_20241108_WRTDS_MD_KG_NP_GenConc_Average.csv")
+# write.csv(tot, "AllDrivers_Harmonized_20241112_WRTDS_MD_KG_rawNP_GenConc_Annual.csv")
+write.csv(tot, "AllDrivers_Harmonized_20241112_WRTDS_MD_KG_NP_GenConc_Annual.csv")
