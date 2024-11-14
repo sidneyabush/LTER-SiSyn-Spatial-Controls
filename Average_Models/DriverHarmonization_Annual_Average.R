@@ -1,12 +1,9 @@
 ## ------------------------------------------------------- ##
-      # Silica WG - Harmonize Drivers: Average Model
+# Silica WG - Harmonize Drivers: Annual and Average Models
 ## ------------------------------------------------------- ##
 # Written by:
 ## Sidney A Bush, Keira Johnson
 
-## ------------------------------------------------------- ##
-                # Housekeeping ----
-## ------------------------------------------------------- ##
 # Load needed libraries
 librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr)
 
@@ -24,17 +21,17 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
   rename(LTER = LTER.x) %>%
   select(-Conc, -Flux, -PeriodLong, -PeriodStart, -LTER.y, -contains("date"), -contains("month"), -min_year, -max_year, -duration) %>%
-  dplyr::mutate(DecYear = as.Date(format(date_decimal(DecYear), "%Y-%m-%d")),
-                Year = format(DecYear, "%Y"),
-                Stream_ID = paste0(LTER, "__", Stream_Name))
+  dplyr::mutate(
+    DecYear = as.Date(format(date_decimal(DecYear), "%Y-%m-%d")),
+    Year = format(DecYear, "%Y"),
+    Stream_Name = case_when(
+      Stream_Name == "East Fork" ~ "east fork",
+      Stream_Name == "West Fork" ~ "west fork",
+      TRUE ~ Stream_Name
+    ),
+    Stream_ID = paste0(LTER, "__", Stream_Name)  # Create Stream_ID after Stream_Name adjustment
+  )
 
-
-wrtds_df <- wrtds_df %>%
-  mutate(Stream_ID = case_when(
-    Stream_ID=="Walker Branch__East Fork"~"Walker Branch__east fork",
-    Stream_ID=="Walker Branch__West Fork"~"Walker Branch__west fork",
-    .default = Stream_ID
-  ))
 
 ## Need to tidy the Finnish site names:
 finn <- read.csv("FinnishSites.csv")
@@ -139,41 +136,46 @@ tot <- tot %>%
         # Add in KG Classifications ----
 ## ------------------------------------------------------- ##
 # Read in climate data produced in KoeppenGeigerClassification.R
-KG <- read.csv("Koeppen_Geiger_2.csv")
-KG$Stream_ID <- paste0(KG$LTER, "__", KG$Stream_Name)
+KG <- read.csv("Koeppen_Geiger_2.csv") %>%
+  dplyr::mutate(
+    Stream_Name = case_when(
+      Stream_Name == "East Fork" ~ "east fork",
+      Stream_Name == "West Fork" ~ "west fork",
+      TRUE ~ Stream_Name
+    ),
+    Stream_ID = paste0(LTER, "__", Stream_Name)
+  )
+
 
 tot <- left_join(tot, KG %>% select(-Stream_Name), by = "Stream_ID", relationship = "many-to-many")
 
 ## ------------------------------------------------------- ##
           # Import Daylength ----
 ## ------------------------------------------------------- ##
-daylen <- read.csv("Monthly_Daylength_2.csv")
-daylen<-daylen[,-1]
+# Load and clean daylength data
+daylen <- read.csv("Monthly_Daylength_2.csv") %>%
+  select(-1)
 
-daylen_range <- daylen %>%
-  dplyr::group_by(Stream_Name) %>%
-  dplyr::summarise(min_day = min(mean_daylength), max_len = max(mean_daylength))
-
-colnames(daylen_range)<-c("Stream_Name", "Min_Daylength", "Max_Daylength")
-# Define renamed and old names directly
+# Define renamed and old names directly in a streamlined manner
 name_conversion <- data.frame(
   Stream_Name = c("MG_WEIR", "OR_low", "COMO", "East Fork", "West Fork"),
   Updated_StreamName = c("Marshall Gulch", "Oracle Ridge", "Como Creek", "east fork", "west fork")
 )
 
-# Filter, join, remove old Stream_Name, and rename in one step
-missing_sites <- daylen_range %>%
-  filter(Stream_Name %in% name_conversion$Stream_Name) %>%
+# Calculate min and max daylength, update Stream_Name, and ensure all sites in "tot" are left-joined
+daylen_range <- daylen %>%
+  dplyr::group_by(Stream_Name) %>%
+  dplyr::summarise(
+    Min_Daylength = min(mean_daylength),
+    Max_Daylength = max(mean_daylength)
+  ) %>%
   left_join(name_conversion, by = "Stream_Name") %>%
-  mutate(Stream_Name = Updated_StreamName) %>%
+  mutate(Stream_Name = coalesce(Updated_StreamName, Stream_Name)) %>%
   select(-Updated_StreamName)
 
-# Append the updated sites to the original dataframe
-daylen_range <- bind_rows(daylen_range, missing_sites)
+# Ensure the result is left-joined to "tot"
+tot <- left_join(tot, daylen_range, by = "Stream_Name", relationship = "many-to-many")
 
-daylen_range <- daylen_range %>%
-  filter(Stream_Name %in% name_conversion$Stream_Name) %>%
-  left_join(name_conversion %>% select(-Stream_Name), by = c("Stream_Name" = "Updated_StreamName"))
 
 # ## ------------------------------------------------------- ##
 #           # On to the Dynamic Drivers ---- 
