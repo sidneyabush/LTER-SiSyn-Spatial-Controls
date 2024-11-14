@@ -364,12 +364,6 @@ print(num_unique_streams)
 N_P_conc <- read.csv("Median_NP_WRTDS_GenConc_2_Annual.csv") %>%
   dplyr::select(-"X", -"chemical")
 
-num_unique_streams <- N_P_conc %>% 
-  summarise(unique_streams = n_distinct(Stream_Name)) %>%
-  pull(unique_streams)
-
-print(num_unique_streams)  
-
 N_P_conc_wide <- N_P_conc %>%
   pivot_wider(names_from = solute_simplified, values_from = median_Conc) %>%
   mutate(across(everything(), ~ na_if(as.character(.), "NULL"))) %>%

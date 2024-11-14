@@ -27,26 +27,10 @@ chem_NP <- subset(chem_NP, chem_NP$GenConc > 0)
 ## ------------------------------------------------------- ##
 # Calculate median N and P values ----
 ## ------------------------------------------------------- ##
-## this is for flow normalized concentrations (GenConc) 
+## this is for (GenConc) 
 chem_NP_avg <- chem_NP %>%
   dplyr::group_by(Stream_Name, chemical) %>%
   dplyr::summarise(median_Conc = median(GenConc, na.rm = T))
-
-# # Create a conversion dataframe with old and new stream names
-# name_conversion <- data.frame(
-#   Stream_Name = c("MG_WEIR", "OR_low", "COMO", "East Fork", "West Fork"),
-#   Updated_StreamName = c("Marshall Gulch", "Oracle Ridge", "Como Creek", "east fork", "west fork")
-# )
-# 
-# # Merge and update stream names
-# missing_sites <- chem_NP_avg %>%
-#   filter(Stream_Name %in% name_conversion$Stream_Name) %>%
-#   left_join(name_conversion, by = "Stream_Name") %>%
-#   select(-Stream_Name) %>%
-#   rename(Stream_Name = Updated_StreamName)
-# 
-# # Add missing sites to chem_NP_avg
-# chem_NP_avg <- bind_rows(missing_sites, chem_NP_avg)
 
 # Convert only NOx and NO3 to NOx, leave other solutes unchanged
 chem_NP_avg$solute_simplified <- ifelse(chem_NP_avg$chemical %in% c("NOx", "NO3"),
