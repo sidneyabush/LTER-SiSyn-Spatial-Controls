@@ -45,10 +45,10 @@ for (i in 1:nrow(finn)) {
   wrtds_df[row_num, "Stream_ID"]<-finn[i,4]
 }
 
-wrtds_df$Stream_ID<-ifelse(wrtds_df$Stream_ID=="Finnish Environmental Institute__TORNIONJ KUKKOLA 14310  ",
+wrtds_df$Stream_ID <- ifelse(wrtds_df$Stream_ID=="Finnish Environmental Institute__TORNIONJ KUKKOLA 14310  ",
                            "Finnish Environmental Institute__TORNIONJ KUKKOLA 14310", wrtds_df$Stream_ID)
 
-wrtds_df$Stream_ID<-ifelse(wrtds_df$Stream_ID=="Finnish Environmental Institute__SIMOJOKI AS. 13500      ",
+wrtds_df$Stream_ID <- ifelse(wrtds_df$Stream_ID=="Finnish Environmental Institute__SIMOJOKI AS. 13500      ",
                            "Finnish Environmental Institute__SIMOJOKI AS. 13500", wrtds_df$Stream_ID)
 
 ## ------------------------------------------------------- ##
@@ -116,8 +116,8 @@ q_stats <- wrtds_si %>%
   summarise(
     mean_q = mean(Q), 
     med_q = median(Q), 
-    min_Q = min(Q), 
-    max_Q = max(Q), 
+    min_q = min(Q), 
+    max_q = max(Q), 
     q_95 = quantile(Q, 0.95), 
     q_5 = quantile(Q, 0.05),
     .groups = "drop"
@@ -130,7 +130,7 @@ tot <- si_stats %>%
   mutate(cvc_cvq = across(starts_with("CV_si"), ~ . * CV_Q, .names = "CVC_CVQ_{.col}"))
 
 tot <- tot %>%
-  left_join(wrtds_si, by = c("Stream_ID", "Year"))
+  left_join(wrtds_df, by = c("Stream_ID", "Year"))
 
 ## ------------------------------------------------------- ##
         # Add in KG Classifications ----
@@ -158,8 +158,8 @@ daylen <- read.csv("Monthly_Daylength_2.csv") %>%
 
 # Define renamed and old names directly in a streamlined manner
 name_conversion <- data.frame(
-  Stream_Name = c("MG_WEIR", "OR_low", "COMO", "East Fork", "West Fork"),
-  Updated_StreamName = c("Marshall Gulch", "Oracle Ridge", "Como Creek", "east fork", "west fork")
+  Stream_Name = c("East Fork", "West Fork"),
+  Updated_StreamName = c("east fork", "west fork")
 )
 
 # Calculate min and max daylength, update Stream_Name, and ensure all sites in "tot" are left-joined
@@ -186,7 +186,7 @@ tot <- left_join(tot, daylen_range, by = "Stream_Name", relationship = "many-to-
 ## ------------------------------------------------------- ##
 # Load data and create the Stream_ID column
 spatial_drivers <- read.csv("all-data_si-extract_2_20240802.csv", stringsAsFactors = FALSE) %>%
-  mutate(Stream_ID = paste0(LTER, "__", Stream_Name))
+  mutate(Stream_ID = paste0(LTER, "__", Stream_Name)) 
 
 # Define the regular expression pattern for month abbreviations
 months_abb <- "_jan_|_feb_|_mar_|_apr_|_may_|_jun_|_jul_|_aug_|_sep_|_oct_|_nov_|_dec_"
@@ -451,7 +451,64 @@ tot <- final_combined_data %>%
   left_join(greenup_df, by = c("Stream_ID", "Year"))
 
 ## ------------------------------------------------------- ##
-#  Gap Filling Missing Data ----
+            #  Silicate Weathering ----
+## ------------------------------------------------------- ##
+# Import mapped lithologies and merge with tot
+mapped_lithologies <- read.csv("mapped_lithologies.csv")
+tot <- merge(tot, mapped_lithologies, by = "major_rock", all.x = TRUE) %>%
+  filter(!is.na(mapped_lithology))  # Filter out rows with NA in the "major_rock" column
+
+# Constants
+seconds_per_year <- 31536000  # Number of seconds in a year
+kg_per_m3 <- 1000  # Density of water in kg/m^3
+km2_to_m2 <- 10^6  # Conversion factor from km^2 to m^2
+R <- 8.314 # Gas constant in J/(mol*K)
+
+# Parameters for each lithology type
+lithology_params <- data.frame(
+  mapped_lithology = c("su", "vb", "pb", "py", "va", "vi", "ss", "pi", "sm", "mt", "pa"),
+  b = c(0.003364, 0.007015, 0.007015, 0.0061, 0.002455, 0.007015, 0.005341, 0.007015, 0.012481, 0.007626, 0.005095),
+  sp = c(1, 1, 1, 1, 1, 1, 0.64, 0.58, 0.24, 0.25, 0.58),
+  sa = c(60, 50, 50, 46, 60, 50, 60, 60, 60, 60, 60)
+)
+
+# Function to calculate weathering consumption rate and average for multiple lithologies
+calculate_weathering <- function(q, lithologies, temp_celsius) {
+  lithologies_list <- strsplit(lithologies, ",\\s*")[[1]]
+  weathering_values <- numeric(length(lithologies_list))
+  
+  for (i in seq_along(lithologies_list)) {
+    lith <- lithologies_list[i]
+    params <- lithology_params %>% filter(mapped_lithology == lith)
+    if (nrow(params) == 0) stop(paste("Lithology not found in the table for", lith))
+    
+    b <- params$b
+    sp <- params$sp
+    sa <- params$sa
+    weathering_values[i] <- q * b * (sp * exp(((1000 * sa) / R) * ((1 / 284.2) - (1 / temp_celsius))))
+  }
+  return(mean(weathering_values))
+}
+
+# Convert the "temp" column from degrees Celsius to Kelvin
+tot <- tot %>%
+  mutate(temp_K = temp + 273.15)
+
+# Calculate runoff for each row
+tot <- tot %>%
+  mutate(runoff = (med_q * seconds_per_year * kg_per_m3) / (drainSqKm * km2_to_m2))
+
+# Group by Stream_ID and Year, then calculate silicate weathering
+tot <- tot %>%
+  group_by(Stream_ID, Year) %>%
+  mutate(silicate_weathering = mapply(calculate_weathering, runoff, mapped_lithology, temp_K)) %>%
+  ungroup()
+
+tot <- tot %>%
+  left_join(tot, by = c("Stream_ID", "Year"))
+
+## ------------------------------------------------------- ##
+            #  Gap Filling Missing Data ----
 ## ------------------------------------------------------- ##
 # Import streams with na slopes
 # Load and process Krycklan slopes
@@ -539,25 +596,50 @@ tot_with_elev_filled <- tot_with_na_elev %>%
 
 # Update tot with the filled elevation values
 tot <- tot %>%
-  left_join(tot_with_elev_filled, by = "Stream_ID", suffix = c("", "_filled")) %>%
+  left_join(tot_with_elev_filled, by = "Stream_ID", suffix = c("", "_filled"), relationship = "many-to-many") %>%
   mutate(
     elevation_mean_m = coalesce(elevation_mean_m_filled, elevation_mean_m)
   ) %>%
   select(-elevation_mean_m_filled)  # Remove Stream_Name_filled from final output
 
+## Subset to just DSi: 
+tot_si <- subset(tot, chemical == "DSi")
+
+
+# Tidy data for export: 
+tot_si <- tot_si %>%
+  select(Stream_ID, Year, drainSqKm, ClimateZ, Name, NOx, P, precip,
+         temp, Max_Daylength, num_days, snow_cover, npp, evapotrans,
+         silicate_weathering, greenup_day, contains("permafrost"),
+         contains("Conc"), contains("Yield"), contains("slope"), 
+         contains("elevation"), contains("q"), 
+         contains("rock"), contains("land"))
+
 ## ------------------------------------------------------- ##
 #  Export Annual Driver data ----
 ## ------------------------------------------------------- ##
-write.csv(tot, "AllDrivers_Harmonized_Annual.csv")
+# Check number of unique sites: should agree with avg
+num_unique_sites <- tot_si %>% 
+  summarise(num_sites = n_distinct(Stream_ID))
+
+print(num_unique_sites)
+
+write.csv(tot_si, "AllDrivers_Harmonized_Annual.csv")
 
 ## ------------------------------------------------------- ##
-#   Calcualte and Export Average Driver data ----
+#   Calculate and Export Average Driver data ----
 ## ------------------------------------------------------- ##
 ## Summarize by Stream_ID and Year columns
 
 # Calculate the average of all drivers by Stream_ID and Year
-tot_avg <- tot %>%
-  group_by(Stream_ID, Year) %>%
+tot_si_avg <- tot_si %>%
+  group_by(Stream_ID) %>%
   summarise(across(everything(), mean, na.rm = TRUE), .groups = "drop")
-write.csv(tot_avg, "AllDrivers_Harmonized_Average.csv")
 
+# Make sure stream counts match
+num_unique_sites <- tot_si_avg %>% 
+  summarise(num_sites = n_distinct(Stream_ID))
+
+print(num_unique_sites)
+
+write.csv(tot_si_avg, "AllDrivers_Harmonized_Average.csv")
