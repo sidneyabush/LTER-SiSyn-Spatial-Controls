@@ -32,7 +32,6 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
     Stream_ID = paste0(LTER, "__", Stream_Name)  # Create Stream_ID after Stream_Name adjustment
   )
 
-
 ## Need to tidy the Finnish site names:
 finn <- read.csv("FinnishSites.csv")
 
@@ -92,7 +91,6 @@ tot <- wrtds_df %>%
          GenYield = GenFlux / drainSqKm) %>%
   select(-FNFlux, -GenFlux)
 
-
 ## ------------------------------------------------------- ##
         # Add in KG Classifications ----
 ## ------------------------------------------------------- ##
@@ -137,6 +135,8 @@ daylen_range <- daylen %>%
 # Ensure the result is left-joined to "tot"
 tot <- left_join(tot, daylen_range, by = "Stream_Name", relationship = "many-to-many")
 
+## Subset to just DSi to make merging easier from hereout
+tot <- subset(tot, chemical == "DSi")
 
 # ## ------------------------------------------------------- ##
 #           # On to the Dynamic Drivers ---- 
@@ -228,6 +228,8 @@ for(driver in unique(spatial_drivers_long_clean$driver_type)) {
 spatial_drivers_wide <- Reduce(function(x, y) merge(x, y, by = c("Stream_ID", "year"), all = TRUE), 
                                wide_data_list)
 
+setDT(spatial_drivers_wide)
+
 spatial_drivers_no_years <- spatial_drivers[, !colnames(spatial_drivers) %in% year_columns, drop = FALSE]  # Columns without numbers
 # Retain Stream_ID and columns without numbers in spatial_drivers_no_years
 spatial_drivers_no_years <- spatial_drivers %>%
@@ -236,6 +238,20 @@ spatial_drivers_no_years <- spatial_drivers %>%
 # Perform a left join to combine the wide annual data with the non-annual data
 combined_spatial_drivers <- spatial_drivers_wide %>%
   left_join(spatial_drivers_no_years, by = "Stream_ID", relationship = "many-to-many")
+
+
+setDT(combined_spatial_drivers)
+
+# Rename `year` to `Year` in `combined_spatial_drivers` to match `tot`
+combined_spatial_drivers <- combined_spatial_drivers %>%
+  dplyr::mutate(Year = as.integer(year))
+
+combined_spatial_drivers <- combined_spatial_drivers %>%
+  distinct(Stream_ID, Year, .keep_all = TRUE)
+
+setDT(tot)
+
+final_combined_data <- tot[combined_spatial_drivers, on = .(Stream_ID, Year), nomatch = 0]
 
 ## ------------------------------------------------------- ##
             # Greenup Day ----
@@ -289,6 +305,14 @@ for (cycle in greenup_cycles) {
 
 # Combine `greenup_long` data for cycle0 only
 greenup_df <- bind_rows(greenup_long$cycle0)
+
+# Merge `greenup_df`, renaming `year` to `Year` if needed
+greenup_df <- greenup_df %>%
+  rename(Year = year)  # Ensure column names match
+
+tot <- final_combined_data %>%
+  left_join(greenup_df, by = c("Stream_ID", "Year"), relationship = "many-to-many")
+
 # ## ------------------------------------------------------- ##
 #           # Import WRTDS N_P Conc ---- 
 # ## ------------------------------------------------------- ##
@@ -384,32 +408,10 @@ raw_P <- raw_NP_avg_final %>%
 # Convert Year to numeric in tot to match the type in raw_P
 tot <- tot %>%
   mutate(Year = as.numeric(Year)) %>%  # Convert Year to numeric
-  
   # Join and replace NA values in P with raw_P values where applicable
   left_join(raw_P, by = c("Stream_Name", "Year")) %>%
   mutate(P = ifelse(is.na(P), raw_P, P)) %>%  # Replace NA values in P with raw_P values
   select(-raw_P)  # Remove the temporary raw_P column
-
-# Print the final result to verify
-print(tot)
-
-## ------------------------------------------------------- ##
-#  Final Merge with Combined Data ----
-## ------------------------------------------------------- ##
-# Rename `year` to `Year` in `combined_spatial_drivers` to match `tot`
-combined_spatial_drivers <- combined_spatial_drivers %>%
-  dplyr::mutate(Year = as.integer(year))
-
-# Merge `tot` with `combined_spatial_drivers`
-final_combined_data <- tot %>%
-  left_join(combined_spatial_drivers, by = c("Stream_ID", "Year"))
-
-# Merge `greenup_df`, renaming `year` to `Year` if needed
-greenup_df <- greenup_df %>%
-  rename(Year = year)  # Ensure column names match
-
-tot <- final_combined_data %>%
-  left_join(greenup_df, by = c("Stream_ID", "Year"), relationship = "many-to-many")
 
 ## ------------------------------------------------------- ##
             #  Silicate Weathering ----
@@ -423,7 +425,7 @@ tot[, major_rock := as.character(major_rock)]
 mapped_lithologies[, major_rock := as.character(major_rock)]
 
 # Perform the merge and filter out NA values in mapped_lithology
-weathering <- merge(tot[, .(Stream_ID, Year, major_rock, med_q, temp, drainSqKm)], 
+weathering <- merge(tot[, .(Stream_ID, Year, major_rock, Q, temp, drainSqKm)], 
                     mapped_lithologies[, .(major_rock, mapped_lithology)], 
                     by = "major_rock", all.x = TRUE)
 weathering <- weathering[!is.na(mapped_lithology)]  # Remove rows with NA in mapped_lithology
@@ -446,7 +448,7 @@ lithology_params <- data.table(
 weathering[, temp_K := temp + 273.15]
 
 # Calculate runoff based on the given formula
-weathering[, runoff := (med_q * seconds_per_year * kg_per_m3) / (drainSqKm * km2_to_m2)]
+weathering[, runoff := (Q * seconds_per_year * kg_per_m3) / (drainSqKm * km2_to_m2)]
 
 # Define a function for vectorized calculation of weathering
 calculate_weathering_vectorized <- function(lithologies, runoff, temp_k) {
@@ -597,11 +599,8 @@ tot <- tot %>%
   ) %>%
   select(-elevation_mean_m_filled)  # Remove Stream_Name_filled from final output
 
-## Subset to just DSi: 
-tot_si <- subset(tot, chemical == "DSi")
-
 # Tidy data for export: 
-tot_si <- tot_si %>%
+tot_si <- tot %>%
   select(Stream_ID, Year, drainSqKm, ClimateZ, Name, NOx, P, precip,
          temp, Max_Daylength, num_days, max_prop_area, npp, evapotrans,
          silicate_weathering, greenup_day, contains("permafrost"),
