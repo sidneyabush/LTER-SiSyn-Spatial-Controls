@@ -81,56 +81,17 @@ missing_sites <- missing_sites %>%
 area <- bind_rows(area, missing_sites)
 
 # Perform a left join while selecting only specific columns from area
-wrtds_df <- wrtds_df %>%
+tot <- wrtds_df %>%
   left_join(area %>% select(Stream_ID), by = "Stream_ID", relationship = "many-to-many")
 
 ## ------------------------------------------------------- ##
             # Calculate Yields ----
 ## ------------------------------------------------------- ##
-wrtds_df <- wrtds_df %>%
+tot <- wrtds_df %>%
   mutate(FNYield = FNFlux / drainSqKm,
          GenYield = GenFlux / drainSqKm) %>%
   select(-FNFlux, -GenFlux)
 
-## ------------------------------------------------------- ##
-          # Calculate Stats ----
-## ------------------------------------------------------- ##
-# Filter for DSi in wrtds_df
-wrtds_si <- subset(wrtds_df, chemical == "DSi")
-
-# Calculate si_stats with CV columns
-si_stats <- wrtds_si %>%
-  group_by(Stream_ID, Year) %>%
-  summarise(
-    across(
-      c(FNConc, GenConc, GenYield, FNYield), 
-      list(mean = mean, median = median, min = min, max = max), 
-      .names = "{.fn}_si_{.col}"
-    ),
-    .groups = "drop"  # Ungroup after summarise for a clean output
-  ) 
-
-# Calculate q_stats with CV for Q
-q_stats <- wrtds_si %>%
-  group_by(Stream_ID, Year) %>%
-  summarise(
-    mean_q = mean(Q), 
-    med_q = median(Q), 
-    min_q = min(Q), 
-    max_q = max(Q), 
-    q_95 = quantile(Q, 0.95), 
-    q_5 = quantile(Q, 0.05),
-    .groups = "drop"
-  )
-
-
-# Merge si_stats and q_stats and calculate CVC/CVQ in the same pipeline
-tot <- si_stats %>%
-  left_join(q_stats, by = c("Stream_ID", "Year")) %>%
-  mutate(cvc_cvq = across(starts_with("CV_si"), ~ . * CV_Q, .names = "CVC_CVQ_{.col}"))
-
-tot <- tot %>%
-  left_join(wrtds_df, by = c("Stream_ID", "Year"))
 
 ## ------------------------------------------------------- ##
         # Add in KG Classifications ----
@@ -448,64 +409,98 @@ greenup_df <- greenup_df %>%
   rename(Year = year)  # Ensure column names match
 
 tot <- final_combined_data %>%
-  left_join(greenup_df, by = c("Stream_ID", "Year"))
+  left_join(greenup_df, by = c("Stream_ID", "Year"), relationship = "many-to-many")
 
 ## ------------------------------------------------------- ##
             #  Silicate Weathering ----
 ## ------------------------------------------------------- ##
-# Import mapped lithologies and merge with tot
-mapped_lithologies <- read.csv("mapped_lithologies.csv")
-tot <- merge(tot, mapped_lithologies, by = "major_rock", all.x = TRUE) %>%
-  filter(!is.na(mapped_lithology))  # Filter out rows with NA in the "major_rock" column
+# Read and prepare data
+mapped_lithologies <- fread("mapped_lithologies.csv")
+setDT(tot)  # Use tot only for the final merged dataset
 
-# Constants
-seconds_per_year <- 31536000  # Number of seconds in a year
-kg_per_m3 <- 1000  # Density of water in kg/m^3
-km2_to_m2 <- 10^6  # Conversion factor from km^2 to m^2
-R <- 8.314 # Gas constant in J/(mol*K)
+# Ensure compatibility in the major_rock column for merging
+tot[, major_rock := as.character(major_rock)]
+mapped_lithologies[, major_rock := as.character(major_rock)]
 
-# Parameters for each lithology type
-lithology_params <- data.frame(
+# Perform the merge and filter out NA values in mapped_lithology
+weathering <- merge(tot[, .(Stream_ID, Year, major_rock, med_q, temp, drainSqKm)], 
+                    mapped_lithologies[, .(major_rock, mapped_lithology)], 
+                    by = "major_rock", all.x = TRUE)
+weathering <- weathering[!is.na(mapped_lithology)]  # Remove rows with NA in mapped_lithology
+
+# Constants for weathering calculations
+seconds_per_year <- 31536000  
+kg_per_m3 <- 1000  
+km2_to_m2 <- 10^6  
+R <- 8.314  
+
+# Define lithology parameters as a data.table
+lithology_params <- data.table(
   mapped_lithology = c("su", "vb", "pb", "py", "va", "vi", "ss", "pi", "sm", "mt", "pa"),
   b = c(0.003364, 0.007015, 0.007015, 0.0061, 0.002455, 0.007015, 0.005341, 0.007015, 0.012481, 0.007626, 0.005095),
   sp = c(1, 1, 1, 1, 1, 1, 0.64, 0.58, 0.24, 0.25, 0.58),
   sa = c(60, 50, 50, 46, 60, 50, 60, 60, 60, 60, 60)
 )
 
-# Function to calculate weathering consumption rate and average for multiple lithologies
-calculate_weathering <- function(q, lithologies, temp_celsius) {
-  lithologies_list <- strsplit(lithologies, ",\\s*")[[1]]
-  weathering_values <- numeric(length(lithologies_list))
-  
-  for (i in seq_along(lithologies_list)) {
-    lith <- lithologies_list[i]
-    params <- lithology_params %>% filter(mapped_lithology == lith)
-    if (nrow(params) == 0) stop(paste("Lithology not found in the table for", lith))
-    
-    b <- params$b
-    sp <- params$sp
-    sa <- params$sa
-    weathering_values[i] <- q * b * (sp * exp(((1000 * sa) / R) * ((1 / 284.2) - (1 / temp_celsius))))
-  }
-  return(mean(weathering_values))
+# Convert temperature to Kelvin for calculations
+weathering[, temp_K := temp + 273.15]
+
+# Calculate runoff based on the given formula
+weathering[, runoff := (med_q * seconds_per_year * kg_per_m3) / (drainSqKm * km2_to_m2)]
+
+# Define a function for vectorized calculation of weathering
+calculate_weathering_vectorized <- function(lithologies, runoff, temp_k) {
+  lithologies_split <- strsplit(lithologies, ",\\s*")
+  weathering_results <- sapply(seq_along(lithologies_split), function(i) {
+    liths <- lithologies_split[[i]]
+    weathering_values <- sapply(liths, function(lith) {
+      params <- lithology_params[mapped_lithology == lith]
+      if (nrow(params) == 0) stop(paste("Lithology not found in the table for", lith))
+      params$b * (params$sp * exp(((1000 * params$sa) / R) * ((1 / 284.2) - (1 / temp_k[i])))) * runoff[i]
+    })
+    mean(weathering_values, na.rm = TRUE)
+  })
+  return(weathering_results)
 }
 
-# Convert the "temp" column from degrees Celsius to Kelvin
-tot <- tot %>%
-  mutate(temp_K = temp + 273.15)
+# Calculate silicate weathering for each row in the weathering data
+weathering[, silicate_weathering := calculate_weathering_vectorized(mapped_lithology, runoff, temp_K), by = .(Stream_ID, Year)]
 
-# Calculate runoff for each row
-tot <- tot %>%
-  mutate(runoff = (med_q * seconds_per_year * kg_per_m3) / (drainSqKm * km2_to_m2))
+setDT(weathering)
 
-# Group by Stream_ID and Year, then calculate silicate weathering
-tot <- tot %>%
-  group_by(Stream_ID, Year) %>%
-  mutate(silicate_weathering = mapply(calculate_weathering, runoff, mapped_lithology, temp_K)) %>%
-  ungroup()
+# Ensure 'Stream_ID' and 'Year' are character to avoid merge issues due to type differences
+tot[, Stream_ID := as.character(Stream_ID)]
+tot[, Year := as.integer(Year)]
+weathering[, Stream_ID := as.character(Stream_ID)]
+weathering[, Year := as.integer(Year)]
 
-tot <- tot %>%
-  left_join(tot, by = c("Stream_ID", "Year"))
+# Step 1: Check for duplicates in both datasets for the join keys
+weathering <- unique(weathering, by = c("Stream_ID", "Year"))
+tot <- unique(tot, by = c("Stream_ID", "Year"))
+
+# Step 2: Attempt the merge with careful memory management
+tryCatch({
+  tot <- merge(
+    tot,
+    weathering[, .(Stream_ID, Year, silicate_weathering)],
+    by = c("Stream_ID", "Year"),
+    all.x = TRUE,
+    allow.cartesian = TRUE
+  )
+}, error = function(e) {
+  message("Error encountered: ", e$message)
+  print("Attempting alternative approach using by=.EACHI")
+  
+  # Retry with by=.EACHI to handle large merges with potential duplicates
+  tot <<- merge(
+    tot,
+    weathering[, .(Stream_ID, Year, silicate_weathering)],
+    by = c("Stream_ID", "Year"),
+    all.x = TRUE,
+    allow.cartesian = TRUE,
+    by = .EACHI
+  )
+})
 
 ## ------------------------------------------------------- ##
             #  Gap Filling Missing Data ----
@@ -605,11 +600,10 @@ tot <- tot %>%
 ## Subset to just DSi: 
 tot_si <- subset(tot, chemical == "DSi")
 
-
 # Tidy data for export: 
 tot_si <- tot_si %>%
   select(Stream_ID, Year, drainSqKm, ClimateZ, Name, NOx, P, precip,
-         temp, Max_Daylength, num_days, snow_cover, npp, evapotrans,
+         temp, Max_Daylength, num_days, max_prop_area, npp, evapotrans,
          silicate_weathering, greenup_day, contains("permafrost"),
          contains("Conc"), contains("Yield"), contains("slope"), 
          contains("elevation"), contains("q"), 
@@ -629,12 +623,79 @@ write.csv(tot_si, "AllDrivers_Harmonized_Annual.csv")
 ## ------------------------------------------------------- ##
 #   Calculate and Export Average Driver data ----
 ## ------------------------------------------------------- ##
-## Summarize by Stream_ID and Year columns
 
-# Calculate the average of all drivers by Stream_ID and Year
+## ------------------------------------------------------- ##
+## Calculate Stats that can only be calculated for average data: 
+## ------------------------------------------------------- ##
+# Calculate si_stats with CV columns
+si_stats <- tot_si %>%
+  group_by(Stream_ID, Year) %>%
+  summarise(
+    across(
+      c(FNConc, GenConc, GenYield, FNYield), 
+      list(mean = mean, median = median, min = min, max = max), 
+      .names = "{.fn}_si_{.col}"
+    ),
+    across(
+      c(FNConc, GenConc, GenYield, FNYield), 
+      ~ sd(.) / mean(.),  # Calculate CV
+      .names = "CV_si_{.col}"
+    ),
+    .groups = "drop"  # Ungroup after summarise for a clean output
+  ) 
+
+# Calculate q_stats with CV for Q
+q_stats <- tot_si %>%
+  group_by(Stream_ID, Year) %>%
+  summarise(
+    mean_q = mean(Q), 
+    med_q = median(Q), 
+    min_q = min(Q), 
+    max_q = max(Q), 
+    q_95 = quantile(Q, 0.95), 
+    q_5 = quantile(Q, 0.05),
+    cv_q = sd(Q) / mean(Q),  # Calculate CV for Q
+    .groups = "drop"
+  )
+
+# Combine si_stats and q_stats and calculate CVC/CVQ
+tot <- si_stats %>%
+  left_join(q_stats, by = c("Stream_ID", "Year")) %>%
+  mutate(
+    cvc_cvq = CV_si_FNConc / cv_q  # Example: Calculate CVC/CVQ for FNConc and Q
+  )
+
+tot_si <- tot %>%
+  left_join(wrtds_df, by = c("Stream_ID", "Year"))
+
+
+## Prepare to summarize tot_si for site average behavior: 
+
+# Define static keywords, excluding Stream_ID (it is handled by grouping)
+static_keywords <- c("drainSqKm", "ClimateZ", "Name", "Max_Daylength",
+                     "slope", "elevation", "rock", "land")  # Columns containing these words are static
+
+# Dynamically identify static and summarizable columns
+static_columns <- names(tot_si)[grepl(paste(static_keywords, collapse = "|"), names(tot_si))]
+columns_to_summarize <- setdiff(names(tot_si), c(static_columns, "Stream_ID"))  # Exclude Stream_ID explicitly
+
+# Summarize data
 tot_si_avg <- tot_si %>%
   group_by(Stream_ID) %>%
-  summarise(across(everything(), mean, na.rm = TRUE), .groups = "drop")
+  summarise(
+    across(
+      all_of(static_columns),  # Static columns identified dynamically
+      ~ first(.), 
+      .names = "{.col}"  # Keep the original column name
+    ),
+    across(
+      all_of(columns_to_summarize),  # Non-static columns
+      mean, 
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  )
+
 
 # Make sure stream counts match
 num_unique_sites <- tot_si_avg %>% 
