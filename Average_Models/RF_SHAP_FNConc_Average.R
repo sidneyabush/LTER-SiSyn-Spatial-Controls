@@ -1,7 +1,7 @@
 # Load needed packages
 librarian::shelf(remotes, RRF, caret, randomForest, DAAG, party, rpart, rpart.plot, mlbench, pROC, tree, dplyr,
                  plot.matrix, reshape2, rcartocolor, arsenal, googledrive, data.table, ggplot2, corrplot, pdp, 
-                 iml, tidyr, viridis)
+                 iml, tidyr, viridis, parallel, doParallel, foreach)
 
 # Clear environment
 rm(list = ls())
@@ -80,169 +80,37 @@ output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/
 # Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
-drivers_df <- read.csv("AllDrivers_Harmonized_20241108_WRTDS_MD_KG_NP_FNConc_silicate_weathering.csv") %>%
-  select(Stream_Name, Stream_ID, FNConc, basin_slope_mean_degree, q_95, q_5, drainage_area, snow_cover, 
-         evapotrans, npp, temp, precip, permafrost, elevation_mean_m, basin_slope_mean_degree,
-         contains("rocks"), contains("land_"), green_up_day, NOx, P, silicate_weathering) %>%
-   distinct(Stream_ID, .keep_all = TRUE) %>%
-  # select(-Use_WRTDS, -cycle1, -X, -X.1, -Name, -ClimateZ, -Latitude, -Longitude, -LTER, -major_soil, -contains("soil"),
-  #        -rndCoord.lat, -rndCoord.lon, -Min_Daylength, -elevation_min_m, 
-  #        -elevation_max_m, -elevation_median_m, -basin_slope_median_degree, -basin_slope_min_degree, -basin_slope_max_degree,
-  #        -num_days, -CV_C, -mean_q, -med_q, -sd_q, -CV_Q, -min_Q, -max_Q,
-  #        -cvc_cvq, -C_Q_slope, -major_land, -major_soil, -major_rock, -temp_K, -mapped_lithology,
-  #        -lithology_description, -runoff, -contains("si"), -contains("flux")) %>%
-  # Filter to retain complete cases for snow_cover
-  filter(!is.na(snow_cover))
-
-
-# # Export a list of stream names with NA values for basin slope
-# streams_with_na_slope <- drivers_df %>%
-#   filter(is.na(basin_slope_mean_degree)) %>%
-#   select(Stream_ID, Stream_Name)
-# 
-# # Save the list to a CSV file
-# write.csv(streams_with_na_slope, "streams_with_na_slope.csv", row.names = FALSE)
-# 
-# # Export a list of stream names with NA values for permafrost
-# streams_with_na_permafrost <- drivers_df %>%
-#   filter(is.na(permafrost)) %>%
-#   select(Stream_ID, Stream_Name)
-# 
-# # Save the list to a CSV file
-# write.csv(streams_with_na_permafrost, "streams_with_na_permafrost.csv", row.names = FALSE)
-
-# Now import raw P data and merge it for sites in drivers_df where there are NA P values
-raw_P <- read.csv("AllDrivers_Harmonized_20241108_WRTDS_MD_KG_rawNP_FNConc.csv") %>%
+drivers_df <- read.csv("AllDrivers_Harmonized_Average.csv") %>%
+  ## Include median or just reg FNConc for Average?
+  select(Stream_ID, FNConc, contains("q"), precip, temp, max_prop_area, npp, evapotrans, 
+         silicate_weathering, greenup_day, permafrost_mean_m, drainSqKm, Max_Daylength,
+         elevation_mean_m, basin_slope_mean_degree, P, NOx,
+         contains("rocks_"), contains("land_")) %>%
+  rename(permafrost = permafrost_mean_m, 
+         snow_cover = max_prop_area, 
+         drainage_area = drainSqKm,
+         elevation = elevation_mean_m,
+         slope = basin_slope_mean_degree) %>%
   distinct(Stream_ID, .keep_all = TRUE) %>%
-  filter(!is.na(num_days)) %>%
-  dplyr::select(Stream_Name, P) %>%
-  dplyr::rename(raw_P = P)  # Rename the P column to distinguish raw P from WRTDS P
-
-# Identify rows in drivers_df where P is NA
-drivers_df_with_na_P <- drivers_df %>%
-  dplyr::filter(is.na(P)) %>%
-  dplyr::select(Stream_Name, Stream_ID, P)
-
-# Merge raw P data for sites where P is NA in drivers_df
-drivers_df_with_raw_P <- drivers_df_with_na_P %>%
-  left_join(raw_P, by = "Stream_Name") %>%
-  mutate(P = ifelse(is.na(P), raw_P, P))  # Replace NA values in P with raw P values
-
-# Update the original drivers_df with the new P values
-drivers_df <- drivers_df %>%
-  left_join(drivers_df_with_raw_P %>% select(Stream_ID, P), by = "Stream_ID", suffix = c("", "_new")) %>%
-  mutate(P = ifelse(is.na(P_new), P, P_new)) %>%  # Replace P with P_new where P_new is not NA
-  select(-P_new)  # Remove the temporary P_new column
-
-## Now import streams with na slopes
-# Load and process Krycklan slopes
-Krycklan_slopes <- transform(read.csv("Krycklan_basin_slopes.csv"), 
-                             basin_slope_mean_degree = atan(gradient_pct / 100) * (180 / pi))
-
-# Load and process US slopes
-US_slopes <- read.csv("DSi_Basin_Slope_missing_sites.csv", header = FALSE)
-colnames(US_slopes) <- US_slopes[1, ]
-US_slopes <- US_slopes[-1, ]
-US_slopes <- US_slopes %>%
-  pivot_longer(
-    cols = everything(),
-    names_to = "Stream_Name",
-    values_to = "basin_slope_mean_degree"
-  ) %>%
-  mutate(basin_slope_mean_degree = as.numeric(basin_slope_mean_degree))
-
-# Upload the Stream_Name to Stream_ID key file
-stream_key <- read.csv("basin_stream_id_conversions.csv", header = TRUE)
-
-# Merge stream key with Krycklan_slopes and US_slopes to add Stream_ID
-Krycklan_slopes <- left_join(Krycklan_slopes, stream_key, by = "Stream_Name") %>%
-  filter(!is.na(basin_slope_mean_degree))  # Remove rows with NA values after merging with key
-
-US_slopes <- left_join(US_slopes, stream_key, by = "Stream_Name") %>%
-  filter(!is.na(basin_slope_mean_degree))  # Remove rows with NA values after merging with key
-
-# Filter drivers_df for rows with NA basin slope values
-drivers_df_with_na_slope <- drivers_df %>%
-  filter(is.na(basin_slope_mean_degree)) %>%
-  select(Stream_Name, Stream_ID)
-
-# Merge drivers_df_with_na_slope with US_slopes and Krycklan_slopes to fill missing values
-drivers_df_with_slope_filled <- drivers_df_with_na_slope %>%
-  left_join(US_slopes %>% select(Stream_ID, basin_slope_mean_degree), by = "Stream_ID") %>%
-  left_join(Krycklan_slopes %>% select(Stream_ID, basin_slope_mean_degree), by = "Stream_ID", suffix = c("_US", "_Krycklan")) %>%
-  mutate(
-    basin_slope_mean_degree = coalesce(basin_slope_mean_degree_US, basin_slope_mean_degree_Krycklan)
-  ) %>%
-  select(Stream_ID, basin_slope_mean_degree)
-
-# Update drivers_df with the filled values
-drivers_df <- drivers_df %>%
-  left_join(drivers_df_with_slope_filled, by = "Stream_ID", suffix = c("", "_filled")) %>%
-  mutate(
-    basin_slope_mean_degree = coalesce(basin_slope_mean_degree_filled, basin_slope_mean_degree)
-  ) %>%
-  select(-basin_slope_mean_degree_filled)
-
-# Load the US elevation data without headers
-US_elev <- read.csv("DSi_Basin_Elevation_missing_sites.csv", header = FALSE)
-
-# Set the first row as column names and remove it from the data
-colnames(US_elev) <- US_elev[1, ]
-US_elev <- US_elev[-1, ]
-
-# Convert the dataframe from wide to long format
-US_elev <- US_elev %>%
-  pivot_longer(
-    cols = everything(),
-    names_to = "Stream_Name",
-    values_to = "elevation_mean_m"
-  )
-
-# Convert elevation_mean_m to numeric
-US_elev$elevation_mean_m <- as.numeric(US_elev$elevation_mean_m)
-
-# Merge with the stream key and remove rows with NA in elevation_mean_m after the merge
-US_elev <- left_join(US_elev, stream_key, by = "Stream_Name") %>%
-  filter(!is.na(elevation_mean_m))
-
-# Filter drivers_df for rows with NA elevation values
-drivers_df_with_na_elev <- drivers_df %>%
-  filter(is.na(elevation_mean_m)) %>%
-  select(Stream_Name, Stream_ID)
-
-# Merge drivers_df_with_na_elev with US_elev to fill missing elevation values
-drivers_df_with_elev_filled <- drivers_df_with_na_elev %>%
-  left_join(US_elev %>% select(Stream_ID, elevation_mean_m), by = "Stream_ID")
-
-# Update drivers_df with the filled elevation values
-drivers_df <- drivers_df %>%
-  left_join(drivers_df_with_elev_filled, by = "Stream_ID", suffix = c("", "_filled")) %>%
-  mutate(
-    elevation_mean_m = coalesce(elevation_mean_m_filled, elevation_mean_m)
-  ) %>%
-  select(-elevation_mean_m_filled, -Stream_Name_filled)  # Remove Stream_Name_filled from final output
+  filter(!is.na(snow_cover))
 
 # Replace NA values in the specified column range with 0
 drivers_df <- drivers_df %>%
-  dplyr::mutate_at(vars(15:30), ~replace(., is.na(.), 0)) %>%
+  dplyr::mutate_at(vars(21:36), ~replace(., is.na(.), 0)) %>%
   # Replace NA values in the "permafrost" column with 0
   mutate(permafrost = replace(permafrost, is.na(permafrost), 0)) 
 
 
 # Testing which drivers we want to keep based on the # of sites it leaves us with
 # Assuming drivers_df is your data frame, and you want to check for complete cases in specific columns
-cols_to_check <- c("P", "basin_slope_mean_degree", "green_up_day", "drainage_area", "NOx")
+cols_to_check <- c("P", "slope", "greenup_day", "drainage_area", "NOx", "evapotrans")
 
 # Use complete.cases() on those columns
 drivers_df <- drivers_df[complete.cases(drivers_df[, cols_to_check]), ]
 
-# # Export the dataframe to a CSV file
-# write.csv(drivers_df, "Final_Sites.csv", row.names = FALSE)
-
 # Convert all integer columns to numeric in one step
 drivers_df <- drivers_df %>% mutate(across(where(is.integer), as.numeric))%>%
-  # Remove Stream_Name and Stream_ID columns
-  select(-Stream_Name, -Stream_ID)
+  select(-Stream_ID)
 
 # Remove outliers using custom function
 # drivers_df <- remove_outlier_rows(drivers_df)
@@ -369,33 +237,9 @@ legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(
 save_rf_importance_plot(rf_model2, output_dir)
 save_lm_plot(rf_model2, drivers_df$FNConc, output_dir)
 
-# # Generate partial dependence plots ----
-# plot_partial_dependence <- function(model, variable) {
-#   par.Long <- partial(model, pred.var = variable)
-#   partial_plot <- autoplot(par.Long, contour = TRUE) + theme_bw() + theme(text = element_text(size = 20))
-#   print(partial_plot)
-# }
-# 
-# # List of variables to plot
-# variables <- c("P", "temp", "green_up_day", "precip")
-# 
-# # Apply the function for each variable
-# lapply(variables, function(var) plot_partial_dependence(rf_model2, var))
-
-
-
-### MAKE INTO A FUNCTION ---- 
+## Calculate SHAP values and make exploratory plots 
 # Set the output directory for plots
 output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/FNConc"
-
-# Required libraries
-library(parallel)
-library(doParallel)
-library(foreach)
-library(iml)
-library(dplyr)
-library(reshape2)
-library(ggplot2)
 
 # Set up a parallel backend for speed (adjust cores as needed)
 num_cores <- detectCores() - 1  # Leave one core free for other tasks
