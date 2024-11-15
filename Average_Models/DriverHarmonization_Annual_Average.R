@@ -149,20 +149,12 @@ tot <- subset(tot, chemical == "DSi")
 # Load data and create the Stream_ID column
 spatial_drivers <- read.csv("all-data_si-extract_2_20240802.csv", stringsAsFactors = FALSE) %>%
   mutate(Stream_ID = paste0(LTER, "__", Stream_Name)) %>%
-  dplyr::select(-Shapefile_Name, -Discharge_File_Name, -contains("soil"))
+  dplyr::select(
+    -Shapefile_Name, -Discharge_File_Name, -contains("soil"), -contains("major"),
+    -matches("_jan_|_feb_|_mar_|_apr_|_may_|_jun_|_jul_|_aug_|_sep_|_oct_|_nov_|_dec_")
+  )
 
 gc()
-
-# Define the regular expression pattern for month abbreviations
-months_abb <- "_jan_|_feb_|_mar_|_apr_|_may_|_jun_|_jul_|_aug_|_sep_|_oct_|_nov_|_dec_"
-
-# Pull out the monthly drivers and Stream_ID column
-monthly_drivers <- spatial_drivers %>%
-  dplyr::select(Stream_ID, matches(months_abb))
-
-# Remove monthly drivers from spatial drivers
-spatial_drivers <- spatial_drivers %>%
-  dplyr::select(-matches(months_abb))
 
 # Identify columns with any numbers in the header
 year_columns <- grep("[0-9]", colnames(spatial_drivers), value = TRUE)
@@ -205,7 +197,8 @@ spatial_drivers_long <- spatial_drivers_long %>%
 
 # Step 2: Remove rows with any NA values in the relevant columns
 # We ensure Stream_ID, year, driver_type, unique_column, and value are all non-NA
-spatial_drivers_long_clean <- spatial_drivers_long 
+spatial_drivers_long_clean <- spatial_drivers_long %>%
+  filter(!is.na(Stream_ID) & !is.na(year) & !is.na(driver_type) & !is.na(unique_column))
 
 # Step 3: Convert `value` to a consistent type (e.g., numeric) if applicable
 # This step ensures there are no type conflicts in the value column
@@ -226,6 +219,8 @@ for(driver in unique(spatial_drivers_long_clean$driver_type)) {
   # Store each driver type as a separate wide dataframe
   wide_data_list[[driver]] <- driver_data
 }
+
+gc()
 
 # Merge all wide dataframes by Stream_ID and year
 spatial_drivers_wide <- Reduce(function(x, y) merge(x, y, by = c("Stream_ID", "year"), all = TRUE), 
@@ -252,7 +247,14 @@ combined_spatial_drivers <- combined_spatial_drivers %>%
 setDT(tot)
 setDT(combined_spatial_drivers)
 
-final_combined_data <- tot[combined_spatial_drivers, on = .(Stream_ID, Year), nomatch = 0]
+# Split `tot` into manageable chunks and join each chunk
+chunk_size <- 10000  # Adjust based on memory capacity
+tot_chunks <- split(tot, ceiling(seq_len(nrow(tot)) / chunk_size))
+
+final_combined_data <- rbindlist(lapply(tot_chunks, function(chunk) {
+  chunk[combined_spatial_drivers, on = .(Stream_ID, Year), nomatch = 0]
+}))
+
 gc()
 ## ------------------------------------------------------- ##
             # Greenup Day ----
