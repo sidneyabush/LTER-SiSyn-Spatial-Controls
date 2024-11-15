@@ -1,5 +1,5 @@
 ## ------------------------------------------------------- ##
-# Silica WG - Harmonize Drivers: Annual and Average Models
+# Silica WG - Harmonize Drivers: AnnualModels
 ## ------------------------------------------------------- ##
 # Written by:
 ## Sidney A Bush, Keira Johnson
@@ -142,137 +142,25 @@ tot <- subset(tot, chemical == "DSi")
 # ## ------------------------------------------------------- ##
 #           # On to the Dynamic Drivers ---- 
 # ## ------------------------------------------------------- ##
-
 ## ------------------------------------------------------- ##
-          # Import Spatial Drivers ----
+# Step 1: Load and preprocess spatial drivers
 ## ------------------------------------------------------- ##
-# Load data and create the Stream_ID column
-spatial_drivers <- read.csv("all-data_si-extract_2_20240802.csv", stringsAsFactors = FALSE) %>%
-  mutate(Stream_ID = paste0(LTER, "__", Stream_Name)) %>%
-  dplyr::select(
-    -Shapefile_Name, -Discharge_File_Name, -contains("soil"), -contains("major"),
-    -matches("_jan_|_feb_|_mar_|_apr_|_may_|_jun_|_jul_|_aug_|_sep_|_oct_|_nov_|_dec_")
-  )
+spatial_drivers <- fread("all-data_si-extract_2_20240802.csv")  # Use fread for faster loading
+spatial_drivers[, Stream_ID := paste0(LTER, "__", Stream_Name)]
+spatial_drivers <- spatial_drivers[, !c("Shapefile_Name", "Discharge_File_Name"), with = FALSE]
+spatial_drivers <- spatial_drivers[, !grepl("soil|major", names(spatial_drivers)), with = FALSE]
+spatial_drivers <- spatial_drivers[, !grepl("_jan_|_feb_|_mar_|_apr_|_may_|_jun_|_jul_|_aug_|_sep_|_oct_|_nov_|_dec_", names(spatial_drivers)), with = FALSE]
 
-gc()
-
-# Identify columns with any numbers in the header
-year_columns <- grep("[0-9]", colnames(spatial_drivers), value = TRUE)
-# Identify columns without numbers, ensuring Stream_ID is included
-non_year_columns <- colnames(spatial_drivers)[!colnames(spatial_drivers) %in% year_columns]
-
-## ------------------------------------------------------- ##
-                # Annual Data ----
-## ------------------------------------------------------- ##
-# Separate columns with numbers from those without using base R indexing
-spatial_drivers_with_years <- spatial_drivers[, year_columns, drop = FALSE]  # Columns with numbers in the header
-# Retain Stream_ID and columns with years in spatial_drivers_with_years
-spatial_drivers_with_years <- spatial_drivers %>%
-  dplyr::select(Stream_ID, all_of(year_columns))
-
-# Convert all columns except Stream_ID to numeric where possible, coercing characters to NA
-spatial_drivers_with_years <- spatial_drivers_with_years %>%
-  mutate(across(-Stream_ID, as.numeric))
-
-# Reshape spatial drivers to long format
-spatial_drivers_long <- spatial_drivers_with_years %>%
-  pivot_longer(
-    cols = -Stream_ID,
-    names_to = "variable",
-    values_to = "value"
-  ) %>%
-  mutate(
-    # Conditionally extract suffix after the year only for variables that start with "snow"
-    driver_type = ifelse(grepl("^snow", variable),
-                         sub("^[^_]+_[0-9]{4}_", "", variable),  # Extract suffix for "snow" variables
-                         sub("_[0-9]{4}.*$", "", variable)),     # Standard extraction for other variables
-    year = as.integer(sub(".*_([0-9]{4}).*", "\\1", variable))
-  ) %>%
-  dplyr::select(Stream_ID, driver_type, year, value)
-
-# Step 1: Create the unique identifier column
-# Here we create a unique column by combining Stream_ID, year, and driver_type
-spatial_drivers_long <- spatial_drivers_long %>%
-  mutate(unique_column = paste(Stream_ID, year, driver_type, sep = "_"))
-
-# Step 2: Remove rows with any NA values in the relevant columns
-# We ensure Stream_ID, year, driver_type, unique_column, and value are all non-NA
-spatial_drivers_long_clean <- spatial_drivers_long %>%
-  filter(!is.na(Stream_ID) & !is.na(year) & !is.na(driver_type) & !is.na(unique_column))
-
-# Step 3: Convert `value` to a consistent type (e.g., numeric) if applicable
-# This step ensures there are no type conflicts in the value column
-spatial_drivers_long_clean <- spatial_drivers_long_clean %>%
-  mutate(value = as.numeric(value))
-
-# Step 4: Pivot to wide format using the unique_column as the column headers
-# Split data by driver type and pivot each separately
-wide_data_list <- list()
-
-for(driver in unique(spatial_drivers_long_clean$driver_type)) {
-  # Subset the data for the current driver type
-  driver_data <- spatial_drivers_long_clean %>%
-    filter(driver_type == driver) %>%
-    dplyr::select(Stream_ID, year, value) %>%
-    rename(!!driver := value)
-  
-  # Store each driver type as a separate wide dataframe
-  wide_data_list[[driver]] <- driver_data
-}
-
-gc()
-
-# Merge all wide dataframes by Stream_ID and year
-spatial_drivers_wide <- Reduce(function(x, y) merge(x, y, by = c("Stream_ID", "year"), all = TRUE), 
-                               wide_data_list)
-
-gc()
-
-setDT(spatial_drivers_wide)
-
-spatial_drivers_no_years <- spatial_drivers[, !colnames(spatial_drivers) %in% year_columns, drop = FALSE]  # Columns without numbers
-# Retain Stream_ID and columns without numbers in spatial_drivers_no_years
-spatial_drivers_no_years <- spatial_drivers %>%
-  dplyr::select(Stream_ID, all_of(non_year_columns))
-
-# Perform a left join to combine the wide annual data with the non-annual data
-combined_spatial_drivers <- spatial_drivers_wide %>%
-  left_join(spatial_drivers_no_years, by = "Stream_ID", 
-            relationship = "many-to-many")%>%
-  mutate(Year = as.integer(year))
-
-combined_spatial_drivers <- combined_spatial_drivers %>%
-  distinct(Stream_ID, Year, .keep_all = TRUE)
-
-setDT(tot)
-setDT(combined_spatial_drivers)
-
-# Split `tot` into manageable chunks and join each chunk
-chunk_size <- 10000  # Adjust based on memory capacity
-tot_chunks <- split(tot, ceiling(seq_len(nrow(tot)) / chunk_size))
-
-final_combined_data <- rbindlist(lapply(tot_chunks, function(chunk) {
-  chunk[combined_spatial_drivers, on = .(Stream_ID, Year), nomatch = 0]
-}))
-
-gc()
-## ------------------------------------------------------- ##
-            # Greenup Day ----
-## ------------------------------------------------------- ##
 # Define greenup cycles (excluding cycle1 as it's not needed)
 greenup_cycles <- c("cycle0")
 
-# Step 1: Standardize column names by removing "MMDD" if present
+# Standardize column names by removing "MMDD" if present
 colnames(spatial_drivers) <- sub("MMDD$", "", colnames(spatial_drivers))
 
-# Convert date columns to day-of-year values for cycle0 only
+# Convert greenup date columns to day-of-year values for cycle0
 for (cycle in greenup_cycles) {
-  # Identify `greenup` columns for the specified cycle
   cycle_cols <- grep(paste0("greenup_", cycle), colnames(spatial_drivers), value = TRUE)
-  
-  # Loop through each column in the cycle
   for (col in cycle_cols) {
-    # Convert date to day-of-year if it’s in the correct format
     spatial_drivers[[paste0(col, "_doy")]] <- ifelse(
       !is.na(as.Date(spatial_drivers[[col]], format = "%Y-%m-%d")),
       yday(as.Date(spatial_drivers[[col]], format = "%Y-%m-%d")),
@@ -280,16 +168,78 @@ for (cycle in greenup_cycles) {
     )
   }
 }
+
 gc()
 
-# Step 3: Reshape `greenup` data for cycle0 only, excluding "cycle" column
+# Identify columns with numbers in the header (annual data)
+year_columns <- grep("[0-9]", colnames(spatial_drivers), value = TRUE)
+non_year_columns <- setdiff(colnames(spatial_drivers), year_columns)
+
+## ------------------------------------------------------- ##
+# Step 2: Process annual data while retaining NA values
+## ------------------------------------------------------- ##
+spatial_drivers_with_years <- spatial_drivers[, ..year_columns]
+spatial_drivers_with_years[, Stream_ID := spatial_drivers$Stream_ID]
+
+spatial_drivers_with_years[, (setdiff(names(spatial_drivers_with_years), "Stream_ID")) := 
+                             lapply(.SD, as.numeric), .SDcols = setdiff(names(spatial_drivers_with_years), "Stream_ID")]
+
+spatial_drivers_long <- melt(
+  spatial_drivers_with_years,
+  id.vars = "Stream_ID",
+  variable.name = "variable",
+  value.name = "value"
+)
+
+spatial_drivers_long[, `:=`(
+  driver_type = fifelse(
+    grepl("^snow", variable), 
+    sub("^[^_]+_[0-9]{4}_", "", variable),
+    sub("_[0-9]{4}.*$", "", variable)
+  ),
+  year = as.integer(sub(".*_([0-9]{4}).*", "\\1", variable))
+)]
+
+gc()
+
+## ------------------------------------------------------- ##
+# Step 3: Pivot to wide format using pivot_wider
+## ------------------------------------------------------- ##
+
+spatial_drivers_wide <- spatial_drivers_long %>%
+  pivot_wider(
+    names_from = driver_type,
+    values_from = value
+  )
+
+gc()
+
+## ------------------------------------------------------- ##
+# Step 4: Combine with non-annual data
+## ------------------------------------------------------- ##
+spatial_drivers_no_years <- spatial_drivers[, ..non_year_columns]
+spatial_drivers_no_years[, Stream_ID := spatial_drivers$Stream_ID]
+
+spatial_drivers_no_years <- spatial_drivers_no_years[!duplicated(Stream_ID)]
+spatial_drivers_wide <- spatial_drivers_wide[!duplicated(Stream_ID)]
+
+combined_spatial_drivers <- merge(
+  spatial_drivers_wide,
+  spatial_drivers_no_years,
+  by = "Stream_ID",
+  all.x = TRUE,
+  allow.cartesian = TRUE
+)
+
+combined_spatial_drivers <- combined_spatial_drivers[!duplicated(combined_spatial_drivers), ]
+
+## ------------------------------------------------------- ##
+# Step 5: Add greenup data (cycle0)
+## ------------------------------------------------------- ##
 greenup_long <- list()
 
 for (cycle in greenup_cycles) {
-  # Select columns starting with `greenup` and ending with `_doy` that match the current cycle
   cycle_doy_cols <- grep(paste0("greenup_", cycle, ".*_doy$"), colnames(spatial_drivers), value = TRUE)
-  
-  # Proceed with reshaping if there are matching columns
   if (length(cycle_doy_cols) > 0) {
     greenup_long[[cycle]] <- spatial_drivers %>%
       select(Stream_ID, all_of(cycle_doy_cols)) %>%
@@ -299,7 +249,7 @@ for (cycle in greenup_cycles) {
         values_to = "greenup_day"
       ) %>%
       mutate(
-        year = as.integer(sub(".*_(\\d{4}).*", "\\1", variable))  # Extract year
+        year = as.integer(sub(".*_(\\d{4}).*", "\\1", variable))
       ) %>%
       select(Stream_ID, year, greenup_day)
   } else {
@@ -307,17 +257,27 @@ for (cycle in greenup_cycles) {
   }
 }
 
-gc()
-
-# Combine `greenup_long` data for cycle0 only
 greenup_df <- bind_rows(greenup_long$cycle0)
 
-# Merge `greenup_df`, renaming `year` to `Year` if needed
-greenup_df <- greenup_df %>%
-  rename(Year = year)  # Ensure column names match
+# Merge greenup data with combined spatial drivers
+combined_spatial_drivers <- combined_spatial_drivers %>%
+  left_join(greenup_df %>% rename(Year = year), by = c("Stream_ID", "Year"), relationship = "many-to-many")
 
-tot <- final_combined_data %>%
-  left_join(greenup_df, by = c("Stream_ID", "Year"), relationship = "many-to-many")
+## ------------------------------------------------------- ##
+# Step 6: Final join with `tot`
+## ------------------------------------------------------- ##
+setDT(tot)
+chunk_size <- 10000
+tot_chunks <- split(tot, ceiling(seq_len(nrow(tot)) / chunk_size))
+
+final_combined_data <- rbindlist(
+  lapply(tot_chunks, function(chunk) {
+    merge(chunk, combined_spatial_drivers, by = c("Stream_ID", "Year"), all.x = TRUE)
+  }),
+  use.names = TRUE, fill = TRUE
+)
+
+gc()
 
 # ## ------------------------------------------------------- ##
 #           # Import WRTDS N_P Conc ---- 
@@ -628,113 +588,113 @@ num_unique_sites <- tot_si %>%
 
 print(num_unique_sites)
 
-## ------------------------------------------------------- ##
-#   Calculate and Export Average Driver data ----
-## ------------------------------------------------------- ##
-
-## ------------------------------------------------------- ##
-## Calculate Stats that can only be calculated for average data: 
-## ------------------------------------------------------- ##
-# Calculate si_stats with CV columns
-si_stats <- tot_si %>%
-  group_by(Stream_ID) %>%
-  summarise(
-    across(
-      c(FNConc, GenConc, GenYield, FNYield), 
-      list(mean = mean, median = median, min = min, max = max), 
-      .names = "{.fn}_si_{.col}"
-    ),
-    across(
-      c(FNConc, GenConc, GenYield, FNYield), 
-      ~ sd(.) / mean(.),  # Calculate CV
-      .names = "CV_si_{.col}"
-    ),
-    .groups = "drop"  # Ungroup after summarise for a clean output
-  ) 
-
-# Calculate q_stats with CV for Q
-q_stats <- tot_si %>%
-  group_by(Stream_ID) %>%
-  summarise(
-    mean_q = mean(Q), 
-    med_q = median(Q), 
-    min_q = min(Q), 
-    max_q = max(Q), 
-    q_95 = quantile(Q, 0.95), 
-    q_5 = quantile(Q, 0.05),
-    sd_q = sd(Q),  # Calculate standard deviation for Q
-    CV_Q = sd(Q) / mean(Q),  # Calculate coefficient of variation for Q
-    .groups = "drop"
-  )
-
-# Combine si_stats and q_stats
-c_q_stats <- si_stats %>%
-  left_join(q_stats, by = c("Stream_ID")) 
-
-tot_si <- tot_si %>%
-  left_join(c_q_stats, by = c("Stream_ID")) 
-
-
-# Step 1: Define static and non-static columns
-static_keywords <- c("drainSqKm", "ClimateZ", "Name", "Max_Daylength",
-                     "slope", "elevation", "rock", "land", "q_", "CV", "Q")
-
-static_columns <- names(tot_si)[grepl(paste(static_keywords, collapse = "|"), names(tot_si))]
-columns_to_summarize <- setdiff(names(tot_si), c(static_columns, "Stream_ID", "Year"))
-
-
-# Step 2: Summarize static columns
-static_summary <- tot_si %>%
-  filter(!is.na(Stream_ID)) %>%  # Remove rows with missing Stream_ID
-  group_by(Stream_ID) %>%        # Group by Stream_ID
-  summarise(
-    across(
-      all_of(static_columns),    # Apply only to static columns
-      ~ first(na.omit(.)),       # Take the first non-NA value
-      .names = "{.col}"
-    ), 
-    .groups = "drop"             # Ungroup the results
-  )
-
-# Step 3: Summarize non-static columns
-non_static_summary <- tot_si %>%
-  filter(!is.na(Stream_ID)) %>%  # Remove rows with missing Stream_ID
-  group_by(Stream_ID) %>%        # Group by Stream_ID
-  summarise(
-    across(
-      all_of(columns_to_summarize),   # Apply only to non-static columns
-      ~ mean(., na.rm = TRUE),        # Calculate the mean, ignoring NA
-      .names = "{.col}"
-    ), 
-    .groups = "drop"                 # Ungroup the results
-  )
-
-
-# Step 4: Merge static and non-static summaries
-final_summary <- left_join(static_summary, non_static_summary, by = "Stream_ID")
-
-# Debugging: Print the final merged summary
-print("Final Summary:")
-print(final_summary)
-
-
-
-
-
-# Make sure stream counts match
-num_unique_sites <- tot_si_avg %>% 
-  summarise(num_sites = n_distinct(Stream_ID))
-
-print(num_unique_sites)
-
-## Tidy up data frame before export: 
-
-tot_si_avg <- tot_si_avg %>%
-  dplyr::select(-Year, -contains("mean_si"), -contains("min_si"), 
-                -contains("max_si"), -contains("CV_si"), -mean_q, -med_q,
-                -min_q, -max_q, -sd_q)
+# ## ------------------------------------------------------- ##
+# #   Calculate and Export Average Driver data ----
+# ## ------------------------------------------------------- ##
+# 
+# ## ------------------------------------------------------- ##
+# ## Calculate Stats that can only be calculated for average data: 
+# ## ------------------------------------------------------- ##
+# # Calculate si_stats with CV columns
+# si_stats <- tot_si %>%
+#   group_by(Stream_ID) %>%
+#   summarise(
+#     across(
+#       c(FNConc, GenConc, GenYield, FNYield), 
+#       list(mean = mean, median = median, min = min, max = max), 
+#       .names = "{.fn}_si_{.col}"
+#     ),
+#     across(
+#       c(FNConc, GenConc, GenYield, FNYield), 
+#       ~ sd(.) / mean(.),  # Calculate CV
+#       .names = "CV_si_{.col}"
+#     ),
+#     .groups = "drop"  # Ungroup after summarise for a clean output
+#   ) 
+# 
+# # Calculate q_stats with CV for Q
+# q_stats <- tot_si %>%
+#   group_by(Stream_ID) %>%
+#   summarise(
+#     mean_q = mean(Q), 
+#     med_q = median(Q), 
+#     min_q = min(Q), 
+#     max_q = max(Q), 
+#     q_95 = quantile(Q, 0.95), 
+#     q_5 = quantile(Q, 0.05),
+#     sd_q = sd(Q),  # Calculate standard deviation for Q
+#     CV_Q = sd(Q) / mean(Q),  # Calculate coefficient of variation for Q
+#     .groups = "drop"
+#   )
+# 
+# # Combine si_stats and q_stats
+# c_q_stats <- si_stats %>%
+#   left_join(q_stats, by = c("Stream_ID")) 
+# 
+# tot_si <- tot_si %>%
+#   left_join(c_q_stats, by = c("Stream_ID")) 
+# 
+# 
+# # Step 1: Define static and non-static columns
+# static_keywords <- c("drainSqKm", "ClimateZ", "Name", "Max_Daylength",
+#                      "slope", "elevation", "rock", "land", "q_", "CV", "Q")
+# 
+# static_columns <- names(tot_si)[grepl(paste(static_keywords, collapse = "|"), names(tot_si))]
+# columns_to_summarize <- setdiff(names(tot_si), c(static_columns, "Stream_ID", "Year"))
+# 
+# 
+# # Step 2: Summarize static columns
+# static_summary <- tot_si %>%
+#   filter(!is.na(Stream_ID)) %>%  # Remove rows with missing Stream_ID
+#   group_by(Stream_ID) %>%        # Group by Stream_ID
+#   summarise(
+#     across(
+#       all_of(static_columns),    # Apply only to static columns
+#       ~ first(na.omit(.)),       # Take the first non-NA value
+#       .names = "{.col}"
+#     ), 
+#     .groups = "drop"             # Ungroup the results
+#   )
+# 
+# # Step 3: Summarize non-static columns
+# non_static_summary <- tot_si %>%
+#   filter(!is.na(Stream_ID)) %>%  # Remove rows with missing Stream_ID
+#   group_by(Stream_ID) %>%        # Group by Stream_ID
+#   summarise(
+#     across(
+#       all_of(columns_to_summarize),   # Apply only to non-static columns
+#       ~ mean(., na.rm = TRUE),        # Calculate the mean, ignoring NA
+#       .names = "{.col}"
+#     ), 
+#     .groups = "drop"                 # Ungroup the results
+#   )
+# 
+# 
+# # Step 4: Merge static and non-static summaries
+# final_summary <- left_join(static_summary, non_static_summary, by = "Stream_ID")
+# 
+# # Debugging: Print the final merged summary
+# print("Final Summary:")
+# print(final_summary)
+# 
+# 
+# 
+# 
+# 
+# # Make sure stream counts match
+# num_unique_sites <- tot_si_avg %>% 
+#   summarise(num_sites = n_distinct(Stream_ID))
+# 
+# print(num_unique_sites)
+# 
+# ## Tidy up data frame before export: 
+# 
+# tot_si_avg <- tot_si_avg %>%
+#   dplyr::select(-Year, -contains("mean_si"), -contains("min_si"), 
+#                 -contains("max_si"), -contains("CV_si"), -mean_q, -med_q,
+#                 -min_q, -max_q, -sd_q)
 
 write.csv(as.data.frame(tot_si), "AllDrivers_Harmonized_Annual.csv")
-write.csv(as.data.frame(tot_si_avg), "AllDrivers_Harmonized_Average.csv")
+# write.csv(as.data.frame(tot_si_avg), "AllDrivers_Harmonized_Average.csv")
 
 gc()
