@@ -23,7 +23,7 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
   select(-Conc, -Flux, -PeriodLong, -PeriodStart, -LTER.y, -contains("date"), -contains("month"), -min_year, -max_year, -duration) %>%
   dplyr::mutate(
     DecYear = as.Date(format(date_decimal(DecYear), "%Y-%m-%d")),
-    Year = format(DecYear, "%Y"),
+    Year = as.integer(format(DecYear, "%Y")),
     Stream_Name = case_when(
       Stream_Name == "East Fork" ~ "east fork",
       Stream_Name == "West Fork" ~ "west fork",
@@ -31,6 +31,8 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
     ),
     Stream_ID = paste0(LTER, "__", Stream_Name)  # Create Stream_ID after Stream_Name adjustment
   )
+
+gc()
 
 ## Need to tidy the Finnish site names:
 finn <- read.csv("FinnishSites.csv")
@@ -147,7 +149,10 @@ tot <- subset(tot, chemical == "DSi")
 ## ------------------------------------------------------- ##
 # Load data and create the Stream_ID column
 spatial_drivers <- read.csv("all-data_si-extract_2_20240802.csv", stringsAsFactors = FALSE) %>%
-  mutate(Stream_ID = paste0(LTER, "__", Stream_Name)) 
+  mutate(Stream_ID = paste0(LTER, "__", Stream_Name)) %>%
+  select(-Shapefile_Name, -Discharge_File_Name, -contains("soil"))
+
+gc()
 
 # Define the regular expression pattern for month abbreviations
 months_abb <- "_jan_|_feb_|_mar_|_apr_|_may_|_jun_|_jul_|_aug_|_sep_|_oct_|_nov_|_dec_"
@@ -190,7 +195,7 @@ spatial_drivers_long <- spatial_drivers_with_years %>%
     driver_type = ifelse(grepl("^snow", variable),
                          sub("^[^_]+_[0-9]{4}_", "", variable),  # Extract suffix for "snow" variables
                          sub("_[0-9]{4}.*$", "", variable)),     # Standard extraction for other variables
-    year = sub(".*_([0-9]{4}).*", "\\1", variable)
+    year = as.integer(sub(".*_([0-9]{4}).*", "\\1", variable))
   ) %>%
   select(Stream_ID, driver_type, year, value)
 
@@ -228,6 +233,8 @@ for(driver in unique(spatial_drivers_long_clean$driver_type)) {
 spatial_drivers_wide <- Reduce(function(x, y) merge(x, y, by = c("Stream_ID", "year"), all = TRUE), 
                                wide_data_list)
 
+gc()
+
 setDT(spatial_drivers_wide)
 
 spatial_drivers_no_years <- spatial_drivers[, !colnames(spatial_drivers) %in% year_columns, drop = FALSE]  # Columns without numbers
@@ -237,14 +244,11 @@ spatial_drivers_no_years <- spatial_drivers %>%
 
 # Perform a left join to combine the wide annual data with the non-annual data
 combined_spatial_drivers <- spatial_drivers_wide %>%
-  left_join(spatial_drivers_no_years, by = "Stream_ID", relationship = "many-to-many")
-
+  left_join(spatial_drivers_no_years, by = "Stream_ID", 
+            relationship = "many-to-many")%>%
+  mutate(Year = as.integer(year))
 
 setDT(combined_spatial_drivers)
-
-# Rename `year` to `Year` in `combined_spatial_drivers` to match `tot`
-combined_spatial_drivers <- combined_spatial_drivers %>%
-  dplyr::mutate(Year = as.integer(year))
 
 combined_spatial_drivers <- combined_spatial_drivers %>%
   distinct(Stream_ID, Year, .keep_all = TRUE)
@@ -252,7 +256,7 @@ combined_spatial_drivers <- combined_spatial_drivers %>%
 setDT(tot)
 
 final_combined_data <- tot[combined_spatial_drivers, on = .(Stream_ID, Year), nomatch = 0]
-
+gc()
 ## ------------------------------------------------------- ##
             # Greenup Day ----
 ## ------------------------------------------------------- ##
@@ -277,6 +281,7 @@ for (cycle in greenup_cycles) {
     )
   }
 }
+gc()
 
 # Step 3: Reshape `greenup` data for cycle0 only, excluding "cycle" column
 greenup_long <- list()
@@ -302,6 +307,8 @@ for (cycle in greenup_cycles) {
     warning(paste("No matching columns found for cycle:", cycle))
   }
 }
+
+gc()
 
 # Combine `greenup_long` data for cycle0 only
 greenup_df <- bind_rows(greenup_long$cycle0)
@@ -333,6 +340,10 @@ wrtds_NP_annual <- wrtds_NP %>%
 wrtds_NP_annual_wide <- wrtds_NP_annual %>%
   pivot_wider(names_from = chemical, values_from = median_Conc)
 
+gc()
+
+setDT(wrtds_NP_annual_wide)
+
 # Merge with the "tot" dataframe to add annual NOx and P data in a single row per Stream_ID and Year
 tot <- tot %>%
   left_join(wrtds_NP_annual_wide, by = c("Stream_ID", "Year"))
@@ -356,7 +367,7 @@ raw_NP <- read.csv("20241003_masterdata_chem.csv")
 # Step 1: Filter for Nitrogen and Phosphorus variables with valid values, extract Year, and keep only years with >5 values
 raw_NP <- raw_NP %>%
   filter(variable %in% c("SRP", "PO4", "NO3", "NOx") & value > 0) %>%
-  mutate(Year = year(as.Date(date, format = "%Y-%m-%d"))) %>%
+  mutate(Year = as.integer(year(as.Date(date, format = "%Y-%m-%d")))) %>%
   group_by(Stream_Name, Year) %>%
   filter(n() > 5) %>%  # Keep only Stream_ID and Year combinations with more than 5 values
   ungroup()
@@ -503,6 +514,8 @@ tryCatch({
     by = .EACHI
   )
 })
+
+gc()
 
 ## ------------------------------------------------------- ##
             #  Gap Filling Missing Data ----
@@ -663,9 +676,6 @@ tot <- si_stats %>%
   mutate(
     cvc_cvq = CV_si_FNConc / cv_q  # Example: Calculate CVC/CVQ for FNConc and Q
   )
-
-tot_si <- tot %>%
-  left_join(wrtds_df, by = c("Stream_ID", "Year"))
 
 
 ## Prepare to summarize tot_si for site average behavior: 
