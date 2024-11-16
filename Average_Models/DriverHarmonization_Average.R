@@ -1,9 +1,3 @@
-## ------------------------------------------------------- ##
-# Silica WG - Harmonize Drivers: Average Models
-## ------------------------------------------------------- ##
-# Written by:
-## Sidney A Bush, Keira Johnson
-
 # Load needed libraries
 librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr)
 
@@ -20,6 +14,7 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 # Read in WRTDS input file and process date and Stream_ID
 wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
   rename(LTER = LTER.x) %>%
+  filter(chemical == "DSi") %>% # Filter for "DSi"
   dplyr::select(-DecYear, -Conc, -Flux, -PeriodLong, -PeriodStart, -LTER.y, -contains("date"), -contains("month"), -min_year, -max_year, -duration) %>%
   dplyr::mutate(
     Stream_Name = case_when(
@@ -28,7 +23,16 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
       TRUE ~ Stream_Name
     ),
     Stream_ID = paste0(LTER, "__", Stream_Name)  # Create Stream_ID after Stream_Name adjustment
-  )
+  ) %>%
+  group_by(Stream_ID) %>%
+  summarise(
+    FNConc = mean(FNConc, na.rm = TRUE),
+    GenConc = mean(GenConc, na.rm = TRUE),
+    FNFlux = mean(FNFlux, na.rm = TRUE),
+    GenFlux = mean(GenFlux, na.rm = TRUE),
+    Q = mean(Q, na.rm = TRUE),
+    .groups = "drop"
+  ) 
 
 gc()
 
@@ -80,32 +84,72 @@ missing_sites <- missing_sites %>%
 area <- bind_rows(area, missing_sites)
 
 # Perform a left join while selecting only specific columns from area
-tot <- wrtds_df %>%
-  left_join(area %>% select(Stream_ID), by = "Stream_ID", relationship = "many-to-many")
+wrtds_df <- wrtds_df %>%
+  left_join(area, by = "Stream_ID")
 
 ## ------------------------------------------------------- ##
 # Calculate Yields ----
 ## ------------------------------------------------------- ##
-tot <- wrtds_df %>%
+wrtds_df <- wrtds_df %>%
   mutate(FNYield = FNFlux / drainSqKm,
          GenYield = GenFlux / drainSqKm) %>%
   dplyr::select(-FNFlux, -GenFlux)
 
 ## ------------------------------------------------------- ##
+# Calculate DSi Stats ----
+## ------------------------------------------------------- ##
+### New below: 
+# Calculate si_stats with CV columns
+si_stats <- wrtds_df %>%
+  group_by(Stream_ID) %>%
+  summarise(
+    across(
+      c(FNConc, GenConc, GenYield, FNYield),
+      list(mean = mean, median = median, min = min, max = max),
+      .names = "{.fn}_si_{.col}"
+    ),
+    across(
+      c(FNConc, GenConc, GenYield, FNYield),
+      ~ sd(.) / mean(.),  # Calculate CV
+      .names = "CV_si_{.col}"
+    ),
+    .groups = "drop"  # Ungroup after summarise for a clean output
+  )
+
+# Calculate q_stats with CV for Q
+q_stats <- wrtds_df %>%
+  group_by(Stream_ID) %>%
+  summarise(
+    mean_q = mean(Q),
+    #med_q = median(Q),
+    #min_q = min(Q),
+    #max_q = max(Q),
+    q_95 = quantile(Q, 0.95),
+    q_5 = quantile(Q, 0.05),
+    sd_q = sd(Q),  # Calculate standard deviation for Q
+    CV_Q = sd(Q) / mean(Q),  # Calculate coefficient of variation for Q
+    .groups = "drop"
+  )
+
+# Combine si_stats and q_stats
+tot <- si_stats %>%
+  left_join(q_stats, by = c("Stream_ID"))
+
+# Combine si_stats and q_stats, then remove duplicate columns
+tot <- tot %>%
+  left_join(wrtds_df, by = "Stream_ID") %>%
+  select(!ends_with(".y")) # Keep only non-duplicated columns
+
+## ------------------------------------------------------- ##
 # Add in KG Classifications ----
 ## ------------------------------------------------------- ##
 # Read in climate data produced in KoeppenGeigerClassification.R
-KG <- read.csv("Koeppen_Geiger_2.csv") %>%
-  dplyr::mutate(
-    Stream_Name = case_when(
-      Stream_Name == "East Fork" ~ "east fork",
-      Stream_Name == "West Fork" ~ "west fork",
-      TRUE ~ Stream_Name
-    ),
-    Stream_ID = paste0(LTER, "__", Stream_Name)
-  )
+KG <- read.csv("Koeppen_Geiger_2.csv")
+KG$Stream_ID<-paste0(KG$LTER, "__", KG$Stream_Name)
 
-tot <- left_join(tot, KG %>% select(-Stream_Name), by = "Stream_ID", relationship = "many-to-many")
+# Combine si_stats and q_stats, handling duplicate columns with coalesce
+tot <- tot %>%
+  left_join(KG, by = "Stream_ID") 
 
 ## ------------------------------------------------------- ##
 # Import Daylength ----
@@ -132,29 +176,23 @@ daylen_range <- daylen %>%
   dplyr::select(-Updated_StreamName)
 
 # Ensure the result is left-joined to "tot"
-tot <- left_join(tot, daylen_range, by = "Stream_Name", relationship = "many-to-many")
-
-## Subset to just DSi to make merging easier from hereout
-tot <- subset(tot, chemical == "DSi")
-
-
-# ## ------------------------------------------------------- ##
-#           # On to the Dynamic Drivers ---- 
-# ## ------------------------------------------------------- ##
+tot <- left_join(tot, daylen_range, by = "Stream_Name")
 
 ## ------------------------------------------------------- ##
 # Import Spatial Drivers ----
 ## ------------------------------------------------------- ##
-# Step 1: Load and preprocess spatial drivers
-spatial_drivers <- read.csv("all-data_si-extract_2_20240802.csv", stringsAsFactors = FALSE) %>%
-  mutate(Stream_ID = paste0(LTER, "__", Stream_Name)) %>%
-  dplyr::select(
-    -Shapefile_Name, -Discharge_File_Name, -contains("soil"), -contains("major"),
-    -matches("_jan_|_feb_|_mar_|_apr_|_may_|_jun_|_jul_|_aug_|_sep_|_oct_|_nov_|_dec_")
-  )
+spatial_drivers <- read.csv("all-data_si-extract_2_20240802.csv", stringsAsFactors = FALSE)
+spatial_drivers$Stream_ID <- paste0(spatial_drivers$LTER, "__", spatial_drivers$Stream_Name)
 
-gc()
+## Before, using full abbrevs removed some of the spatial driver columns (e.g., "dec" in "deciduous" was causing
+#  deciduous land cover to be filtered out)
+months_abb <- c("_jan_|_feb_|_mar_|_apr_|_may_|_jun_|_jul_|_aug_|_sep_|_oct_|_nov_|_dec_")
 
+## Pull out the monthly drivers, plus the column that contains "Stream_ID"
+monthly_drivers <- spatial_drivers[,c(361,which(colnames(spatial_drivers) %like% months_abb))]
+
+# Remove monthly drivers from spatial drivers
+spatial_drivers <- spatial_drivers[,-c(which(colnames(spatial_drivers) %like% months_abb))]
 
 # These are the categorical variables like "major_land", "major_soil", and "major_rock" and the numerical % of each
 major_cat_vars <- which(colnames(spatial_drivers) %like% c("soil|land|rock"))
@@ -169,8 +207,6 @@ relevant_columns <- c("elevation", "basin")
 # Use grep to locate elevation and basin slope columns
 elevation_basin_cols <- grep(paste(relevant_columns, collapse = "|"), colnames(spatial_drivers))
 
-## Now need to add in basin slope and elevation for missing sites: 
-
 # Combine major categorical columns with elevation and basin slope
 cat_vars <- spatial_drivers[, c(major_cat_vars, elevation_basin_cols)]
 
@@ -180,12 +216,13 @@ cat_vars$Stream_ID <- spatial_drivers$Stream_ID
 # These are the quantitative drivers
 drivers_list_quant <- c("num_days", "prop_area", "precip", "evapotrans", "temp", "npp", "permafrost")
 
-
+# Add in Greenup day
+greenup <- c("cycle0", "cycle1")
 site_mean <- list()
 
 for (i in 1:length(drivers_list_quant)) {
   drive_cols <- grep(drivers_list_quant[i], colnames(spatial_drivers))
-  one_driver <- spatial_drivers[,c(284, drive_cols)]
+  one_driver <- spatial_drivers[,c(301, drive_cols)]
   site_mean[[i]] <- rowMeans(one_driver[,c(2:length(one_driver))], na.rm = TRUE)
 }
 
@@ -193,15 +230,12 @@ mean_df <- as.data.frame(do.call(cbind, site_mean))
 colnames(mean_df) <- drivers_list_quant
 mean_df$Stream_ID <- spatial_drivers$Stream_ID
 
-# Add in Greenup day
-greenup <- c("cycle0", "cycle1")
-
 ## Get mean greenup day
 greenup_mean <- list()
 stream_id <- c("Stream_ID")
 for (i in 1:length(greenup)) {
   drive_cols <- grep(greenup[i], colnames(spatial_drivers))
-  one_driver <- spatial_drivers[,c(284, drive_cols)]
+  one_driver <- spatial_drivers[,c(301, drive_cols)]
   one_driver <- one_driver[!duplicated(one_driver$Stream_ID),]
   
   driver_melt <- melt(one_driver, id.vars=stream_id)
@@ -223,18 +257,21 @@ tot <- merge(tot, mean_df, by="Stream_ID")
 
 unique(tot$Stream_ID)
 
-# ## ------------------------------------------------------- ##
-#           # Import WRTDS N_P Conc ---- 
-# ## ------------------------------------------------------- ##
-
 ## ------------------------------------------------------- ##
 # Import WRTDS N_P Conc ---- 
 ## ------------------------------------------------------- ##
-
-# Filter for relevant chemicals and positive GenConc values, and simplify NO3/NOx to NOx
-wrtds_NP <- wrtds_df %>%
+wrtds_NP <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv")%>%
+  rename(LTER = LTER.x) %>%
   filter(chemical %in% c("P", "NO3", "NOx"), GenConc > 0) %>%  # Removes NAs and zero values
-  mutate(chemical = ifelse(chemical %in% c("NOx", "NO3"), "NOx", chemical))
+  mutate(chemical = ifelse(chemical %in% c("NOx", "NO3"), "NOx", chemical)) %>%
+  dplyr::mutate(
+    Stream_Name = case_when(
+    Stream_Name == "East Fork" ~ "east fork",
+    Stream_Name == "West Fork" ~ "west fork",
+    TRUE ~ Stream_Name
+  ),
+  Stream_ID = paste0(LTER, "__", Stream_Name)  # Create Stream_ID after Stream_Name adjustment
+)
 
 # Summarize to get the average GenConc by Stream_ID, and simplified chemical
 wrtds_NP_avg <- wrtds_NP %>%
@@ -254,19 +291,11 @@ tot <- tot %>%
 # ## ------------------------------------------------------- ##
 # Import RAW N_P Conc ---- 
 # ## ------------------------------------------------------- ##
+raw_NP <- read.csv("20241003_masterdata_chem.csv") %>%
+  filter(variable %in% c("SRP", "PO4", "NO3", "NOx") & value > 0) %>% # 
+  mutate(solute_simplified = ifelse(variable %in% c("NOx", "NO3"), "NOx", "P")) 
 
-# Step 1: Read in the raw nitrogen and phosphorus dataset
-raw_NP <- read.csv("20241003_masterdata_chem.csv")
-
-# Step 2: Filter for valid variables and positive values
-raw_NP <- raw_NP %>%
-  filter(variable %in% c("SRP", "PO4", "NO3", "NOx") & value > 0)  # Keeps valid solutes with positive values
-
-# Step 3: Simplify variable names for NOx and SRP to "NOx" and "P"
-raw_NP <- raw_NP %>%
-  mutate(solute_simplified = ifelse(variable %in% c("NOx", "NO3"), "NOx", "P"))
-
-# Step 4: Calculate stream-level averages for NOx and P concentrations
+# Calculate stream-level averages for NOx and P concentrations
 raw_NP_avg <- raw_NP %>%
   group_by(Stream_Name, solute_simplified) %>%
   summarise(
@@ -275,21 +304,17 @@ raw_NP_avg <- raw_NP %>%
   ) %>%
   pivot_wider(names_from = solute_simplified, values_from = avg_Conc, names_prefix = "avg_Conc_")
 
-# Step 5: Merge `raw_NP_avg` with the `tot` dataframe
+# Merge `raw_NP_avg` with the `tot` dataframe
 tot <- tot %>%
   left_join(raw_NP_avg, by = "Stream_Name", relationship = "many-to-many") %>%
   mutate(
     # Replace NA values in P and NOx with the corresponding averages from raw_NP_avg
-    P = coalesce(P, avg_Conc_P),
-    NOx = coalesce(NOx, avg_Conc_NOx)
-  ) %>%
+    P = coalesce(P, avg_Conc_P)) %>%
   # Remove temporary columns created during the join
-  select(-avg_Conc_P, -avg_Conc_NOx)
+  select(-avg_Conc_P)
 
 # Clean up memory
 gc()
-
-
 
 ## ------------------------------------------------------- ##
 #  Gap Filling Missing Data ----
@@ -386,138 +411,6 @@ tot <- tot %>%
   ) %>%
   select(-elevation_mean_m_filled)  # Remove Stream_Name_filled from final output
 
-## ------------------------------------------------------- ##
-# Calculate Stats that can only be calculated for average data:
-## ------------------------------------------------------- ##
-# Calculate si_stats with CV columns
-si_stats <- tot %>%
-  group_by(Stream_ID) %>%
-  summarise(
-    across(
-      c(FNConc, GenConc, GenYield, FNYield),
-      list(mean = mean, median = median, min = min, max = max),
-      .names = "{.fn}_si_{.col}"
-    ),
-    across(
-      c(FNConc, GenConc, GenYield, FNYield),
-      ~ sd(.) / mean(.),  # Calculate CV
-      .names = "CV_si_{.col}"
-    ),
-    .groups = "drop"  # Ungroup after summarise for a clean output
-  )
-
-# Calculate q_stats with CV for Q
-q_stats <- tot %>%
-  group_by(Stream_ID) %>%
-  summarise(
-    mean_q = mean(Q),
-    med_q = median(Q),
-    min_q = min(Q),
-    max_q = max(Q),
-    q_95 = quantile(Q, 0.95),
-    q_5 = quantile(Q, 0.05),
-    sd_q = sd(Q),  # Calculate standard deviation for Q
-    CV_Q = sd(Q) / mean(Q),  # Calculate coefficient of variation for Q
-    .groups = "drop"
-  )
-
-# Combine si_stats and q_stats
-c_q_stats <- si_stats %>%
-  left_join(q_stats, by = c("Stream_ID"))
-
-tot <- tot %>%
-  left_join(c_q_stats, by = c("Stream_ID"))
-
-# ------------------------------------------------------- #
-# Average: 
-# ------------------------------------------------------- #
-
-tot <- tot %>%
-  group_by(Stream_ID) %>%
-  summarise(across(where(is.numeric), mean, na.rm = TRUE), .groups = "drop")
-
-
-## ------------------------------------------------------- ##
-# Import Spatial Drivers ----
-## ------------------------------------------------------- ##
-# Step 1: Load and preprocess spatial drivers
-spatial_drivers <- read.csv("all-data_si-extract_2_20240802.csv", stringsAsFactors = FALSE) %>%
-  mutate(Stream_ID = paste0(LTER, "__", Stream_Name)) %>%
-  dplyr::select(
-    -Shapefile_Name, -Discharge_File_Name, -contains("soil"),
-    -matches("_jan_|_feb_|_mar_|_apr_|_may_|_jun_|_jul_|_aug_|_sep_|_oct_|_nov_|_dec_")
-  )
-
-gc()
-
-
-# These are the categorical variables like "major_land", "major_soil", and "major_rock" and the numerical % of each
-major_cat_vars <- which(colnames(spatial_drivers) %like% c("soil|land|rock"))
-cat_vars <- spatial_drivers[,c(major_cat_vars)]
-
-# Combine spatial drivers and categorical variables
-spatial_vars <- cbind(spatial_drivers, cat_vars)
-
-# Define the pattern to search for elevation and basin slope columns
-relevant_columns <- c("elevation", "basin")
-
-# Use grep to locate elevation and basin slope columns
-elevation_basin_cols <- grep(paste(relevant_columns, collapse = "|"), colnames(spatial_drivers))
-
-## Now need to add in basin slope and elevation for missing sites: 
-
-# Combine major categorical columns with elevation and basin slope
-cat_vars <- spatial_drivers[, c(major_cat_vars, elevation_basin_cols)]
-
-# Add Stream_ID back to the resulting data
-cat_vars$Stream_ID <- spatial_drivers$Stream_ID
-
-# These are the quantitative drivers
-drivers_list_quant <- c("num_days", "prop_area", "precip", "evapotrans", "temp", "npp", "permafrost")
-
-
-site_mean <- list()
-
-for (i in 1:length(drivers_list_quant)) {
-  drive_cols <- grep(drivers_list_quant[i], colnames(spatial_drivers))
-  one_driver <- spatial_drivers[,c(284, drive_cols)]
-  site_mean[[i]] <- rowMeans(one_driver[,c(2:length(one_driver))], na.rm = TRUE)
-}
-
-mean_df <- as.data.frame(do.call(cbind, site_mean))
-colnames(mean_df) <- drivers_list_quant
-mean_df$Stream_ID <- spatial_drivers$Stream_ID
-
-# Add in Greenup day
-greenup <- c("cycle0", "cycle1")
-
-## Get mean greenup day
-greenup_mean <- list()
-stream_id <- c("Stream_ID")
-for (i in 1:length(greenup)) {
-  drive_cols <- grep(greenup[i], colnames(spatial_drivers))
-  one_driver <- spatial_drivers[,c(284, drive_cols)]
-  one_driver <- one_driver[!duplicated(one_driver$Stream_ID),]
-  
-  driver_melt <- melt(one_driver, id.vars=stream_id)
-  
-  driver_melt$doy <- yday(as.Date(driver_melt$value, "%Y-%m-%d"))
-  one_driver <- dcast(driver_melt, Stream_ID~variable, value.var = "doy")
-  greenup_mean[[i]] <- rowMeans(one_driver[,c(2:length(one_driver))], na.rm = TRUE)
-}
-
-green_df <- as.data.frame(do.call(cbind, greenup_mean))
-
-colnames(green_df) <- greenup
-green_df$Stream_ID <- one_driver$Stream_ID
-
-mean_df <- merge(mean_df, green_df, by="Stream_ID", all = TRUE)
-mean_df <- merge(mean_df, cat_vars, by="Stream_ID", all=TRUE)
-
-tot <- merge(tot, mean_df, by="Stream_ID")
-
-unique(tot$Stream_ID)
-
 # ------------------------------------------------------- #
 # Silicate Weathering: Stream-Level Averages
 # ------------------------------------------------------- #
@@ -602,6 +495,8 @@ tot <- tot %>%
 # Clean up memory
 gc()
 
+# Export the resulting dataframe to a .csv file
+write.csv(tot, "All_Drivers_Harmonized_Average", row.names = FALSE)
 
 
 
