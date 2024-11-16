@@ -188,8 +188,8 @@ spatial_drivers$Stream_ID <- paste0(spatial_drivers$LTER, "__", spatial_drivers$
 #  deciduous land cover to be filtered out)
 months_abb <- c("_jan_|_feb_|_mar_|_apr_|_may_|_jun_|_jul_|_aug_|_sep_|_oct_|_nov_|_dec_")
 
-## Pull out the monthly drivers, plus the column that contains "Stream_ID"
-monthly_drivers <- spatial_drivers[,c(361,which(colnames(spatial_drivers) %like% months_abb))]
+# ## Pull out the monthly drivers, plus the column that contains "Stream_ID"
+# monthly_drivers <- spatial_drivers[,c(361,which(colnames(spatial_drivers) %like% months_abb))]
 
 # Remove monthly drivers from spatial drivers
 spatial_drivers <- spatial_drivers[,-c(which(colnames(spatial_drivers) %like% months_abb))]
@@ -250,10 +250,16 @@ green_df <- as.data.frame(do.call(cbind, greenup_mean))
 colnames(green_df) <- greenup
 green_df$Stream_ID <- one_driver$Stream_ID
 
-mean_df <- merge(mean_df, green_df, by="Stream_ID", all = TRUE)
+##### THIS IS WHERE THE ISSUE IS: 
+
+green_df <- green_df %>% drop_na(cycle0)  # Removes rows with NA values in the "cycle0" column
+mean_drivers_df <- mean_df %>% drop_na()   # Removes NA rows
+
+mean_df <- merge(mean_drivers_df, green_df, by="Stream_ID", all = TRUE)
 mean_df <- merge(mean_df, cat_vars, by="Stream_ID", all=TRUE)
 
-tot <- merge(tot, mean_df, by="Stream_ID")
+tot <- tot %>%
+  left_join(mean_df, by = "Stream_ID") 
 
 unique(tot$Stream_ID)
 

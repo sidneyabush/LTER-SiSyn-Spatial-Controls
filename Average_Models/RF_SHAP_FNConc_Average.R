@@ -82,7 +82,7 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 drivers_df <- read.csv("AllDrivers_Harmonized_Average.csv") %>%
   ## Include median or just reg FNConc for Average?
-  select(Stream_ID, FNConc, contains("q"), precip, temp, max_prop_area, npp, evapotrans, 
+  select(Stream_ID, FNConc, contains("q_"), precip, temp, max_prop_area, npp, evapotrans, 
          silicate_weathering, greenup_day, permafrost_mean_m, drainSqKm, Max_Daylength,
          elevation_mean_m, basin_slope_mean_degree, P, NOx,
          contains("rocks_"), contains("land_")) %>%
@@ -91,12 +91,11 @@ drivers_df <- read.csv("AllDrivers_Harmonized_Average.csv") %>%
          drainage_area = drainSqKm,
          elevation = elevation_mean_m,
          slope = basin_slope_mean_degree) %>%
-  distinct(Stream_ID, .keep_all = TRUE) %>%
-  filter(!is.na(snow_cover))
+  distinct(Stream_ID, .keep_all = TRUE) 
 
 # Replace NA values in the specified column range with 0
 drivers_df <- drivers_df %>%
-  dplyr::mutate_at(vars(21:36), ~replace(., is.na(.), 0)) %>%
+  dplyr::mutate_at(vars(19:34), ~replace(., is.na(.), 0)) %>%
   # Replace NA values in the "permafrost" column with 0
   mutate(permafrost = replace(permafrost, is.na(permafrost), 0)) 
 
@@ -119,7 +118,7 @@ drivers_df <- drivers_df %>% mutate(across(where(is.integer), as.numeric))%>%
 sapply(drivers_df, function(x) sum(is.na(x)))
 
 # Plot correlation between driver variables ----
-numeric_drivers <- 2:32  # Indices for numeric drivers
+numeric_drivers <- 2:33  # Indices for numeric drivers
 driver_cor <- cor(drivers_df[, numeric_drivers])
 corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = F)
 
