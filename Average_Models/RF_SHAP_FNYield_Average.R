@@ -28,7 +28,7 @@ test_numtree_average <- function(ntree_list) {
   for (i in 1:length(ntree_list)) {
     # Set seed for each model training step within the loop
     set.seed(123)
-    rf_model <- randomForest(median_FNConc ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = ntree_list[[i]])
+    rf_model <- randomForest(FNYield ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = ntree_list[[i]])
     MSE[[i]] <- rf_model$mse
   }
   return(MSE)
@@ -47,8 +47,8 @@ test_numtree_optimized <- function(ntree_list) {
 }
 
 # Function to remove outliers based on Z-scores
-cols_to_consider <- c("median_FNConc")
-sd_limit <- 2
+cols_to_consider <- c("FNYield")
+sd_limit <- 3
 remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit = sd_limit) {
   z_scores <- sapply(data_to_filter[cols], function(data) abs((data - mean(data, na.rm = TRUE)) / sd(data, na.rm = TRUE)))
   return(data_to_filter[rowSums(z_scores > limit, na.rm = TRUE) == 0, ])
@@ -57,7 +57,7 @@ remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit =
 # Define a function to save RF variable importance plot as a PDF
 save_rf_importance_plot <- function(rf_model, output_dir) {
   pdf(sprintf("%s/RF_variable_importance.pdf", output_dir), width = 8, height = 6)
-  randomForest::varImpPlot(rf_model, main = "RF Variable Importance - Average FN Concentration", col = "darkblue")
+  randomForest::varImpPlot(rf_model, main = "RF Variable Importance - Average FN Yield", col = "darkblue")
   dev.off()
 }
 
@@ -65,7 +65,7 @@ save_rf_importance_plot <- function(rf_model, output_dir) {
 save_lm_plot <- function(rf_model, observed, output_dir) {
   pdf(sprintf("%s/RF_lm_plot.pdf", output_dir), width = 8, height = 8)
   plot(rf_model$predicted, observed, pch = 16, cex = 1.5,
-       xlab = "Predicted", ylab = "Observed", main = "Observed vs Predicted - Average FN Concentration",
+       xlab = "Predicted", ylab = "Observed", main = "Observed vs Predicted - Average FN Yield",
        cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5)
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2)
   legend("topleft", bty = "n", cex = 1.5, legend = paste("R² =", format(mean(rf_model$rsq), digits = 3)))
@@ -74,14 +74,14 @@ save_lm_plot <- function(rf_model, observed, output_dir) {
 }
 
 # Set the output directory path for saving PDFs
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/FNConc"
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/FNYield"
 
 # Read in and tidy data ----
 # Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
 
 drivers_df <- read.csv("AllDrivers_Harmonized_Average.csv") %>%
-  select(-contains("Yield"), -contains("Gen")) %>%
+  select(-contains("Conc"), -contains("Gen")) %>%
   dplyr::mutate_at(vars(14:29), ~replace(., is.na(.), 0)) %>%
   mutate(across(where(is.integer), as.numeric)) %>%
   distinct(Stream_ID, .keep_all = TRUE) %>%
@@ -98,7 +98,7 @@ corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag =
 
 pdf(sprintf("%s/correlation_plot.pdf", output_dir), width = 10, height = 10)
 corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = FALSE)
-title("Median Flow Normalized Si Concentration")  # Add title in the PDF
+title("Median FN Si Yield")  # Add title in the PDF
 dev.off()
 
 # Global seed before testing different numbers of trees (ntree) ----
@@ -123,11 +123,11 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE)) + geom_point() + geom_line() + theme_c
 
 # Global seed before tuning mtry based on optimized ntree ----
 set.seed(123)
-tuneRF(drivers_df[, numeric_drivers], drivers_df[, 1], ntreeTry = 1300, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(drivers_df[, numeric_drivers], drivers_df[, 1], ntreeTry = 2000, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
-rf_model1 <- randomForest(median_FNConc ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 1300, mtry = 11)
+rf_model1 <- randomForest(FNYield ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 11)
 
 # Visualize output for rf_model1
 print(rf_model1)
@@ -148,8 +148,8 @@ seeds[[total_repeats]] <- 123
 control <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = cv_repeats, number = cv_number, seeds = seeds, verbose = TRUE)
 
 # Divide data into predictor variables (x) and response variable (y)
-x <- drivers_df[, !(colnames(drivers_df) == "median_FNConc")]
-y <- drivers_df$median_FNConc
+x <- drivers_df[, !(colnames(drivers_df) == "FNYield")]
+y <- drivers_df$FNYield
 
 # Run RFE to select the best features ----
 set.seed(123)
@@ -162,7 +162,7 @@ print(result_rfe)
 new_rf_input <- paste(predictors(result_rfe), collapse = "+")
 
 # Format those features into a formula for the optimized random forest model
-rf_formula <- formula(paste("median_FNConc ~", new_rf_input))
+rf_formula <- formula(paste("FNYield ~", new_rf_input))
 
 # Global seed before re-tuning RF after RFE optimization ----
 set.seed(123)
@@ -187,19 +187,19 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE)) + geom_point() + geom_line() +
 # Global seed before re-tuning mtry
 set.seed(123)
 kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
-tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 1000, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 2000, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
-rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 1000, mtry = 7)
+rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 3)
 
 # Visualize output for rf_model2
 print(rf_model2)
 randomForest::varImpPlot(rf_model2)
 
 # Generate plots comparing predicted vs observed ----
-lm_plot <- plot(rf_model2$predicted, drivers_df$median_FNConc, pch = 16, cex = 1.5,
-                xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers - FN Concentration",
+lm_plot <- plot(rf_model2$predicted, drivers_df$FNYield, pch = 16, cex = 1.5,
+                xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers - FN Yield",
                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
   theme(text = element_text(size = 40), face = "bold")
@@ -208,11 +208,11 @@ legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(
 
 # Save RF variable importance plot and LM plot for rf_model2
 save_rf_importance_plot(rf_model2, output_dir)
-save_lm_plot(rf_model2, drivers_df$median_FNConc, output_dir)
+save_lm_plot(rf_model2, drivers_df$FNYield, output_dir)
 
 ## Calculate SHAP values and make exploratory plots 
 # Set the output directory for plots
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/FNConc"
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/FNYield"
 
 # Set up a parallel backend for speed (adjust cores as needed)
 num_cores <- detectCores() - 1  # Leave one core free for other tasks
@@ -221,7 +221,7 @@ registerDoParallel(cores = num_cores)
 # Function to create shapley_plot_data without any subsetting
 create_shapley_plot_data <- function(model, kept_drivers, drivers_df, sample_size = 30) {
   # Create the predictor object for the full dataset
-  predictor <- Predictor$new(model = model, data = kept_drivers, y = drivers_df$median_FNConc)
+  predictor <- Predictor$new(model = model, data = kept_drivers, y = drivers_df$FNYield)
   
   # Parallel Shapley calculations for each observation
   set.seed(123)  # For reproducibility
@@ -268,7 +268,7 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) 
   overall_importance_plot <- ggplot(overall_feature_importance, aes(x = reorder(feature, importance), y = importance)) +
     geom_bar(stat = "identity", fill = "steelblue") +
     coord_flip() +
-    labs(x = "Feature", y = "Mean Absolute SHAP Value", title = "Overall Feature Importance - Average FN Concentration") +
+    labs(x = "Feature", y = "Mean Absolute SHAP Value", title = "Overall Feature Importance - Average FN Yield") +
     theme_minimal()
   
   # Print plot to the PDF
@@ -286,7 +286,7 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) 
   shap_summary_plot <- ggplot(shap_data_normalized, aes(x = phi, y = feature)) + 
     geom_point(aes(color = normalized_value), alpha = 0.6) + 
     scale_color_gradient(low = "blue", high = "red", name = "Feature Value", breaks = c(0, 1), labels = c("Low", "High")) +
-    labs(x = "SHAP Value", y = NULL, title = "SHAP Summary Plot - Average FN Concentration") + 
+    labs(x = "SHAP Value", y = NULL, title = "SHAP Summary Plot - Average FN Yield") + 
     theme_bw() + 
     theme(axis.text.y = element_text(size = 12), axis.text.x = element_text(size = 12), 
           plot.title = element_text(size = 16, face = "bold"))
@@ -303,7 +303,7 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) 
   pos_neg_plot <- ggplot(pos_neg_summary, aes(x = feature, y = mean_phi, fill = mean_phi > 0)) +
     geom_bar(stat = "identity") +
     scale_fill_manual(values = c("red", "blue"), labels = c("Negative Impact", "Positive Impact")) +
-    labs(x = "Feature", y = "Mean SHAP Value", title = "Overall SHAP Impact by Feature - Average FN Concentration") +
+    labs(x = "Feature", y = "Mean SHAP Value", title = "Overall SHAP Impact by Feature - Average FN Yield") +
     coord_flip() +
     theme_minimal()
   
@@ -321,7 +321,7 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) 
       
       dependence_plot <- ggplot(shap_data[shap_data$feature == feature_name, ], aes_mapping) +
         geom_point(alpha = 0.6) + 
-        labs(x = paste("Value of", feature_name), y = "SHAP Value", title = paste("Average FN Concentration SHAP Dependence Plot for", feature_name)) + 
+        labs(x = paste("Value of", feature_name), y = "SHAP Value", title = paste("Average FN Yield SHAP Dependence Plot for", feature_name)) + 
         theme_minimal() +
         (if (color_var %in% names(shap_data)) scale_color_viridis_c(name = color_var) else NULL)
       

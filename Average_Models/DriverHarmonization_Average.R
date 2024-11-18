@@ -503,6 +503,7 @@ tot <- tot %>%
   left_join(weathering_avg, by = "Stream_ID") %>%
   select(-major_rock, -Stream_Name, -min_daylength, -ClimateZ, -Name, -mean_q) %>%
   rename(snow_cover = prop_area, 
+         greenup_day = cycle0,
        drainage_area = drainSqKm,
        elevation = elevation_mean_m,
        basin_slope = basin_slope_mean_degree) %>%
