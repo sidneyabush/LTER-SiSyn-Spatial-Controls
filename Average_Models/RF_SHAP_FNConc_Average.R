@@ -28,7 +28,7 @@ test_numtree_average <- function(ntree_list) {
   for (i in 1:length(ntree_list)) {
     # Set seed for each model training step within the loop
     set.seed(123)
-    rf_model <- randomForest(FNConc ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = ntree_list[[i]])
+    rf_model <- randomForest(median_FNConc ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = ntree_list[[i]])
     MSE[[i]] <- rf_model$mse
   }
   return(MSE)
@@ -47,8 +47,8 @@ test_numtree_optimized <- function(ntree_list) {
 }
 
 # Function to remove outliers based on Z-scores
-cols_to_consider <- c("FNConc")
-sd_limit <- 1.5
+cols_to_consider <- c("median_FNConc")
+sd_limit <- 2
 remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit = sd_limit) {
   z_scores <- sapply(data_to_filter[cols], function(data) abs((data - mean(data, na.rm = TRUE)) / sd(data, na.rm = TRUE)))
   return(data_to_filter[rowSums(z_scores > limit, na.rm = TRUE) == 0, ])
@@ -74,51 +74,24 @@ save_lm_plot <- function(rf_model, observed, output_dir) {
 }
 
 # Set the output directory path for saving PDFs
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/FNConc"
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/median_FNConc"
 
 # Read in and tidy data ----
 # Set working directory
-setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
 
 drivers_df <- read.csv("AllDrivers_Harmonized_Average.csv") %>%
-  ## Include median or just reg FNConc for Average?
-  select(Stream_ID, FNConc, contains("q_"), precip, temp, max_prop_area, npp, evapotrans, 
-         silicate_weathering, greenup_day, permafrost_mean_m, drainSqKm, Max_Daylength,
-         elevation_mean_m, basin_slope_mean_degree, P, NOx,
-         contains("rocks_"), contains("land_")) %>%
-  rename(permafrost = permafrost_mean_m, 
-         snow_cover = max_prop_area, 
-         drainage_area = drainSqKm,
-         elevation = elevation_mean_m,
-         slope = basin_slope_mean_degree) %>%
-  distinct(Stream_ID, .keep_all = TRUE) 
-
-# Replace NA values in the specified column range with 0
-drivers_df <- drivers_df %>%
-  dplyr::mutate_at(vars(19:34), ~replace(., is.na(.), 0)) %>%
-  # Replace NA values in the "permafrost" column with 0
-  mutate(permafrost = replace(permafrost, is.na(permafrost), 0)) 
-
-
-# Testing which drivers we want to keep based on the # of sites it leaves us with
-# Assuming drivers_df is your data frame, and you want to check for complete cases in specific columns
-cols_to_check <- c("P", "slope", "greenup_day", "drainage_area", "NOx", "evapotrans")
-
-# Use complete.cases() on those columns
-drivers_df <- drivers_df[complete.cases(drivers_df[, cols_to_check]), ]
-
-# Convert all integer columns to numeric in one step
-drivers_df <- drivers_df %>% mutate(across(where(is.integer), as.numeric))%>%
-  select(-Stream_ID)
+  select(-contains("Yield"), -contains("Gen")) %>%
+  dplyr::mutate_at(vars(14:29), ~replace(., is.na(.), 0)) %>%
+  mutate(across(where(is.integer), as.numeric)) %>%
+  distinct(Stream_ID, .keep_all = TRUE) %>%
+  drop_na()
 
 # Remove outliers using custom function
-# drivers_df <- remove_outlier_rows(drivers_df)
-
-# Optionally, check distribution of NAs across all columns
-sapply(drivers_df, function(x) sum(is.na(x)))
+drivers_df <- remove_outlier_rows(drivers_df)
 
 # Plot correlation between driver variables ----
-numeric_drivers <- 2:33  # Indices for numeric drivers
+numeric_drivers <- 2:35  # Indices for numeric drivers
 driver_cor <- cor(drivers_df[, numeric_drivers])
 corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = F)
 
@@ -153,7 +126,7 @@ tuneRF(drivers_df[, numeric_drivers], drivers_df[, 1], ntreeTry = 2000, stepFact
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
-rf_model1 <- randomForest(FNConc ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 10)
+rf_model1 <- randomForest(median_FNConc ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 10)
 
 # Visualize output for rf_model1
 print(rf_model1)
@@ -174,8 +147,8 @@ seeds[[total_repeats]] <- 123
 control <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = cv_repeats, number = cv_number, seeds = seeds, verbose = TRUE)
 
 # Divide data into predictor variables (x) and response variable (y)
-x <- drivers_df[, !(colnames(drivers_df) == "FNConc")]
-y <- drivers_df$FNConc
+x <- drivers_df[, !(colnames(drivers_df) == "median_FNConc")]
+y <- drivers_df$median_FNConc
 
 # Run RFE to select the best features ----
 set.seed(123)
@@ -188,7 +161,7 @@ print(result_rfe)
 new_rf_input <- paste(predictors(result_rfe), collapse = "+")
 
 # Format those features into a formula for the optimized random forest model
-rf_formula <- formula(paste("FNConc ~", new_rf_input))
+rf_formula <- formula(paste("median_FNConc ~", new_rf_input))
 
 # Global seed before re-tuning RF after RFE optimization ----
 set.seed(123)
@@ -224,7 +197,7 @@ print(rf_model2)
 randomForest::varImpPlot(rf_model2)
 
 # Generate plots comparing predicted vs observed ----
-lm_plot <- plot(rf_model2$predicted, drivers_df$FNConc, pch = 16, cex = 1.5,
+lm_plot <- plot(rf_model2$predicted, drivers_df$median_FNConc, pch = 16, cex = 1.5,
                 xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers - FN Concentration",
                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
@@ -234,11 +207,11 @@ legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(
 
 # Save RF variable importance plot and LM plot for rf_model2
 save_rf_importance_plot(rf_model2, output_dir)
-save_lm_plot(rf_model2, drivers_df$FNConc, output_dir)
+save_lm_plot(rf_model2, drivers_df$median_FNConc, output_dir)
 
 ## Calculate SHAP values and make exploratory plots 
 # Set the output directory for plots
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/FNConc"
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/median_FNConc"
 
 # Set up a parallel backend for speed (adjust cores as needed)
 num_cores <- detectCores() - 1  # Leave one core free for other tasks
@@ -247,7 +220,7 @@ registerDoParallel(cores = num_cores)
 # Function to create shapley_plot_data without any subsetting
 create_shapley_plot_data <- function(model, kept_drivers, drivers_df, sample_size = 30) {
   # Create the predictor object for the full dataset
-  predictor <- Predictor$new(model = model, data = kept_drivers, y = drivers_df$FNConc)
+  predictor <- Predictor$new(model = model, data = kept_drivers, y = drivers_df$median_FNConc)
   
   # Parallel Shapley calculations for each observation
   set.seed(123)  # For reproducibility

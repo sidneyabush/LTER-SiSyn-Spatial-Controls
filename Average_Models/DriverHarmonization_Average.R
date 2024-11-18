@@ -1,5 +1,5 @@
 # Load needed libraries
-librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr)
+librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr, stringr, readr)
 
 # Clear environment
 rm(list = ls())
@@ -15,24 +15,16 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
   rename(LTER = LTER.x) %>%
   filter(chemical == "DSi") %>% # Filter for "DSi"
-  dplyr::select(-DecYear, -Conc, -Flux, -PeriodLong, -PeriodStart, -LTER.y, -contains("date"), -contains("month"), -min_year, -max_year, -duration) %>%
+  dplyr::select(-DecYear, -Conc, -Flux, -PeriodLong, -PeriodStart, -LTER.y, -contains("date"), 
+                -contains("month"), -min_year, -max_year, -duration) %>%
   dplyr::mutate(
     Stream_Name = case_when(
       Stream_Name == "East Fork" ~ "east fork",
       Stream_Name == "West Fork" ~ "west fork",
       TRUE ~ Stream_Name
     ),
-    Stream_ID = paste0(LTER, "__", Stream_Name)  # Create Stream_ID after Stream_Name adjustment
-  ) %>%
-  group_by(Stream_ID) %>%
-  summarise(
-    FNConc = mean(FNConc, na.rm = TRUE),
-    GenConc = mean(GenConc, na.rm = TRUE),
-    FNFlux = mean(FNFlux, na.rm = TRUE),
-    GenFlux = mean(GenFlux, na.rm = TRUE),
-    Q = mean(Q, na.rm = TRUE),
-    .groups = "drop"
-  ) 
+    Stream_ID = paste0(LTER, "__", Stream_Name),
+    .groups = "drop") 
 
 gc()
 
@@ -55,7 +47,41 @@ wrtds_df$Stream_ID <- ifelse(wrtds_df$Stream_ID=="Finnish Environmental Institut
                              "Finnish Environmental Institute__SIMOJOKI AS. 13500", wrtds_df$Stream_ID)
 
 ## ------------------------------------------------------- ##
-# Download Reference Table from GD for DA ----
+# Calculate Stats ----
+## ------------------------------------------------------- ##
+# Calculate si_stats without CV columns
+si_stats <- wrtds_df %>%
+  group_by(Stream_ID) %>%
+  summarise(
+    across(
+      c(FNConc, GenConc, FNFlux, GenFlux),
+      list(median = median),
+      .names = "{.fn}_{.col}"
+    ),
+    .groups = "drop"  # Ungroup after summarise for a clean output
+  )
+
+
+# Calculate q_stats with CV for Q
+q_stats <- wrtds_df %>%
+  group_by(Stream_ID) %>%
+  summarise(
+    mean_q = mean(Q),
+    sd_q = sd(Q),  # Calculate standard deviation for Q
+    CV_Q = sd(Q) / mean(Q),  # Calculate coefficient of variation for Q
+    q_95 = quantile(Q, 0.95),
+    q_5 = quantile(Q, 0.05),
+    .groups = "drop"
+  )
+
+# Combine si_stats and q_stats
+tot <- si_stats %>%
+  left_join(q_stats, by = c("Stream_ID")) %>%
+  select(-sd_q) %>%
+  distinct(Stream_ID, .keep_all = TRUE)
+
+## ------------------------------------------------------- ##
+    # Download Reference Table from GD for DA ----
 ## ------------------------------------------------------- ##
 ref_table_link <- "https://docs.google.com/spreadsheets/d/11t9YYTzN_T12VAQhHuY5TpVjGS50ymNmKznJK4rKTIU/edit#gid=357814834"
 ref_table_folder = drive_get(as_id(ref_table_link))
@@ -73,7 +99,7 @@ name_conversion <- data.frame(
 
 # Filter and join in one step
 missing_sites <- left_join(area[area$Stream_ID %in% name_conversion$Stream_ID, ], 
-                           name_conversion, by = "Stream_ID")
+                           name_conversion, by = "Stream_ID") 
 
 # Remove the unnecessary column and rename the remaining one
 missing_sites <- missing_sites %>%
@@ -84,64 +110,30 @@ missing_sites <- missing_sites %>%
 area <- bind_rows(area, missing_sites)
 
 # Perform a left join while selecting only specific columns from area
-wrtds_df <- wrtds_df %>%
-  left_join(area, by = "Stream_ID")
+tot <- tot %>%
+  left_join(area, by = "Stream_ID")%>%
+  distinct(Stream_ID, .keep_all = TRUE)
+
+gc()
 
 ## ------------------------------------------------------- ##
 # Calculate Yields ----
 ## ------------------------------------------------------- ##
-wrtds_df <- wrtds_df %>%
-  mutate(FNYield = FNFlux / drainSqKm,
-         GenYield = GenFlux / drainSqKm) %>%
-  dplyr::select(-FNFlux, -GenFlux)
+yields <- tot %>%
+  mutate(FNYield = median_FNFlux / drainSqKm,
+         GenYield = median_GenFlux / drainSqKm) %>%
+  dplyr::select(-median_FNFlux, -median_GenFlux)
 
-## ------------------------------------------------------- ##
-# Calculate DSi Stats ----
-## ------------------------------------------------------- ##
-### New below: 
-# Calculate si_stats with CV columns
-si_stats <- wrtds_df %>%
-  group_by(Stream_ID) %>%
-  summarise(
-    across(
-      c(FNConc, GenConc, GenYield, FNYield),
-      list(mean = mean, median = median, min = min, max = max),
-      .names = "{.fn}_si_{.col}"
-    ),
-    across(
-      c(FNConc, GenConc, GenYield, FNYield),
-      ~ sd(.) / mean(.),  # Calculate CV
-      .names = "CV_si_{.col}"
-    ),
-    .groups = "drop"  # Ungroup after summarise for a clean output
-  )
-
-# Calculate q_stats with CV for Q
-q_stats <- wrtds_df %>%
-  group_by(Stream_ID) %>%
-  summarise(
-    mean_q = mean(Q),
-    #med_q = median(Q),
-    #min_q = min(Q),
-    #max_q = max(Q),
-    q_95 = quantile(Q, 0.95),
-    q_5 = quantile(Q, 0.05),
-    sd_q = sd(Q),  # Calculate standard deviation for Q
-    CV_Q = sd(Q) / mean(Q),  # Calculate coefficient of variation for Q
-    .groups = "drop"
-  )
-
-# Combine si_stats and q_stats
-tot <- si_stats %>%
-  left_join(q_stats, by = c("Stream_ID"))
-
-# Combine si_stats and q_stats, then remove duplicate columns
+# Combine si_stats and q_stats, handling duplicate columns with coalesce
 tot <- tot %>%
-  left_join(wrtds_df, by = "Stream_ID") %>%
-  select(!ends_with(".y")) # Keep only non-duplicated columns
+  left_join(yields, by = "Stream_ID") %>%
+  dplyr::select(-median_FNFlux, -median_GenFlux) %>%
+  distinct(Stream_ID, .keep_all = TRUE)
+
+gc()
 
 ## ------------------------------------------------------- ##
-# Add in KG Classifications ----
+          # Add in KG Classifications ----
 ## ------------------------------------------------------- ##
 # Read in climate data produced in KoeppenGeigerClassification.R
 KG <- read.csv("Koeppen_Geiger_2.csv")
@@ -149,10 +141,11 @@ KG$Stream_ID<-paste0(KG$LTER, "__", KG$Stream_Name)
 
 # Combine si_stats and q_stats, handling duplicate columns with coalesce
 tot <- tot %>%
-  left_join(KG, by = "Stream_ID") 
+  left_join(KG, by = "Stream_ID") %>%
+  distinct(Stream_ID, .keep_all = TRUE)
 
 ## ------------------------------------------------------- ##
-# Import Daylength ----
+            # Import Daylength ----
 ## ------------------------------------------------------- ##
 # Load and clean daylength data
 daylen <- read.csv("Monthly_Daylength_2.csv") %>%
@@ -168,20 +161,23 @@ name_conversion <- data.frame(
 daylen_range <- daylen %>%
   dplyr::group_by(Stream_Name) %>%
   dplyr::summarise(
-    Min_Daylength = min(mean_daylength),
-    Max_Daylength = max(mean_daylength)
+    min_daylength = min(mean_daylength),
+    max_daylength = max(mean_daylength)
   ) %>%
   left_join(name_conversion, by = "Stream_Name") %>%
   mutate(Stream_Name = coalesce(Updated_StreamName, Stream_Name)) %>%
   dplyr::select(-Updated_StreamName)
 
 # Ensure the result is left-joined to "tot"
-tot <- left_join(tot, daylen_range, by = "Stream_Name")
+tot <- tot %>% 
+  left_join(daylen_range, by = "Stream_Name") %>%
+  distinct(Stream_ID, .keep_all = TRUE)
 
 ## ------------------------------------------------------- ##
-# Import Spatial Drivers ----
+            # Import Spatial Drivers ----
 ## ------------------------------------------------------- ##
-spatial_drivers <- read.csv("all-data_si-extract_2_20240802.csv", stringsAsFactors = FALSE)
+spatial_drivers <- read.csv("all-data_si-extract_2_20240802.csv", stringsAsFactors = FALSE) %>%
+  select(-contains("soil"))
 spatial_drivers$Stream_ID <- paste0(spatial_drivers$LTER, "__", spatial_drivers$Stream_Name)
 
 ## Before, using full abbrevs removed some of the spatial driver columns (e.g., "dec" in "deciduous" was causing
@@ -222,7 +218,7 @@ site_mean <- list()
 
 for (i in 1:length(drivers_list_quant)) {
   drive_cols <- grep(drivers_list_quant[i], colnames(spatial_drivers))
-  one_driver <- spatial_drivers[,c(301, drive_cols)]
+  one_driver <- spatial_drivers[,c(288, drive_cols)]
   site_mean[[i]] <- rowMeans(one_driver[,c(2:length(one_driver))], na.rm = TRUE)
 }
 
@@ -230,12 +226,20 @@ mean_df <- as.data.frame(do.call(cbind, site_mean))
 colnames(mean_df) <- drivers_list_quant
 mean_df$Stream_ID <- spatial_drivers$Stream_ID
 
-## Get mean greenup day
+mean_df <- left_join(mean_df, cat_vars, by="Stream_ID")
+
+tot <- tot %>%
+  left_join(mean_df, by = "Stream_ID") %>%
+  distinct(Stream_ID, .keep_all = TRUE)
+
+## ------------------------------------------------------- ##
+# Calculate Greenup Day ----
+## ------------------------------------------------------- ##
 greenup_mean <- list()
 stream_id <- c("Stream_ID")
 for (i in 1:length(greenup)) {
   drive_cols <- grep(greenup[i], colnames(spatial_drivers))
-  one_driver <- spatial_drivers[,c(301, drive_cols)]
+  one_driver <- spatial_drivers[,c(288, drive_cols)]
   one_driver <- one_driver[!duplicated(one_driver$Stream_ID),]
   
   driver_melt <- melt(one_driver, id.vars=stream_id)
@@ -250,21 +254,12 @@ green_df <- as.data.frame(do.call(cbind, greenup_mean))
 colnames(green_df) <- greenup
 green_df$Stream_ID <- one_driver$Stream_ID
 
-##### THIS IS WHERE THE ISSUE IS: 
-
-green_df <- green_df %>% drop_na(cycle0)  # Removes rows with NA values in the "cycle0" column
-mean_drivers_df <- mean_df %>% drop_na()   # Removes NA rows
-
-mean_df <- merge(mean_drivers_df, green_df, by="Stream_ID", all = TRUE)
-mean_df <- merge(mean_df, cat_vars, by="Stream_ID", all=TRUE)
-
 tot <- tot %>%
-  left_join(mean_df, by = "Stream_ID") 
-
-unique(tot$Stream_ID)
+  left_join(green_df, by="Stream_ID") %>%
+  distinct(Stream_ID, .keep_all = TRUE)
 
 ## ------------------------------------------------------- ##
-# Import WRTDS N_P Conc ---- 
+            # Import WRTDS N_P Conc ---- 
 ## ------------------------------------------------------- ##
 wrtds_NP <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv")%>%
   rename(LTER = LTER.x) %>%
@@ -292,10 +287,11 @@ gc()
 
 # Merge with the "tot" dataframe to add average NOx and P data in a single row per Stream_ID
 tot <- tot %>%
-  left_join(wrtds_NP_avg, by = "Stream_ID")
+  left_join(wrtds_NP_avg, by = "Stream_ID") %>%
+  distinct(Stream_ID, .keep_all = TRUE)
 
 # ## ------------------------------------------------------- ##
-# Import RAW N_P Conc ---- 
+              # Import RAW N_P Conc ---- 
 # ## ------------------------------------------------------- ##
 raw_NP <- read.csv("20241003_masterdata_chem.csv") %>%
   filter(variable %in% c("SRP", "PO4", "NO3", "NOx") & value > 0) %>% # 
@@ -317,13 +313,14 @@ tot <- tot %>%
     # Replace NA values in P and NOx with the corresponding averages from raw_NP_avg
     P = coalesce(P, avg_Conc_P)) %>%
   # Remove temporary columns created during the join
-  select(-avg_Conc_P)
+  select(-avg_Conc_P, -avg_Conc_NOx) %>%
+  distinct(Stream_ID, .keep_all = TRUE)
 
 # Clean up memory
 gc()
 
 ## ------------------------------------------------------- ##
-#  Gap Filling Missing Data ----
+            #  Gap Filling Missing Data ----
 ## ------------------------------------------------------- ##
 # Import streams with na slopes
 # Load and process Krycklan slopes
@@ -415,12 +412,22 @@ tot <- tot %>%
   mutate(
     elevation_mean_m = coalesce(elevation_mean_m_filled, elevation_mean_m)
   ) %>%
-  select(-elevation_mean_m_filled)  # Remove Stream_Name_filled from final output
+  select(-elevation_mean_m_filled) %>%
+  distinct(Stream_ID, .keep_all = TRUE)  
 
 # ------------------------------------------------------- #
-# Silicate Weathering: Stream-Level Averages
+# Tidy-up Full Dataset ----
 # ------------------------------------------------------- #
-
+tot <- tot %>%
+  rename_with(~ str_replace(., "\\.x$", ""), ends_with(".x"))%>%  # Remove `.x` from column names
+  select(-ends_with(".y"), -Use_WRTDS, -X, Stream_Name, -Latitude, -num_days,
+         -Longitude, -LTER, -contains("coord"), -major_land, -cycle1, 
+         -contains("median_degree"), -contains("min_degree"),
+         -contains("max_degree"), -contains("median_m"), -contains("min_m"), -contains("max_m"))  # Remove columns with `.y` in their names
+  
+# ------------------------------------------------------- #
+      # Silicate Weathering: Stream-Level Averages
+# ------------------------------------------------------- #
 # Read and prepare data
 mapped_lithologies <- fread("mapped_lithologies.csv")
 
@@ -439,7 +446,7 @@ mapped_lithologies[, major_rock := as.character(major_rock)]
 
 # Merge and filter out rows with NA in `mapped_lithology`
 weathering <- merge(
-  tot[, .(Stream_ID, major_rock, Q, temp, drainSqKm)], 
+  tot[, .(Stream_ID, major_rock, mean_q, temp, drainSqKm)], 
   mapped_lithologies[, .(major_rock, mapped_lithology)], 
   by = "major_rock", all.x = TRUE
 )
@@ -463,7 +470,7 @@ lithology_params <- data.table(
 weathering[, temp_K := temp + 273.15]
 
 # Calculate runoff based on the formula
-weathering[, runoff := (Q * seconds_per_year * kg_per_m3) / (drainSqKm * km2_to_m2)]
+weathering[, runoff := (mean_q * seconds_per_year * kg_per_m3) / (drainSqKm * km2_to_m2)]
 
 # Define a function for vectorized calculation of weathering
 calculate_weathering_vectorized <- function(lithologies, runoff, temp_k) {
@@ -487,22 +494,38 @@ weathering[, silicate_weathering := calculate_weathering_vectorized(mapped_litho
 weathering_avg <- weathering %>%
   group_by(Stream_ID) %>%
   summarise(
-    avg_silicate_weathering = mean(silicate_weathering, na.rm = TRUE),
-    avg_temp = mean(temp, na.rm = TRUE),
-    avg_Q = mean(Q, na.rm = TRUE),
-    avg_runoff = mean(runoff, na.rm = TRUE),
+    silicate_weathering = mean(silicate_weathering, na.rm = TRUE),
     .groups = "drop"
   )
 
 # Merge averaged weathering data back into the `tot` dataframe
 tot <- tot %>%
-  left_join(weathering_avg, by = "Stream_ID")
+  left_join(weathering_avg, by = "Stream_ID") %>%
+  select(-major_rock, -Stream_Name, -min_daylength, -ClimateZ, -Name, -mean_q) %>%
+  rename(snow_cover = prop_area, 
+       drainage_area = drainSqKm,
+       elevation = elevation_mean_m,
+       basin_slope = basin_slope_mean_degree) %>%
+  distinct(Stream_ID, .keep_all = TRUE) 
+
+# Export Stream_IDs with NA values in "permafrost" or "snow_cover"
+na_stream_ids <- tot %>%
+  filter(is.na(permafrost) | is.na(snow_cover)) %>%
+  select(Stream_ID, permafrost, snow_cover)  # Include only relevant columns for clarity
+
+write_csv(na_stream_ids, "na_permafrost_snow_cover_stream_ids.csv")
+
+# Replace NA values in the specified column range with 0
+drivers_df <- tot %>%
+  # Replace NA values in the "permafrost" column with 0
+  mutate(permafrost = replace(permafrost, is.na(permafrost), 0), 
+         snow_cover = replace(snow_cover, is.na(snow_cover), 0))
 
 # Clean up memory
 gc()
 
 # Export the resulting dataframe to a .csv file
-write.csv(tot, "All_Drivers_Harmonized_Average", row.names = FALSE)
+write.csv(drivers_df, "AllDrivers_Harmonized_Average.csv", row.names = FALSE)
 
 
 
