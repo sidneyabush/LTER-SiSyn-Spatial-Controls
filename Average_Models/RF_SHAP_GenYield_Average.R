@@ -81,8 +81,8 @@ output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
 
 drivers_df <- read.csv("AllDrivers_Harmonized_Average.csv") %>%
-  select(-contains("Conc"), -contains("FN")) %>%
-  dplyr::mutate_at(vars(14:29), ~replace(., is.na(.), 0)) %>%
+  select(-drainage_area, -contains("Conc"), -contains("FN")) %>%
+  dplyr::mutate_at(vars(13:28), ~replace(., is.na(.), 0)) %>%
   mutate(across(where(is.integer), as.numeric)) %>%
   distinct(Stream_ID, .keep_all = TRUE) %>%
   select(-Stream_ID) %>%
@@ -92,7 +92,7 @@ drivers_df <- read.csv("AllDrivers_Harmonized_Average.csv") %>%
 # drivers_df <- remove_outlier_rows(drivers_df)
 
 # Plot correlation between driver variables ----
-numeric_drivers <- 2:34  # Indices for numeric drivers
+numeric_drivers <- 2:33  # Indices for numeric drivers
 driver_cor <- cor(drivers_df[, numeric_drivers])
 corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = F)
 
@@ -335,7 +335,7 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) 
 }
 
 # Run the function to create all plots in a single PDF file, coloring dependence plots by specified variables (e.g., "precip", "temp")
-color_vars <- c("drainage_area", "snow_cover", "precip", 
+color_vars <- c("snow_cover", "precip", 
                 "evapotrans", "temp", "npp", "permafrost", "greenup_day",
                 "rocks_volcanic", "NOx", "P", "max_daylength", "silicate_weathering", "q_95", "q_5")  # List of features to color by
 output_file <- sprintf("%s/all_shapley_plots.pdf", output_dir)  # Specify the output file path

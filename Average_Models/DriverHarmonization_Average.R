@@ -24,9 +24,13 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
       TRUE ~ Stream_Name
     ),
     Stream_ID = paste0(LTER, "__", Stream_Name),
-    .groups = "drop") 
+    .groups = "drop"
+  ) %>%
+  filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) # Remove rows with Inf in numeric columns only
+
 
 gc()
+
 
 ## Need to tidy the Finnish site names:
 finn <- read.csv("FinnishSites.csv")
