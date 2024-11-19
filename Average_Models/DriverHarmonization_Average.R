@@ -10,12 +10,9 @@ rm(list = ls())
 ## Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
-## Download most up to date WRTDS outputs (annual kalman)
-# Read in WRTDS input file and process date and Stream_ID
 wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
   rename(LTER = LTER.x) %>%
-  filter(chemical == "DSi") %>% # Filter for "DSi"
-  dplyr::select(-DecYear, -Conc, -Flux, -PeriodLong, -PeriodStart, -LTER.y, -contains("date"), 
+  dplyr::select(-Conc, -Flux, -PeriodLong, -PeriodStart, -LTER.y, -contains("date"), 
                 -contains("month"), -min_year, -max_year, -duration) %>%
   dplyr::mutate(
     Stream_Name = case_when(
@@ -24,12 +21,19 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
       TRUE ~ Stream_Name
     ),
     Stream_ID = paste0(LTER, "__", Stream_Name),
-    .groups = "drop"
-  ) %>%
-  filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) # Remove rows with Inf in numeric columns only
-
+    .groups = "drop") %>%
+  filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
+  filter(chemical == "DSi") %>%
+  filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc) # Remove rows where FNConc is ±50% of GenConc
 
 gc()
+
+num_unique_stream_ids <- wrtds_df %>%
+  pull(Stream_ID) %>%
+  n_distinct()
+
+print(num_unique_stream_ids)
+
 
 
 ## Need to tidy the Finnish site names:
@@ -265,18 +269,22 @@ tot <- tot %>%
 ## ------------------------------------------------------- ##
             # Import WRTDS N_P Conc ---- 
 ## ------------------------------------------------------- ##
-wrtds_NP <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv")%>%
+wrtds_NP <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
   rename(LTER = LTER.x) %>%
   filter(chemical %in% c("P", "NO3", "NOx"), GenConc > 0) %>%  # Removes NAs and zero values
-  mutate(chemical = ifelse(chemical %in% c("NOx", "NO3"), "NOx", chemical)) %>%
-  dplyr::mutate(
+  mutate(
+    chemical = ifelse(chemical %in% c("NOx", "NO3"), "NOx", chemical),
     Stream_Name = case_when(
-    Stream_Name == "East Fork" ~ "east fork",
-    Stream_Name == "West Fork" ~ "west fork",
-    TRUE ~ Stream_Name
-  ),
-  Stream_ID = paste0(LTER, "__", Stream_Name)  # Create Stream_ID after Stream_Name adjustment
-)
+      Stream_Name == "East Fork" ~ "east fork",
+      Stream_Name == "West Fork" ~ "west fork",
+      TRUE ~ Stream_Name
+    ),
+    Stream_ID = paste0(LTER, "__", Stream_Name)  # Create Stream_ID after Stream_Name adjustment
+  ) %>%
+  filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
+  filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc)  # Remove rows where FNConc is ±50% of GenConc
+
+gc()
 
 # Summarize to get the average GenConc by Stream_ID, and simplified chemical
 wrtds_NP_avg <- wrtds_NP %>%

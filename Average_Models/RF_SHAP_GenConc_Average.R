@@ -187,11 +187,11 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE)) + geom_point() + geom_line() +
 # Global seed before re-tuning mtry
 set.seed(123)
 kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
-tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 2000, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 1000, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
-rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 1500, mtry = 10)
+rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 1000, mtry = 6)
 
 # Visualize output for rf_model2
 print(rf_model2)
@@ -249,8 +249,7 @@ create_shapley_plot_data <- function(model, kept_drivers, drivers_df, sample_siz
 # Generate shapley_plot_data for the entire dataset
 shapley_plot_data <- create_shapley_plot_data(rf_model2, kept_drivers, drivers_df)
 
-# Create and save all required plots for full Shapley data, with optional color combinations for dependence plots
-create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) {  # Accept color_vars as an argument
+create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL, log_scaled_drivers = c("drainage_area", "npp", "q_95", "q_5", "silicate_weathering")) {
   # Filter out silicate_weathering values > 20
   shap_data <- shap_data %>%
     filter(silicate_weathering <= 20)
@@ -278,7 +277,7 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) 
   shap_data <- shap_data %>%
     mutate(feature = factor(feature, levels = rev(overall_feature_importance$feature)))
   
-  # 2. SHAP Summary Plot with low-to-high coloring (normalized for each feature)
+  # 2. SHAP Summary Plot
   shap_data_normalized <- shap_data %>%
     group_by(feature) %>%
     mutate(normalized_value = (value - min(value, na.rm = TRUE)) / (max(value, na.rm = TRUE) - min(value, na.rm = TRUE)))
@@ -294,23 +293,7 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) 
   # Print plot to the PDF
   print(shap_summary_plot)
   
-  # 3. Positive/Negative SHAP Impact Plot
-  pos_neg_summary <- shap_data %>%
-    group_by(feature) %>%
-    summarise(mean_phi = mean(phi)) %>%
-    mutate(feature = factor(feature, levels = rev(overall_feature_importance$feature)))
-  
-  pos_neg_plot <- ggplot(pos_neg_summary, aes(x = feature, y = mean_phi, fill = mean_phi > 0)) +
-    geom_bar(stat = "identity") +
-    scale_fill_manual(values = c("red", "blue"), labels = c("Negative Impact", "Positive Impact")) +
-    labs(x = "Feature", y = "Mean SHAP Value", title = "Overall SHAP Impact by Feature - Average Gen Concentration") +
-    coord_flip() +
-    theme_minimal()
-  
-  # Print plot to the PDF
-  print(pos_neg_plot)
-  
-  # 4. SHAP Dependence Plots for each feature with all combinations of coloring variables
+  # 3. SHAP Dependence Plots for each feature
   for (feature_name in unique(shap_data$feature)) {
     for (color_var in color_vars) {
       aes_mapping <- if (color_var %in% names(shap_data)) {
@@ -321,9 +304,22 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) 
       
       dependence_plot <- ggplot(shap_data[shap_data$feature == feature_name, ], aes_mapping) +
         geom_point(alpha = 0.6) + 
-        labs(x = paste("Value of", feature_name), y = "SHAP Value", title = paste("Average Gen Concentration SHAP Dependence Plot for", feature_name)) + 
-        theme_minimal() +
-        (if (color_var %in% names(shap_data)) scale_color_viridis_c(name = color_var) else NULL)
+        labs(x = paste("Value of", feature_name), y = "SHAP Value", title = paste("Average Gen Concentration SHAP Dependence Plot for", feature_name)) +
+        geom_hline(yintercept = 0, linetype = "dashed", color = "red") +  # Add y=0 red dashed line
+        theme_minimal()
+      
+      # Apply log scale to x-axis if the feature is in the log_scaled_drivers list
+      if (feature_name %in% log_scaled_drivers) {
+        dependence_plot <- dependence_plot + scale_x_log10() +
+          labs(x = paste("log(", feature_name, ")", sep = ""))
+      }
+      
+      # Apply log scale to the color scale if the color_var is in the log_scaled_drivers list
+      if (color_var %in% log_scaled_drivers) {
+        dependence_plot <- dependence_plot + scale_color_viridis_c(name = paste("log(", color_var, ")", sep = ""), trans = "log10")
+      } else if (color_var %in% names(shap_data)) {
+        dependence_plot <- dependence_plot + scale_color_viridis_c(name = color_var)
+      }
       
       # Print plot to the PDF
       print(dependence_plot)
@@ -338,8 +334,67 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) 
 color_vars <- c("drainage_area", "snow_cover", "precip", 
                 "evapotrans", "temp", "npp", "permafrost", "greenup_day",
                 "rocks_volcanic", "NOx", "P", "max_daylength", "silicate_weathering", "q_95", "q_5")  # List of features to color by
-output_file <- sprintf("%s/all_shapley_plots.pdf", output_dir)  # Specify the output file path
+output_file <- sprintf("%s/all_shapley_plots_Average_GenConc.pdf", output_dir)  # Specify the output file path
 create_all_shapley_plots(shapley_plot_data, output_file, color_vars)
+
+
+### Create new pdf of just single drivers colored by Si: 
+single_dependence_output_file <- sprintf("%s/single_shap_dependence_plots_Average_GenConc.pdf", output_dir)
+
+# Define the drivers to apply log scaling
+log_scaled_drivers <- c("drainage_area", "npp", "q_95", "q_5", "silicate_weathering")  # Customize the list as needed
+
+create_single_shap_dependence_plots <- function(shap_data, output_file, log_scaled_drivers = c("drainage_area", "npp", "q_95", "q_5")) {
+  # Open a new PDF file for the SHAP dependence plots
+  pdf(output_file, width = 8, height = 8)
+  
+  # Loop through each unique feature in the SHAP data
+  for (feature_name in unique(shap_data$feature)) {
+    # Filter data for the current feature
+    feature_data <- shap_data[shap_data$feature == feature_name, ]
+    
+    # Determine the x-axis label
+    x_label <- if (feature_name %in% log_scaled_drivers) {
+      paste("log(", feature_name, ")", sep = "")
+    } else {
+      paste("Value of", feature_name)
+    }
+    
+    # Create the dependence plot
+    dependence_plot <- ggplot(feature_data, aes(x = value, y = phi, color = median_GenConc)) +
+      geom_point(alpha = 0.6) +
+      scale_color_viridis_c(name = "Median GenConc") +
+      labs(
+        x = x_label,  # Use the custom x_label here
+        y = "SHAP Value",
+        title = paste("SHAP Dependence Plot for", feature_name)
+      ) +
+      geom_hline(yintercept = 0, linetype = "dashed", color = "red") +  # Add y=0 red dashed line
+      theme_minimal()
+    
+    # Apply log scale if the feature is in the log_scaled_drivers list
+    if (feature_name %in% log_scaled_drivers) {
+      dependence_plot <- dependence_plot + scale_x_log10()
+    }
+    
+    # Print the plot to the PDF
+    print(dependence_plot)
+  }
+  
+  # Close the PDF
+  dev.off()
+}
+
+
+
+
+# Call the function to generate the single SHAP dependence plots
+create_single_shap_dependence_plots(
+  shap_data = shapley_plot_data,       # Your SHAP data
+  output_file = single_dependence_output_file, # Output file path
+  log_scaled_drivers = log_scaled_drivers      # Drivers to log scale
+)
+
 
 
 # BASEMENT -------------------
