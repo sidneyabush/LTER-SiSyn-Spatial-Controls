@@ -123,11 +123,11 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE)) + geom_point() + geom_line() + theme_c
 
 # Global seed before tuning mtry based on optimized ntree ----
 set.seed(123)
-tuneRF(drivers_df[, numeric_drivers], drivers_df[, 1], ntreeTry = 1200, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(drivers_df[, numeric_drivers], drivers_df[, 1], ntreeTry = 100, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
-rf_model1 <- randomForest(GenYield ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 1200, mtry = 11)
+rf_model1 <- randomForest(GenYield ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 100, mtry = 10)
 
 # Visualize output for rf_model1
 print(rf_model1)
@@ -191,7 +191,7 @@ tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 2000, stepFactor = 1, improve =
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
-rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 3)
+rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 1)
 
 # Visualize output for rf_model2
 print(rf_model2)
@@ -218,10 +218,12 @@ output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/
 num_cores <- detectCores() - 1  # Leave one core free for other tasks
 registerDoParallel(cores = num_cores)
 
+log_scaled_drivers <- c("npp", "q_95", "q_5", "silicate_weathering")  # Customize the list as needed
+
 # Function to create shapley_plot_data without any subsetting
 create_shapley_plot_data <- function(model, kept_drivers, drivers_df, sample_size = 30) {
   # Create the predictor object for the full dataset
-  predictor <- Predictor$new(model = model, data = kept_drivers, y = drivers_df$median_GenYield)
+  predictor <- Predictor$new(model = model, data = kept_drivers, y = drivers_df$GenYield)
   
   # Parallel Shapley calculations for each observation
   set.seed(123)  # For reproducibility
@@ -267,7 +269,7 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL, 
   overall_importance_plot <- ggplot(overall_feature_importance, aes(x = reorder(feature, importance), y = importance)) +
     geom_bar(stat = "identity", fill = "steelblue") +
     coord_flip() +
-    labs(x = "Feature", y = "Mean Absolute SHAP Value", title = "Overall Feature Importance - Average Gen Concentration") +
+    labs(x = "Feature", y = "Mean Absolute SHAP Value", title = "Overall Feature Importance - Average Gen Yield") +
     theme_minimal()
   
   # Print plot to the PDF
@@ -285,7 +287,7 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL, 
   shap_summary_plot <- ggplot(shap_data_normalized, aes(x = phi, y = feature)) + 
     geom_point(aes(color = normalized_value), alpha = 0.6) + 
     scale_color_gradient(low = "blue", high = "red", name = "Feature Value", breaks = c(0, 1), labels = c("Low", "High")) +
-    labs(x = "SHAP Value", y = NULL, title = "SHAP Summary Plot - Average Gen Concentration") + 
+    labs(x = "SHAP Value", y = NULL, title = "SHAP Summary Plot - Average Gen Yield") + 
     theme_bw() + 
     theme(axis.text.y = element_text(size = 12), axis.text.x = element_text(size = 12), 
           plot.title = element_text(size = 16, face = "bold"))
@@ -304,7 +306,7 @@ create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL, 
       
       dependence_plot <- ggplot(shap_data[shap_data$feature == feature_name, ], aes_mapping) +
         geom_point(alpha = 0.6) + 
-        labs(x = paste("Value of", feature_name), y = "SHAP Value", title = paste("Average Gen Concentration SHAP Dependence Plot for", feature_name)) +
+        labs(x = paste("Value of", feature_name), y = "SHAP Value", title = paste("Average Gen Yield SHAP Dependence Plot for", feature_name)) +
         geom_hline(yintercept = 0, linetype = "dashed", color = "red") +  # Add y=0 red dashed line
         theme_minimal()
       
@@ -359,7 +361,7 @@ create_single_shap_dependence_plots <- function(shap_data, output_file, log_scal
     }
     
     # Create the dependence plot
-    dependence_plot <- ggplot(feature_data, aes(x = value, y = phi, color = median_GenYield)) +
+    dependence_plot <- ggplot(feature_data, aes(x = value, y = phi, color = GenYield)) +
       geom_point(alpha = 0.6) +
       scale_color_viridis_c(name = "Median GenYield") +
       labs(
