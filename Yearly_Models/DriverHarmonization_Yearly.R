@@ -152,7 +152,7 @@ tot <- subset(tot, chemical == "DSi")
 spatial_drivers <- fread("all-data_si-extract_2_202412_test.csv")  # Use fread for faster loading
 spatial_drivers[, Stream_ID := paste0(LTER, "__", Stream_Name)]
 spatial_drivers <- spatial_drivers[, !c("Shapefile_Name", "Discharge_File_Name"), with = FALSE]
-spatial_drivers <- spatial_drivers[, !grepl("soil|major", names(spatial_drivers)), with = FALSE]
+spatial_drivers <- spatial_drivers[, !grepl("soil", names(spatial_drivers)), with = FALSE]
 spatial_drivers <- spatial_drivers[, !grepl("_jan_|_feb_|_mar_|_apr_|_may_|_jun_|_jul_|_aug_|_sep_|_oct_|_nov_|_dec_", names(spatial_drivers)), with = FALSE]
 
 # Define greenup cycles (excluding cycle1 as it's not needed)
@@ -557,7 +557,7 @@ tot <- tot %>%
 tot_si <- tot %>%
   dplyr::select(Stream_ID, Year, drainSqKm, ClimateZ, Name, NOx, P, precip,
          temp, Max_Daylength, num_days, max_prop_area, npp, evapotrans,
-         silicate_weathering, greenup_day, permafrost_mean_m, elevation_mean_m, 
+         silicate_weathering, greenup_cycle0, permafrost_mean_m, elevation_mean_m, 
          basin_slope_mean_degree, contains("Q"),
          contains("Conc"), contains("Yield"),
          contains("rock"), contains("land"))
@@ -571,113 +571,6 @@ num_unique_sites <- tot_si %>%
 
 print(num_unique_sites)
 
-# ## ------------------------------------------------------- ##
-# #   Calculate and Export Average Driver data ----
-# ## ------------------------------------------------------- ##
-# 
-# ## ------------------------------------------------------- ##
-# ## Calculate Stats that can only be calculated for average data: 
-# ## ------------------------------------------------------- ##
-# # Calculate si_stats with CV columns
-# si_stats <- tot_si %>%
-#   group_by(Stream_ID) %>%
-#   summarise(
-#     across(
-#       c(FNConc, GenConc, GenYield, FNYield), 
-#       list(mean = mean, median = median, min = min, max = max), 
-#       .names = "{.fn}_si_{.col}"
-#     ),
-#     across(
-#       c(FNConc, GenConc, GenYield, FNYield), 
-#       ~ sd(.) / mean(.),  # Calculate CV
-#       .names = "CV_si_{.col}"
-#     ),
-#     .groups = "drop"  # Ungroup after summarise for a clean output
-#   ) 
-# 
-# # Calculate q_stats with CV for Q
-# q_stats <- tot_si %>%
-#   group_by(Stream_ID) %>%
-#   summarise(
-#     mean_q = mean(Q), 
-#     med_q = median(Q), 
-#     min_q = min(Q), 
-#     max_q = max(Q), 
-#     q_95 = quantile(Q, 0.95), 
-#     q_5 = quantile(Q, 0.05),
-#     sd_q = sd(Q),  # Calculate standard deviation for Q
-#     CV_Q = sd(Q) / mean(Q),  # Calculate coefficient of variation for Q
-#     .groups = "drop"
-#   )
-# 
-# # Combine si_stats and q_stats
-# c_q_stats <- si_stats %>%
-#   left_join(q_stats, by = c("Stream_ID")) 
-# 
-# tot_si <- tot_si %>%
-#   left_join(c_q_stats, by = c("Stream_ID")) 
-# 
-# 
-# # Step 1: Define static and non-static columns
-# static_keywords <- c("drainSqKm", "ClimateZ", "Name", "Max_Daylength",
-#                      "slope", "elevation", "rock", "land", "q_", "CV", "Q")
-# 
-# static_columns <- names(tot_si)[grepl(paste(static_keywords, collapse = "|"), names(tot_si))]
-# columns_to_summarize <- setdiff(names(tot_si), c(static_columns, "Stream_ID", "Year"))
-# 
-# 
-# # Step 2: Summarize static columns
-# static_summary <- tot_si %>%
-#   filter(!is.na(Stream_ID)) %>%  # Remove rows with missing Stream_ID
-#   group_by(Stream_ID) %>%        # Group by Stream_ID
-#   summarise(
-#     across(
-#       all_of(static_columns),    # Apply only to static columns
-#       ~ first(na.omit(.)),       # Take the first non-NA value
-#       .names = "{.col}"
-#     ), 
-#     .groups = "drop"             # Ungroup the results
-#   )
-# 
-# # Step 3: Summarize non-static columns
-# non_static_summary <- tot_si %>%
-#   filter(!is.na(Stream_ID)) %>%  # Remove rows with missing Stream_ID
-#   group_by(Stream_ID) %>%        # Group by Stream_ID
-#   summarise(
-#     across(
-#       all_of(columns_to_summarize),   # Apply only to non-static columns
-#       ~ mean(., na.rm = TRUE),        # Calculate the mean, ignoring NA
-#       .names = "{.col}"
-#     ), 
-#     .groups = "drop"                 # Ungroup the results
-#   )
-# 
-# 
-# # Step 4: Merge static and non-static summaries
-# final_summary <- left_join(static_summary, non_static_summary, by = "Stream_ID")
-# 
-# # Debugging: Print the final merged summary
-# print("Final Summary:")
-# print(final_summary)
-# 
-# 
-# 
-# 
-# 
-# # Make sure stream counts match
-# num_unique_sites <- tot_si_avg %>% 
-#   summarise(num_sites = n_distinct(Stream_ID))
-# 
-# print(num_unique_sites)
-# 
-# ## Tidy up data frame before export: 
-# 
-# tot_si_avg <- tot_si_avg %>%
-#   dplyr::select(-Year, -contains("mean_si"), -contains("min_si"), 
-#                 -contains("max_si"), -contains("CV_si"), -mean_q, -med_q,
-#                 -min_q, -max_q, -sd_q)
-
-write.csv(as.data.frame(tot_si), "AllDrivers_Harmonized_Annual.csv")
-# write.csv(as.data.frame(tot_si_avg), "AllDrivers_Harmonized_Average.csv")
+write.csv(as.data.frame(tot_si), "AllDrivers_Harmonized_Yearly.csv")
 
 gc()
