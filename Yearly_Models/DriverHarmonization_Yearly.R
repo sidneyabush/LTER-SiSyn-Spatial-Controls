@@ -284,7 +284,7 @@ gc()
 setDT(wrtds_NP_annual_wide)
 
 # Merge with the "tot" dataframe to add annual NOx and P data in a single row per Stream_ID and Year
-tot <- tot %>%
+tot <- final_combined_data %>%
   left_join(wrtds_NP_annual_wide, by = c("Stream_ID", "Year"))
 
 # Count the number of years with NA values for NOx and P for each Stream_ID, showing only non-zero results
@@ -296,6 +296,9 @@ na_counts <- tot %>%
     .groups = "drop"
   ) %>%
   filter(na_years_NOx > 0 | na_years_P > 0)  # Keep only rows with non-zero counts
+
+tot <- tot %>%
+  rename(Stream_Name = Stream_Name.x)
 
 # ## ------------------------------------------------------- ##
 #           # Import RAW N_P Conc ---- 
@@ -423,39 +426,35 @@ weathering[, silicate_weathering := calculate_weathering_vectorized(mapped_litho
 
 setDT(weathering)
 
-# Ensure 'Stream_ID' and 'Year' are character to avoid merge issues due to type differences
+# Ensure 'Stream_ID' and 'Year' are compatible types
 tot[, Stream_ID := as.character(Stream_ID)]
 tot[, Year := as.integer(Year)]
 weathering[, Stream_ID := as.character(Stream_ID)]
 weathering[, Year := as.integer(Year)]
 
-# Step 1: Check for duplicates in both datasets for the join keys
+# Calculate silicate weathering for each row in the weathering data
+weathering[, silicate_weathering := calculate_weathering_vectorized(mapped_lithology, runoff, temp_K)]
+
+# Ensure uniqueness in the datasets
 weathering <- unique(weathering, by = c("Stream_ID", "Year"))
 tot <- unique(tot, by = c("Stream_ID", "Year"))
 
-# Step 2: Attempt the merge with careful memory management
+# Perform the merge correctly
 tryCatch({
   tot <- merge(
     tot,
     weathering[, .(Stream_ID, Year, silicate_weathering)],
     by = c("Stream_ID", "Year"),
     all.x = TRUE,
-    allow.cartesian = TRUE
+    allow.cartesian = FALSE
   )
 }, error = function(e) {
-  message("Error encountered: ", e$message)
-  print("Attempting alternative approach using by=.EACHI")
-  
-  # Retry with by=.EACHI to handle large merges with potential duplicates
-  tot <<- merge(
-    tot,
-    weathering[, .(Stream_ID, Year, silicate_weathering)],
-    by = c("Stream_ID", "Year"),
-    all.x = TRUE,
-    allow.cartesian = TRUE,
-    by = .EACHI
-  )
+  message("Error encountered during merge: ", e$message)
 })
+
+# Clean up memory
+gc()
+
 
 gc()
 
