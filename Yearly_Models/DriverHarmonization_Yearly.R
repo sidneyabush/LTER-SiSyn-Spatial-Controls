@@ -81,9 +81,13 @@ missing_sites <- missing_sites %>%
 # Append the updated sites to the original dataframe
 area <- bind_rows(area, missing_sites)
 
-# Perform a left join while selecting only specific columns from area
+# Perform left join and convert DecYear to Year
 tot <- wrtds_df %>%
-  left_join(area %>% select(Stream_ID), by = "Stream_ID", relationship = "many-to-many")
+  left_join(area %>% select(Stream_ID), by = "Stream_ID", relationship = "many-to-many") %>%
+  mutate(
+    DecYear = as.numeric(format(DecYear, "%Y")) + as.numeric(format(DecYear, "%j")) / 365,
+    Year = floor(DecYear)
+  )
 
 ## ------------------------------------------------------- ##
             # Calculate Yields ----
@@ -202,82 +206,56 @@ spatial_drivers_long[, `:=`(
   year = as.integer(sub(".*_([0-9]{4}).*", "\\1", variable))
 )]
 
+spatial_drivers_long <- spatial_drivers_long %>%
+  filter(!is.na(value)) %>%
+  distinct(Stream_ID, driver_type, year, .keep_all = TRUE)
+
 gc()
 
 ## ------------------------------------------------------- ##
-# Step 3: Pivot to wide format using pivot_wider
+# Step 3: Pivot all driver types to wide format
 ## ------------------------------------------------------- ##
 
+# Pivot long data into a wide format, ensuring each driver type becomes a column
 spatial_drivers_wide <- spatial_drivers_long %>%
   pivot_wider(
-    names_from = driver_type,
+    names_from = driver_type,  # Create columns for each driver type
     values_from = value
   )
 
-gc()
-
 ## ------------------------------------------------------- ##
-# Step 4: Combine with non-annual data
+# Step 4: Combine static (non-annual) data
 ## ------------------------------------------------------- ##
-spatial_drivers_no_years <- spatial_drivers[, ..non_year_columns]
-spatial_drivers_no_years[, Stream_ID := spatial_drivers$Stream_ID]
 
-spatial_drivers_no_years <- spatial_drivers_no_years[!duplicated(Stream_ID)]
-spatial_drivers_wide <- spatial_drivers_wide[!duplicated(Stream_ID)]
+# Ensure static data is merged properly
+spatial_drivers_no_years <- spatial_drivers[, ..non_year_columns] %>%
+  distinct(Stream_ID, .keep_all = TRUE)  # Remove duplicates by Stream_ID
 
 combined_spatial_drivers <- merge(
   spatial_drivers_wide,
   spatial_drivers_no_years,
   by = "Stream_ID",
-  all.x = TRUE,
-  allow.cartesian = TRUE
+  all.x = TRUE
 )
 
-combined_spatial_drivers <- combined_spatial_drivers[!duplicated(combined_spatial_drivers), ]
-
-## ------------------------------------------------------- ##
-# Step 5: Add greenup data (cycle0)
-## ------------------------------------------------------- ##
-greenup_long <- list()
-
-for (cycle in greenup_cycles) {
-  cycle_doy_cols <- grep(paste0("greenup_", cycle, ".*_doy$"), colnames(spatial_drivers), value = TRUE)
-  if (length(cycle_doy_cols) > 0) {
-    greenup_long[[cycle]] <- spatial_drivers %>%
-      select(Stream_ID, all_of(cycle_doy_cols)) %>%
-      pivot_longer(
-        cols = all_of(cycle_doy_cols),
-        names_to = "variable",
-        values_to = "greenup_day"
-      ) %>%
-      mutate(
-        year = as.integer(sub(".*_(\\d{4}).*", "\\1", variable))
-      ) %>%
-      select(Stream_ID, year, greenup_day)
-  } else {
-    warning(paste("No matching columns found for cycle:", cycle))
-  }
-}
-
-greenup_df <- bind_rows(greenup_long$cycle0)
-
-# Merge greenup data with combined spatial drivers
+# Rename "year" to "Year" in combined_spatial_drivers
 combined_spatial_drivers <- combined_spatial_drivers %>%
-  left_join(greenup_df %>% rename(Year = year), by = c("Stream_ID", "Year"), relationship = "many-to-many")
+  rename(Year = year)
 
 ## ------------------------------------------------------- ##
-# Step 6: Final join with `tot`
+# Step 5: Final merge to consolidate all rows by site and year
 ## ------------------------------------------------------- ##
-setDT(tot)
-chunk_size <- 10000
-tot_chunks <- split(tot, ceiling(seq_len(nrow(tot)) / chunk_size))
 
-final_combined_data <- rbindlist(
-  lapply(tot_chunks, function(chunk) {
-    merge(chunk, combined_spatial_drivers, by = c("Stream_ID", "Year"), all.x = TRUE)
-  }),
-  use.names = TRUE, fill = TRUE
-)
+# Merge with `tot` and consolidate rows by site and year
+final_combined_data <- merge(
+  tot,
+  combined_spatial_drivers,
+  by = c("Stream_ID", "Year"),
+  all.x = TRUE
+) %>%
+  group_by(Stream_ID, Year) %>%  # Group by site and year
+  summarise(across(everything(), ~ ifelse(all(is.na(.)), NA, first(na.omit(.))))) %>%
+  ungroup()
 
 gc()
 
@@ -390,6 +368,10 @@ tot <- tot %>%
 ## ------------------------------------------------------- ##
 # Read and prepare data
 mapped_lithologies <- fread("mapped_lithologies.csv")
+
+# Convert `tot` and `mapped_lithologies` to data.tables
+setDT(tot)
+setDT(mapped_lithologies)
 
 # Ensure compatibility in the major_rock column for merging
 tot[, major_rock := as.character(major_rock)]
