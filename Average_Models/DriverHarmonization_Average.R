@@ -184,7 +184,7 @@ tot <- tot %>%
 ## ------------------------------------------------------- ##
             # Import Spatial Drivers ----
 ## ------------------------------------------------------- ##
-spatial_drivers <- read.csv("all-data_si-extract_2_20240802.csv", stringsAsFactors = FALSE) %>%
+spatial_drivers <- read.csv("all-data_si-extract_2_202412_test.csv", stringsAsFactors = FALSE) %>%
   select(-contains("soil"))
 spatial_drivers$Stream_ID <- paste0(spatial_drivers$LTER, "__", spatial_drivers$Stream_Name)
 
@@ -226,7 +226,7 @@ site_mean <- list()
 
 for (i in 1:length(drivers_list_quant)) {
   drive_cols <- grep(drivers_list_quant[i], colnames(spatial_drivers))
-  one_driver <- spatial_drivers[,c(288, drive_cols)]
+  one_driver <- spatial_drivers[,c(293, drive_cols)]
   site_mean[[i]] <- rowMeans(one_driver[,c(2:length(one_driver))], na.rm = TRUE)
 }
 
@@ -247,12 +247,12 @@ greenup_mean <- list()
 stream_id <- c("Stream_ID")
 for (i in 1:length(greenup)) {
   drive_cols <- grep(greenup[i], colnames(spatial_drivers))
-  one_driver <- spatial_drivers[,c(288, drive_cols)]
+  one_driver <- spatial_drivers[,c(293, drive_cols)]
   one_driver <- one_driver[!duplicated(one_driver$Stream_ID),]
   
   driver_melt <- melt(one_driver, id.vars=stream_id)
   
-  driver_melt$doy <- yday(as.Date(driver_melt$value, "%Y-%m-%d"))
+  driver_melt$doy <- yday(as.Date(driver_melt$value, "%m/%d/%Y"))
   one_driver <- dcast(driver_melt, Stream_ID~variable, value.var = "doy")
   greenup_mean[[i]] <- rowMeans(one_driver[,c(2:length(one_driver))], na.rm = TRUE)
 }

@@ -145,7 +145,7 @@ tot <- subset(tot, chemical == "DSi")
 ## ------------------------------------------------------- ##
 # Step 1: Load and preprocess spatial drivers
 ## ------------------------------------------------------- ##
-spatial_drivers <- fread("all-data_si-extract_2_20240802.csv")  # Use fread for faster loading
+spatial_drivers <- fread("all-data_si-extract_2_202412_test.csv")  # Use fread for faster loading
 spatial_drivers[, Stream_ID := paste0(LTER, "__", Stream_Name)]
 spatial_drivers <- spatial_drivers[, !c("Shapefile_Name", "Discharge_File_Name"), with = FALSE]
 spatial_drivers <- spatial_drivers[, !grepl("soil|major", names(spatial_drivers)), with = FALSE]
@@ -162,8 +162,8 @@ for (cycle in greenup_cycles) {
   cycle_cols <- grep(paste0("greenup_", cycle), colnames(spatial_drivers), value = TRUE)
   for (col in cycle_cols) {
     spatial_drivers[[paste0(col, "_doy")]] <- ifelse(
-      !is.na(as.Date(spatial_drivers[[col]], format = "%Y-%m-%d")),
-      yday(as.Date(spatial_drivers[[col]], format = "%Y-%m-%d")),
+      !is.na(as.Date(spatial_drivers[[col]], format = "%m/%d/%Y")),
+      yday(as.Date(spatial_drivers[[col]], format = "%m/%d/%Y")),
       NA_real_
     )
   }
@@ -190,6 +190,8 @@ spatial_drivers_long <- melt(
   variable.name = "variable",
   value.name = "value"
 )
+
+setDT(spatial_drivers_long)
 
 spatial_drivers_long[, `:=`(
   driver_type = fifelse(
