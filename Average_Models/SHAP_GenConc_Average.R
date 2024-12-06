@@ -74,6 +74,9 @@ create_shap_partial_dependence_plots <- function(shap_data, drivers_df, output_d
     driver_data <- driver_data %>%
       mutate(color_value = drivers_df[[color_var]][row_id])
     
+    # Add the log scale for select drivers
+    log_scaled_drivers <- c("drainage_area", "q_5", "evapotrans", "silicate_weathering")
+    
     # Create the SHAP-based partial dependence plot
     shap_pdp_plot <- ggplot(driver_data, aes(x = value, y = phi, color = color_value)) +
       geom_point(alpha = 0.6) +
@@ -81,11 +84,15 @@ create_shap_partial_dependence_plots <- function(shap_data, drivers_df, output_d
       geom_hline(yintercept = 0, color = "darkred", linetype = "dashed", size = 1) +  # Add a dark red dashed line at y = 0
       labs(
         title = paste("SHAP Partial Dependence Plot for", driver),
-        x = paste("Value of", driver),
+        x = ifelse(driver %in% log_scaled_drivers, paste("log(", driver, ")", sep = ""), paste("Value of", driver)),
         y = "SHAP Value"
       ) +
       theme_minimal() +
-      theme(plot.title = element_text(size = 16, face = "bold"))
+      theme(plot.title = element_text(size = 16, face = "bold")) +
+      # Apply log scale if the driver is in log_scaled_drivers
+      if (driver %in% log_scaled_drivers) {
+        scale_x_log10()
+      }
     
     # Print the plot to the PDF
     print(shap_pdp_plot)

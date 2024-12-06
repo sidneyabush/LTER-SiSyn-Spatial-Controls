@@ -149,7 +149,7 @@ tot <- subset(tot, chemical == "DSi")
 ## ------------------------------------------------------- ##
 # Step 1: Load and preprocess spatial drivers
 ## ------------------------------------------------------- ##
-spatial_drivers <- fread("all-data_si-extract_2_202412_test.csv")  # Use fread for faster loading
+spatial_drivers <- fread("all-data_si-extract_2_202412.csv")  # Use fread for faster loading
 spatial_drivers[, Stream_ID := paste0(LTER, "__", Stream_Name)]
 spatial_drivers <- spatial_drivers[, !c("Shapefile_Name", "Discharge_File_Name"), with = FALSE]
 spatial_drivers <- spatial_drivers[, !grepl("soil", names(spatial_drivers)), with = FALSE]

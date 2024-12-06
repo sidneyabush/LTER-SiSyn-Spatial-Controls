@@ -184,7 +184,7 @@ tot <- tot %>%
 ## ------------------------------------------------------- ##
             # Import Spatial Drivers ----
 ## ------------------------------------------------------- ##
-spatial_drivers <- read.csv("all-data_si-extract_2_202412_test.csv", stringsAsFactors = FALSE) %>%
+spatial_drivers <- read.csv("all-data_si-extract_2_202412.csv", stringsAsFactors = FALSE) %>%
   select(-contains("soil"))
 spatial_drivers$Stream_ID <- paste0(spatial_drivers$LTER, "__", spatial_drivers$Stream_Name)
 

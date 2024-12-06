@@ -102,29 +102,6 @@ corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag =
 title("Annual Gen Si Concentration")  # Add title in the PDF
 dev.off()
 
-library(doParallel)
-library(foreach)
-
-# Set up parallel backend
-cl <- makeCluster(detectCores() - 1)  # Use all but one core
-registerDoParallel(cl)
-
-test_numtree_average_parallel <- function(ntree_list) {
-  MSE <- foreach(ntree = ntree_list, .combine = c, .packages = "randomForest") %dopar% {
-    set.seed(123)
-    rf_model <- randomForest(GenConc ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = ntree)
-    rf_model$mse
-  }
-  return(MSE)
-}
-
-# Run parallel version
-MSE_list <- test_numtree_average_parallel(c(100, 200, 300, 400, 500, 600, 700, 800, 900, 1000))
-
-# Stop the cluster
-stopCluster(cl)
-
-
 # Global seed before testing different numbers of trees (ntree) ----
 set.seed(123)
 MSE_list <- test_numtree_average(c(100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000))
