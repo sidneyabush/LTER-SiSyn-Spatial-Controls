@@ -266,8 +266,21 @@ for (i in 1:(cv_repeats * cv_number)) {
 }
 seeds[[total_repeats]] <- 123
 
+
 # control <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = cv_repeats, number = cv_number, seeds = seeds, verbose = TRUE)
 control <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = 5, number = 5, verbose = FALSE)
+
+# Try a smaller subset of features (e.g., only the first 10 features)----
+x_small <- drivers_df[, 2:11]
+y_small <- drivers_df$GenConc
+
+# Run RFE with a smaller dataset
+set.seed(123)
+result_rfe_small <- rfe(x = x_small, y = y_small, sizes = c(1:10), rfeControl = control)
+
+# View the result
+print(result_rfe_small)
+
 
 # Divide data into predictor variables (x) and response variable (y)
 x <- drivers_df[, !(colnames(drivers_df) == "GenConc")]
