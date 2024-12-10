@@ -269,17 +269,29 @@ wrtds_NP <- wrtds_df %>%
   filter(chemical %in% c("P", "NO3", "NOx"), GenConc > 0) %>%  # Removes NAs and zero values
   mutate(chemical = ifelse(chemical %in% c("NOx", "NO3"), "NOx", chemical))
 
-# Summarize to get the median GenConc by Stream_ID, Year, and simplified chemical with NA removal
-wrtds_NP_annual <- wrtds_NP %>%
-  group_by(Stream_ID, Year, chemical) %>%
-  summarise(
-    median_Conc = median(GenConc, na.rm = TRUE),  # Ensures NAs are ignored in median calculation
-    .groups = 'drop'
+# Reshape data to ensure NOx and P values are in the same row
+wrtds_NP_annual_wide <- wrtds_NP %>%
+  pivot_wider(
+    id_cols = c(Stream_ID, Year),  # Keep Stream_ID and Year as unique identifiers
+    names_from = chemical,         # Create separate columns for NOx and P
+    values_from = GenConc          # Values for NOx and P come from GenConc
   )
 
-# Reshape data to have separate columns for NOx and P
-wrtds_NP_annual_wide <- wrtds_NP_annual %>%
-  pivot_wider(names_from = chemical, values_from = median_Conc)
+# Find duplicates in the wide dataframe
+duplicates <- wrtds_NP_annual_wide %>%
+  group_by(Stream_ID, Year) %>%
+  filter(n() > 1)  # Keep rows where there are duplicate Stream_ID-Year combinations
+
+# Print duplicates for review
+print(duplicates)
+
+# Optional: Count the number of duplicates
+duplicate_count <- duplicates %>%
+  summarize(duplicate_count = n())
+
+# Print the count of duplicates
+print(duplicate_count)
+
 
 gc()
 
@@ -305,14 +317,32 @@ tot <- tot %>%
 # ## ------------------------------------------------------- ##
 #           # Import WRTDS N_P Data ---- 
 # ## ------------------------------------------------------- ##
-# Filter for relevant chemicals (N and P) and positive GenConc values, simplify NO3/NOx to NOx
+# Filter for relevant chemicals (N and P) and simplify NO3/NOx to NOx
 wrtds_NP <- wrtds_df %>%
-  filter(chemical %in% c("P", "NO3", "NOx"), GenConc > 0) %>%  # Removes NAs and zero values
-  mutate(chemical = ifelse(chemical %in% c("NOx", "NO3"), "NOx", chemical))
+  filter(chemical %in% c("P", "NO3", "NOx") & GenConc > 0) %>%  # Keep only positive GenConc
+  mutate(
+    chemical = ifelse(chemical %in% c("NOx", "NO3"), "NOx", chemical)  # Simplify to NOx
+  )
 
-# Reshape data to have separate columns for NOx and P
+# Handle duplicates by taking the median
+wrtds_NP <- wrtds_NP %>%
+  group_by(Stream_ID, Year, chemical) %>%  # Group by unique combinations
+  summarise(
+    GenConc = median(GenConc, na.rm = TRUE),  # Take the median if duplicates exist
+    .groups = "drop"  # Ungroup after summarizing
+  )
+
+# Reshape data to wide format
 wrtds_NP_wide <- wrtds_NP %>%
-  pivot_wider(names_from = chemical, values_from = GenConc)
+  pivot_wider(
+    id_cols = c(Stream_ID, Year),  # Group by Stream_ID and Year
+    names_from = chemical,         # Create separate columns for NOx and P
+    values_from = GenConc,         # Populate these columns with GenConc values
+    values_fill = list(GenConc = NA)  # Fill missing combinations with NA
+  )
+
+# Verify structure after reshaping
+str(wrtds_NP_wide)
 
 gc()
 
@@ -322,35 +352,42 @@ setDT(wrtds_NP_wide)
 tot <- final_combined_data %>%
   left_join(wrtds_NP_wide, by = c("Stream_ID", "Year"))
 
+str(tot)
+
+
 # ## ------------------------------------------------------- ##
 #           # Import RAW N_P Data ---- 
 # ## ------------------------------------------------------- ##
 # Read in the dataset
 raw_NP <- read.csv("20241003_masterdata_chem.csv")
 
-# Step 1: Filter for relevant variables and valid values, extract Year
-raw_NP <- raw_NP %>%
-  filter(variable %in% c("SRP", "PO4", "NO3", "NOx") & value > 0) %>%
-  mutate(Year = as.integer(year(as.Date(date, format = "%Y-%m-%d"))))
+# Step 1: Filter, create Stream_ID, simplify solutes, and calculate median
+raw_NP_median <- raw_NP %>%
+  mutate(
+    Year = as.integer(year(as.Date(date, format = "%Y-%m-%d"))),  # Extract Year from date
+    Stream_ID = paste(LTER, Stream_Name, sep = "__"),              # Create Stream_ID by combining LTER and Stream_Name
+    solute_simplified = case_when(  # Simplify solutes into NOx and P categories
+      variable %in% c("NOx", "NO3") ~ "NOx",
+      variable %in% c("SRP", "PO4") ~ "P",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(solute_simplified)) %>%  # Keep only relevant solutes (NOx, P)
+  group_by(Stream_ID, Year, solute_simplified) %>%  # Group by Stream_ID, year, and solute
+  summarise(
+    median_value = median(value, na.rm = TRUE),  # Calculate median value
+    .groups = "drop"  # Ungroup after summarizing
+  )
 
-# Step 2: Rename sites using a lookup table and update stream names
-raw_NP <- raw_NP %>%
-  left_join(name_conversion, by = "Stream_Name") %>%
-  mutate(Stream_Name = coalesce(Updated_StreamName, Stream_Name)) %>%
-  select(-Updated_StreamName)
+# Step 2: Reshape the data to wide format
+raw_NP_wide <- raw_NP_median %>%
+  pivot_wider(
+    names_from = solute_simplified,  # Create columns for NOx and P
+    values_from = median_value,      # Populate these columns with the median values
+    values_fill = list(median_value = NA)  # Fill missing combinations with NA
+  )
 
-# Step 3: Simplify variable names for NOx and SRP to NOx and P
-raw_NP <- raw_NP %>%
-  mutate(solute_simplified = case_when(
-    variable %in% c("NOx", "NO3") ~ "NOx",
-    variable %in% c("SRP", "PO4") ~ "P",
-    TRUE ~ variable
-  ))
-
-# Step 4: Reshape to wide format with one column per solute (NOx, P)
-raw_NP_wide <- raw_NP %>%
-  select(Stream_Name, Year, solute_simplified, value) %>%
-  pivot_wider(names_from = solute_simplified, values_from = value)
+str(raw_NP_wide)
 
 # ## ------------------------------------------------------- ##
 #           # Match Data by Year ---- 
@@ -360,15 +397,33 @@ solutes <- c("P", "NOx")
 
 for (solute in solutes) {
   raw_solute <- raw_NP_wide %>%
-    select(Stream_Name, Year, !!sym(solute)) %>%
+    select(Stream_ID, Year, !!sym(solute)) %>%
     rename(raw_solute = !!sym(solute))
   
   tot <- tot %>%
     mutate(Year = as.numeric(Year)) %>%  # Ensure Year is numeric for consistent merging
-    left_join(raw_solute, by = c("Stream_Name", "Year")) %>%
+    left_join(raw_solute, by = c("Stream_ID", "Year")) %>%
     mutate(!!sym(solute) := ifelse(is.na(!!sym(solute)), raw_solute, !!sym(solute))) %>%
     select(-raw_solute)  # Remove the temporary column
 }
+
+str(tot)
+
+# Check for duplicates in the `tot` dataframe
+duplicates_tot <- tot %>%
+  group_by(Stream_ID, Year) %>% 
+  filter(n() > 1)  # Keep only duplicated Stream_ID-Year combinations
+
+# Print the duplicates for review
+print(duplicates_tot)
+
+# Count the number of duplicates
+num_duplicates <- duplicates_tot %>% 
+  summarise(count = n()) %>% 
+  ungroup()
+
+print(num_duplicates)
+
 
 ## ------------------------------------------------------- ##
             #  Silicate Weathering ----
@@ -562,6 +617,21 @@ tot_si <- tot %>%
          basin_slope_mean_degree, contains("Q"),
          contains("Conc"), contains("Yield"),
          contains("rock"), contains("land"))
+
+duplicates <- tot_si %>%
+  group_by(Stream_ID, Year) %>%
+  filter(n() > 1)
+
+
+if (nrow(duplicates) > 0) {
+  print("Duplicates detected:")
+  print(duplicates)
+} else {
+  print("No duplicates detected.")
+}
+
+tot_si <- tot_si %>%
+  distinct(Stream_ID, Year, .keep_all = TRUE)
 
 ## ------------------------------------------------------- ##
 #  Export Annual Driver data ----

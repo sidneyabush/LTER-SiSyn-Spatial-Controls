@@ -68,6 +68,7 @@ drivers_df <- read.csv("AllDrivers_Harmonized_Yearly.csv") %>%
   mutate(across(where(is.integer), as.numeric)) %>%
   select(GenConc, everything()) %>%
   select(-Stream_ID) %>%
+  filter(GenConc <= 60) %>%  # Remove rows where GenConc > 60
   drop_na()
 
 # Plot and save correlation matrix ----
@@ -92,6 +93,7 @@ ggplot(MSE_df_rf1, aes(ntree, mean_MSE)) +
   theme_classic() + 
   scale_x_continuous(breaks = seq(100, 2000, 100)) + 
   theme(text = element_text(size = 20))
+
 
 # Manually select ntree for rf_model1 ----
 manual_ntree_rf1 <- 2000  # Replace with your chosen value
@@ -147,6 +149,7 @@ test_numtree_average <- function(ntree_list) {
     rf_model <- randomForest(GenConc ~ ., data = drivers_df, importance = TRUE, proximity = FALSE, ntree = ntree)
     rf_model$mse
   }
+  
   
   # Stop the parallel cluster
   stopCluster(cl)
