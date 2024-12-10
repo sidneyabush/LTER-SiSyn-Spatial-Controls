@@ -5,7 +5,7 @@
 ## Sidney A Bush, Keira Johnson
 
 # Load needed libraries
-librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr)
+librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr, httr, readxl)
 
 # Clear environment
 rm(list = ls())
@@ -55,13 +55,24 @@ wrtds_df$Stream_ID <- ifelse(wrtds_df$Stream_ID=="Finnish Environmental Institut
 ## ------------------------------------------------------- ##
       # Download Reference Table from GD for DA ----
 ## ------------------------------------------------------- ##
-ref_table_link <- "https://docs.google.com/spreadsheets/d/11t9YYTzN_T12VAQhHuY5TpVjGS50ymNmKznJK4rKTIU/edit#gid=357814834"
-ref_table_folder = drive_get(as_id(ref_table_link))
-ref_table <- drive_download(ref_table_folder$drive_resource, overwrite = T)
 
-ref_table <- readxl::read_xlsx("Site_Reference_Table.xlsx")
+# Define the URL for the Google Sheets document
+ref_table_link <- "https://docs.google.com/spreadsheets/d/11t9YYTzN_T12VAQhHuY5TpVjGS50ymNmKznJK4rKTIU/export?format=xlsx"
+
+# Download the file
+response <- GET(ref_table_link)
+
+# Save the file locally
+file_path <- "Site_Reference_Table.xlsx"
+writeBin(content(response, "raw"), file_path)
+
+# Read the Excel file
+ref_table <- read_xlsx(file_path)
+
+# Process the reference table
 ref_table$Stream_ID <- paste0(ref_table$LTER, "__", ref_table$Stream_Name)
-area <- ref_table[,c("drainSqKm", "Stream_ID")]
+area <- ref_table[, c("drainSqKm", "Stream_ID")]
+
 
 # Define renamed and old names directly
 name_conversion <- data.frame(
@@ -301,70 +312,72 @@ tot <- tot %>%
   rename(Stream_Name = Stream_Name.x)
 
 # ## ------------------------------------------------------- ##
-#           # Import RAW N_P Conc ---- 
+#           # Import WRTDS N_P Data ---- 
+# ## ------------------------------------------------------- ##
+# Filter for relevant chemicals (N and P) and positive GenConc values, simplify NO3/NOx to NOx
+wrtds_NP <- wrtds_df %>%
+  filter(chemical %in% c("P", "NO3", "NOx"), GenConc > 0) %>%  # Removes NAs and zero values
+  mutate(chemical = ifelse(chemical %in% c("NOx", "NO3"), "NOx", chemical))
+
+# Reshape data to have separate columns for NOx and P
+wrtds_NP_wide <- wrtds_NP %>%
+  pivot_wider(names_from = chemical, values_from = GenConc)
+
+gc()
+
+setDT(wrtds_NP_wide)
+
+# Merge with the "tot" dataframe to add annual NOx and P data
+tot <- final_combined_data %>%
+  left_join(wrtds_NP_wide, by = c("Stream_ID", "Year"))
+
+# ## ------------------------------------------------------- ##
+#           # Import RAW N_P Data ---- 
 # ## ------------------------------------------------------- ##
 # Read in the dataset
 raw_NP <- read.csv("20241003_masterdata_chem.csv")
 
-# Step 1: Filter for Nitrogen and Phosphorus variables with valid values, extract Year, and keep only years with >5 values
+# Step 1: Filter for relevant variables and valid values, extract Year
 raw_NP <- raw_NP %>%
   filter(variable %in% c("SRP", "PO4", "NO3", "NOx") & value > 0) %>%
-  mutate(Year = as.integer(year(as.Date(date, format = "%Y-%m-%d")))) %>%
-  group_by(Stream_Name, Year) %>%
-  filter(n() > 5) %>%  # Keep only Stream_ID and Year combinations with more than 5 values
-  ungroup()
+  mutate(Year = as.integer(year(as.Date(date, format = "%Y-%m-%d"))))
 
-# Step 2: Calculate annual median N and P values, removing NAs before calculating
-raw_NP_avg <- raw_NP %>%
-  group_by(Stream_Name, Year, variable) %>%
-  summarise(annual_median_Conc = median(value, na.rm = TRUE), .groups = "drop")
-
-# Step 3: Get unique stream-variable combinations for units
-raw_NP_units <- raw_NP %>%
-  select(Stream_Name, variable, units) %>%
-  distinct()
-
-# Step 4: Merge annual average values with units
-raw_NP_avg <- raw_NP_avg %>%
-  left_join(raw_NP_units, by = c("Stream_Name", "variable"))
-
-# Step 5: Rename sites using a lookup table and update stream names
-name_conversion <- data.frame(
-  Stream_Name = c("east fork", "west fork"),
-  Updated_StreamName = c("East Fork", "West Fork")
-)
-
-raw_NP_avg <- raw_NP_avg %>%
+# Step 2: Rename sites using a lookup table and update stream names
+raw_NP <- raw_NP %>%
   left_join(name_conversion, by = "Stream_Name") %>%
   mutate(Stream_Name = coalesce(Updated_StreamName, Stream_Name)) %>%
   select(-Updated_StreamName)
 
-# Step 6: Simplify variable names for NOx and SRP to NOx and P
-raw_NP_avg <- raw_NP_avg %>%
-  mutate(solute_simplified = ifelse(variable %in% c("NOx", "NO3"), "NOx", "P"))
+# Step 3: Simplify variable names for NOx and SRP to NOx and P
+raw_NP <- raw_NP %>%
+  mutate(solute_simplified = case_when(
+    variable %in% c("NOx", "NO3") ~ "NOx",
+    variable %in% c("SRP", "PO4") ~ "P",
+    TRUE ~ variable
+  ))
 
-# Step 7: Average values for streams that switched between NO3 and NOx reporting
-raw_NP_avg_final <- raw_NP_avg %>%
-  group_by(Stream_Name, Year, solute_simplified) %>%
-  summarise(annual_median_Conc = median(annual_median_Conc, na.rm = TRUE), .groups = "drop")
+# Step 4: Reshape to wide format with one column per solute (NOx, P)
+raw_NP_wide <- raw_NP %>%
+  select(Stream_Name, Year, solute_simplified, value) %>%
+  pivot_wider(names_from = solute_simplified, values_from = value)
 
-# Step 8: Ensure unique stream-solute-year combinations
-raw_NP_avg_final <- raw_NP_avg_final %>%
-  distinct(Stream_Name, Year, solute_simplified, .keep_all = TRUE)
+# ## ------------------------------------------------------- ##
+#           # Match Data by Year ---- 
+# ## ------------------------------------------------------- ##
+# Merge raw N, P data into `tot`, matching years and replacing missing values
+solutes <- c("P", "NOx")
 
-# Step 9: Filter `raw_NP_avg_final` for the "P" solute
-raw_P <- raw_NP_avg_final %>%
-  filter(solute_simplified == "P") %>%
-  select(Stream_Name, Year, annual_median_Conc) %>%
-  rename(raw_P = annual_median_Conc)
-
-# Convert Year to numeric in tot to match the type in raw_P
-tot <- tot %>%
-  mutate(Year = as.numeric(Year)) %>%  # Convert Year to numeric
-  # Join and replace NA values in P with raw_P values where applicable
-  left_join(raw_P, by = c("Stream_Name", "Year")) %>%
-  mutate(P = ifelse(is.na(P), raw_P, P)) %>%  # Replace NA values in P with raw_P values
-  select(-raw_P)  # Remove the temporary raw_P column
+for (solute in solutes) {
+  raw_solute <- raw_NP_wide %>%
+    select(Stream_Name, Year, !!sym(solute)) %>%
+    rename(raw_solute = !!sym(solute))
+  
+  tot <- tot %>%
+    mutate(Year = as.numeric(Year)) %>%  # Ensure Year is numeric for consistent merging
+    left_join(raw_solute, by = c("Stream_Name", "Year")) %>%
+    mutate(!!sym(solute) := ifelse(is.na(!!sym(solute)), raw_solute, !!sym(solute))) %>%
+    select(-raw_solute)  # Remove the temporary column
+}
 
 ## ------------------------------------------------------- ##
             #  Silicate Weathering ----
