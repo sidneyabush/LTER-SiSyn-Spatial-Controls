@@ -266,28 +266,16 @@ for (i in 1:(cv_repeats * cv_number)) {
 }
 seeds[[total_repeats]] <- 123
 
-
-# control <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = cv_repeats, number = cv_number, seeds = seeds, verbose = TRUE)
-control <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = 5, number = 5, verbose = FALSE)
-
-# Try a smaller subset of features (e.g., only the first 10 features)----
-x_small <- drivers_df[, 2:11]
-y_small <- drivers_df$GenConc
-
-# Run RFE with a smaller dataset
-set.seed(123)
-result_rfe_small <- rfe(x = x_small, y = y_small, sizes = c(1:10), rfeControl = control)
-
-# View the result
-print(result_rfe_small)
-
+control <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = cv_repeats, 
+                      number = cv_number, verbose = TRUE, allowParallel = FALSE)
 
 # Divide data into predictor variables (x) and response variable (y)
 x <- drivers_df[, !(colnames(drivers_df) == "GenConc")]
 y <- drivers_df$GenConc
 
 sink(NULL)  # Reset output sink
-closeAllConnections()  # Close any open connections
+closeAllConnections()  # Close all connections
+dev.off()  # Close any open graphic devices
 
 # Run RFE to select the best features ----
 set.seed(123)
@@ -329,7 +317,7 @@ tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 2000, stepFactor = 1, improve =
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
-rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 6)
+rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 5)
 
 # Visualize output for rf_model2
 print(rf_model2)
@@ -337,7 +325,7 @@ randomForest::varImpPlot(rf_model2)
 
 # Generate plots comparing predicted vs observed ----
 lm_plot <- plot(rf_model2$predicted, drivers_df$GenConc, pch = 16, cex = 1.5,
-                xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers - Gen Concentration",
+                xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers - Yearly Gen Concentration",
                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
   theme(text = element_text(size = 40), face = "bold")
@@ -353,57 +341,3 @@ save(rf_model2, file = "GenConc_Yearly_rf_model2.RData")
 kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
 save(kept_drivers, file = "GenConc_Yearly_kept_drivers.RData")
 save(drivers_df, file = "GenConc_Yearly_drivers_df.RData")
-
-
-rf_model1 <- randomForest(GenConc ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = manual_ntree_rf1, mtry = manual_mtry_rf1)
-
-# Perform RFE to select features for rf_model2 ----
-x <- drivers_df[, !(colnames(drivers_df) == "GenConc")]
-y <- drivers_df$GenConc
-control <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = 5, number = 5, verbose = FALSE)
-
-set.seed(123)
-result_rfe <- rfe(x = x, y = y, sizes = c(1:ncol(x)), rfeControl = control)
-selected_features <- predictors(result_rfe)
-rf_formula <- as.formula(paste("GenConc ~", paste(selected_features, collapse = " + ")))
-
-# Test different ntree values for rf_model2 ----
-MSE_list_rf2 <- test_numtree_parallel(ntree_values, rf_formula, drivers_df)
-
-# Visualize MSE results for rf_model2 ----
-MSE_df_rf2 <- data.frame(
-  ntree = ntree_values,
-  mean_MSE = sapply(MSE_list_rf2, mean)
-)
-
-ggplot(MSE_df_rf2, aes(ntree, mean_MSE)) + 
-  geom_point() + 
-  geom_line() + 
-  theme_classic() + 
-  scale_x_continuous(breaks = seq(100, 2000, 100)) + 
-  theme(text = element_text(size = 20))
-
-# Manually select ntree for rf_model2 ----
-manual_ntree_rf2 <- 1200  # Replace with your chosen value
-
-# Tune mtry for rf_model2 ----
-tuneRF(drivers_df[, selected_features], drivers_df[, 1], ntreeTry = manual_ntree_rf2, stepFactor = 1, improve = 0.5, plot = TRUE)
-
-# Manually select mtry for rf_model2 ----
-manual_mtry_rf2 <- 8  # Replace with your chosen value
-
-# Fit rf_model2 ----
-set.seed(123)
-rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = manual_ntree_rf2, mtry = manual_mtry_rf2)
-
-# Visualize and save RF variable importance plot for rf_model2 ----
-save_rf_importance_plot(rf_model2, output_dir)
-
-# Visualize and save LM plot for rf_model2 ----
-save_lm_plot(rf_model2, drivers_df$GenConc, output_dir)
-
-# Save final model and required objects for SHAP analysis ----
-save(rf_model2, file = "GenConc_Yr_rf_model2.RData")
-kept_drivers <- drivers_df[, colnames(drivers_df) %in% selected_features]
-save(kept_drivers, file = "GenConc_Yr_kept_drivers.RData")
-save(drivers_df, file = "GenConc_Yr_drivers_df.RData")
