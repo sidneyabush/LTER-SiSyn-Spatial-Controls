@@ -5,7 +5,7 @@
 ## Sidney A Bush, Keira Johnson
 
 # Load needed libraries
-librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr, httr, readxl)
+librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr, stringr, readr)
 
 # Clear environment
 rm(list = ls())
@@ -53,26 +53,17 @@ wrtds_df$Stream_ID <- ifelse(wrtds_df$Stream_ID=="Finnish Environmental Institut
                            "Finnish Environmental Institute__SIMOJOKI AS. 13500", wrtds_df$Stream_ID)
 
 ## ------------------------------------------------------- ##
-      # Download Reference Table from GD for DA ----
+# Download Reference Table from GD for DA ----
 ## ------------------------------------------------------- ##
+# ref_table_link <- "https://docs.google.com/spreadsheets/d/11t9YYTzN_T12VAQhHuY5TpVjGS50ymNmKznJK4rKTIU/edit#gid=357814834"
+# ref_table_folder = drive_get(as_id(ref_table_link))
+# ref_table <- drive_download(ref_table_folder$drive_resource, overwrite = T)
+# 
+# ref_table <- readxl::read_xlsx("Site_Reference_Table.xlsx")
 
-# Define the URL for the Google Sheets document
-ref_table_link <- "https://docs.google.com/spreadsheets/d/11t9YYTzN_T12VAQhHuY5TpVjGS50ymNmKznJK4rKTIU/export?format=xlsx"
-
-# Download the file
-response <- GET(ref_table_link)
-
-# Save the file locally
-file_path <- "Site_Reference_Table.xlsx"
-writeBin(content(response, "raw"), file_path)
-
-# Read the Excel file
-ref_table <- read_xlsx(file_path)
-
-# Process the reference table
+ref_table <- read.csv("Site_Reference_Table - WRTDS_Reference_Table_LTER_V2.csv")
 ref_table$Stream_ID <- paste0(ref_table$LTER, "__", ref_table$Stream_Name)
-area <- ref_table[, c("drainSqKm", "Stream_ID")]
-
+area <- ref_table[,c("drainSqKm", "Stream_ID")]
 
 # Define renamed and old names directly
 name_conversion <- data.frame(
@@ -466,9 +457,6 @@ tryCatch({
 })
 
 # Clean up memory
-gc()
-
-
 gc()
 
 ## ------------------------------------------------------- ##
