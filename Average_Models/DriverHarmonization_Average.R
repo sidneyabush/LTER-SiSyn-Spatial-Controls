@@ -91,11 +91,15 @@ tot <- si_stats %>%
 ## ------------------------------------------------------- ##
     # Download Reference Table from GD for DA ----
 ## ------------------------------------------------------- ##
-ref_table_link <- "https://docs.google.com/spreadsheets/d/11t9YYTzN_T12VAQhHuY5TpVjGS50ymNmKznJK4rKTIU/edit#gid=357814834"
-ref_table_folder = drive_get(as_id(ref_table_link))
-ref_table <- drive_download(ref_table_folder$drive_resource, overwrite = T)
+# ref_table_link <- "https://docs.google.com/spreadsheets/d/11t9YYTzN_T12VAQhHuY5TpVjGS50ymNmKznJK4rKTIU/edit#gid=357814834"
+# ref_table_folder = drive_get(as_id(ref_table_link))
+# ref_table <- drive_download(ref_table_folder$drive_resource, overwrite = T)
+# 
+# ref_table <- readxl::read_xlsx("Site_Reference_Table.xlsx")
+# ref_table$Stream_ID <- paste0(ref_table$LTER, "__", ref_table$Stream_Name)
+# area <- ref_table[,c("drainSqKm", "Stream_ID")]
 
-ref_table <- readxl::read_xlsx("Site_Reference_Table.xlsx")
+ref_table <- read.csv("Site_Reference_Table - WRTDS_Reference_Table_LTER_V2.csv")
 ref_table$Stream_ID <- paste0(ref_table$LTER, "__", ref_table$Stream_Name)
 area <- ref_table[,c("drainSqKm", "Stream_ID")]
 
@@ -191,9 +195,6 @@ spatial_drivers$Stream_ID <- paste0(spatial_drivers$LTER, "__", spatial_drivers$
 ## Before, using full abbrevs removed some of the spatial driver columns (e.g., "dec" in "deciduous" was causing
 #  deciduous land cover to be filtered out)
 months_abb <- c("_jan_|_feb_|_mar_|_apr_|_may_|_jun_|_jul_|_aug_|_sep_|_oct_|_nov_|_dec_")
-
-# ## Pull out the monthly drivers, plus the column that contains "Stream_ID"
-# monthly_drivers <- spatial_drivers[,c(361,which(colnames(spatial_drivers) %like% months_abb))]
 
 # Remove monthly drivers from spatial drivers
 spatial_drivers <- spatial_drivers[,-c(which(colnames(spatial_drivers) %like% months_abb))]

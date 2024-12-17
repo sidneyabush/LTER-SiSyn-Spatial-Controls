@@ -83,15 +83,22 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 drivers_df <- read.csv("AllDrivers_Harmonized_Yearly.csv") %>%
   filter(GenConc <= 60) %>%  # Remove rows where GenConc > 60
-  select(-contains("Conc"), -contains("FN"), -contains("major"), -X, -Year, -Name, -ClimateZ) %>%
+  select(-contains("Conc"), -contains("FN"), -contains("major"), -X, -Name, -ClimateZ, -drainSqKm) %>%
   dplyr::mutate_at(vars(19:34), ~replace(., is.na(.), 0)) %>%
+  mutate(
+    permafrost_mean_m = ifelse(is.na(permafrost_mean_m), 0, permafrost_mean_m),  # Set NA values in permafrost_mean_m to 0
+    # num_days = ifelse(is.na(num_days), 0, num_days),        # Set NA values in num_days to 0
+    # max_prop_area = ifelse(is.na(max_prop_area), 0, max_prop_area),  # Set NA values in max_prop_area to 0
+    across(where(is.integer), as.numeric)) %>%
   mutate(across(where(is.integer), as.numeric)) %>%
   select(GenYield, everything()) %>%
-  select(-Stream_ID) %>%
+  select(-Stream_ID, -Year) %>%
   drop_na()
 
+## NEED TO ALSO DECIDE WHICH YEARS TO FILTER (e.g., MODIS data only starts in 2001 so 2001 - 2022? 2023? see where wrtds_df ends)
+
 # Plot and save correlation matrix ----
-numeric_drivers <- 2:33
+numeric_drivers <- 2:32
 driver_cor <- cor(drivers_df[, numeric_drivers])
 save_correlation_plot(driver_cor, output_dir)
 
@@ -115,7 +122,7 @@ ggplot(MSE_df_rf1, aes(ntree, mean_MSE)) +
 
 
 # Manually select ntree for rf_model1 ----
-manual_ntree_rf1 <- 2000  # Replace with your chosen value
+manual_ntree_rf1 <- 1000  # Replace with your chosen value
 
 # Tune mtry for rf_model1 ----
 tuneRF(drivers_df[, 2:ncol(drivers_df)], drivers_df[, 1], ntreeTry = manual_ntree_rf1, stepFactor = 1, improve = 0.5, plot = TRUE)
@@ -189,11 +196,11 @@ ggplot(MSE_df_parallel, aes(x = ntree, y = mean_MSE)) +
 # Global seed before re-tuning mtry
 set.seed(123)
 kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
-tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 2000, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 500, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
-rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 5)
+rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 500, mtry = 5)
 
 # Visualize output for rf_model2
 print(rf_model2)
