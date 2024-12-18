@@ -199,6 +199,22 @@ months_abb <- c("_jan_|_feb_|_mar_|_apr_|_may_|_jun_|_jul_|_aug_|_sep_|_oct_|_no
 # Remove monthly drivers from spatial drivers
 spatial_drivers <- spatial_drivers[,-c(which(colnames(spatial_drivers) %like% months_abb))]
 
+# Replace NA with 0 only for permafrost columns
+permafrost_cols <- grep("permafrost", colnames(spatial_drivers), value = TRUE)
+spatial_drivers[, permafrost_cols] <- lapply(spatial_drivers[, permafrost_cols], function(x) {
+  x[is.na(x)] <- 0
+  return(x)
+})
+
+# Extract years from wrtds_df
+dsi_years <- unique(floor(wrtds_df$DecYear))  # Extract integer year
+
+# Create a pattern for DSi years
+year_pattern <- paste0("_", dsi_years, "_", collapse = "|")
+
+# Filter columns in spatial_drivers that match DSi years
+matching_columns <- grep(year_pattern, colnames(spatial_drivers), value = TRUE)
+
 # These are the categorical variables like "major_land", "major_soil", and "major_rock" and the numerical % of each
 major_cat_vars <- which(colnames(spatial_drivers) %like% c("soil|land|rock"))
 cat_vars <- spatial_drivers[,c(major_cat_vars)]
@@ -221,16 +237,29 @@ cat_vars$Stream_ID <- spatial_drivers$Stream_ID
 # These are the quantitative drivers
 drivers_list_quant <- c("num_days", "prop_area", "precip", "evapotrans", "temp", "npp", "permafrost")
 
-# Add in Greenup day
-greenup <- c("cycle0", "cycle1")
 site_mean <- list()
 
 for (i in 1:length(drivers_list_quant)) {
-  drive_cols <- grep(drivers_list_quant[i], colnames(spatial_drivers))
-  one_driver <- spatial_drivers[,c(293, drive_cols)]
-  site_mean[[i]] <- rowMeans(one_driver[,c(2:length(one_driver))], na.rm = TRUE)
+  # Filter columns matching driver and year
+  drive_cols <- grep(drivers_list_quant[i], matching_columns)
+  
+  if (length(drive_cols) > 0) {
+    # Subset spatial_drivers with matching columns
+    one_driver <- spatial_drivers[, c(293, drive_cols), drop = FALSE]  # Ensure it's still a dataframe
+    
+    # Ensure columns are numeric
+    numeric_driver <- one_driver[, -1, drop = FALSE]  # Exclude Stream_ID
+    numeric_driver[] <- lapply(numeric_driver, as.numeric)
+    
+    # Calculate rowMeans for numeric data (ignores NA by default)
+    site_mean[[i]] <- rowMeans(numeric_driver, na.rm = TRUE)
+  } else {
+    warning(paste("No matching columns found for:", drivers_list_quant[i]))
+    site_mean[[i]] <- rep(NA, nrow(spatial_drivers))
+  }
 }
 
+# Combine results into a dataframe
 mean_df <- as.data.frame(do.call(cbind, site_mean))
 colnames(mean_df) <- drivers_list_quant
 mean_df$Stream_ID <- spatial_drivers$Stream_ID
@@ -244,24 +273,44 @@ tot <- tot %>%
 ## ------------------------------------------------------- ##
 # Calculate Greenup Day ----
 ## ------------------------------------------------------- ##
+
+greenup <- c("cycle0", "cycle1")
 greenup_mean <- list()
-stream_id <- c("Stream_ID")
+
+# Calculate row means for Greenup Day
 for (i in 1:length(greenup)) {
-  drive_cols <- grep(greenup[i], colnames(spatial_drivers))
-  one_driver <- spatial_drivers[,c(293, drive_cols)]
-  one_driver <- one_driver[!duplicated(one_driver$Stream_ID),]
+  # Filter columns matching greenup and year
+  drive_cols <- grep(greenup[i], matching_columns)
   
-  driver_melt <- melt(one_driver, id.vars=stream_id)
-  
-  driver_melt$doy <- yday(as.Date(driver_melt$value, "%m/%d/%Y"))
-  one_driver <- dcast(driver_melt, Stream_ID~variable, value.var = "doy")
-  greenup_mean[[i]] <- rowMeans(one_driver[,c(2:length(one_driver))], na.rm = TRUE)
+  if (length(drive_cols) > 0) {
+    # Subset the spatial_drivers dataframe with Stream_ID and greenup columns
+    one_driver <- spatial_drivers[, c(293, drive_cols), drop = FALSE]
+    
+    # Melt and process the data for Greenup Day
+    driver_melt <- melt(one_driver, id.vars = "Stream_ID")
+    driver_melt$doy <- suppressWarnings(yday(as.Date(driver_melt$value, "%m/%d/%Y")))
+    
+    # Replace invalid DOY (e.g., NAs due to bad dates) with NA
+    driver_melt$doy[is.na(driver_melt$doy)] <- NA
+    
+    # Reshape and calculate rowMeans ignoring NAs
+    one_driver <- dcast(driver_melt, Stream_ID ~ variable, value.var = "doy")
+    numeric_driver <- one_driver[, -1, drop = FALSE]  # Exclude Stream_ID
+    
+    # Calculate row means ignoring NAs
+    greenup_mean[[i]] <- rowMeans(numeric_driver, na.rm = TRUE)
+  } else {
+    warning(paste("No matching columns found for:", greenup[i]))
+    greenup_mean[[i]] <- rep(NA, nrow(spatial_drivers))
+  }
 }
 
+# Combine results into a dataframe
 green_df <- as.data.frame(do.call(cbind, greenup_mean))
-
 colnames(green_df) <- greenup
-green_df$Stream_ID <- one_driver$Stream_ID
+green_df$Stream_ID <- spatial_drivers$Stream_ID
+
+
 
 tot <- tot %>%
   left_join(green_df, by="Stream_ID") %>%
