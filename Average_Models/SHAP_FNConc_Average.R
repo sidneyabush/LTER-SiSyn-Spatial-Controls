@@ -8,13 +8,13 @@ rm(list = ls())
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 # Load required data and model from the RF script
-load("GenYield_Ave_rf_model2.RData")
-load("GenYield_Ave_kept_drivers.RData")
-load("GenYield_Ave_drivers_df.RData")
+load("FNConc_Ave_rf_model2.RData")
+load("FNConc_Ave_kept_drivers.RData")
+load("FNConc_Ave_drivers_df.RData")
 
 # Set global seed and output directory
 set.seed(123)
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/GenYield"
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/FNConc"
 
 # Function to create SHAP values
 generate_shap_values <- function(model, kept_drivers, sample_size = 30) {
@@ -59,18 +59,18 @@ create_all_shapley_plots <- function(shap_values, output_file) {
 }
 
 # Output full SHAP plots
-output_file <- sprintf("%s/GenYield_Ave_Overall_SHAP_Variable_Importance.pdf", output_dir)
+output_file <- sprintf("%s/FNConc_Ave_Overall_SHAP_Variable_Importance.pdf", output_dir)
 create_all_shapley_plots(shap_values, output_file)
 
 # Function to create SHAP-based partial dependence plots
-create_shap_partial_dependence_plots <- function(shap_values, kept_drivers, drivers_df, output_dir, color_var = "GenYield") {
+create_shap_partial_dependence_plots <- function(shap_values, kept_drivers, drivers_df, output_dir, color_var = "median_FNConc") {
   # Check if the specified coloring variable exists in drivers_df
   if (!(color_var %in% colnames(drivers_df))) {
     stop(paste("The specified color_var:", color_var, "is not in the drivers_df dataframe."))
   }
   
   # Open a PDF to save all SHAP partial dependence plots
-  pdf(file = file.path(output_dir, "GenYield_Ave_SHAP_Partial_Dependence_Plots.pdf"), width = 8, height = 8)
+  pdf(file = file.path(output_dir, "FNConc_Ave_SHAP_Partial_Dependence_Plots.pdf"), width = 8, height = 8)
   
   # Loop through each feature in shap_values
   for (feature in colnames(shap_values)) {
@@ -113,7 +113,7 @@ create_shap_partial_dependence_plots(
   kept_drivers = kept_drivers,
   drivers_df = drivers_df,
   output_dir = output_dir,
-  color_var = "GenYield"
+  color_var = "median_FNConc"
 )
 
 # Function to create variable importance plots for multiple flexible subsets
