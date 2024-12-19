@@ -488,6 +488,7 @@ tot <- tot %>%
 # ------------------------------------------------------- #
 tot <- tot %>%
   rename_with(~ str_replace(., "\\.x$", ""), ends_with(".x"))%>%  # Remove `.x` from column names
+  filter(FNYield <= 100) %>%  
   select(-ends_with(".y"), -Use_WRTDS, -X, Stream_Name, -Latitude, -num_days,
          -Longitude, -LTER, -contains("coord"), -major_land, 
          -contains("median_degree"), -contains("min_degree"),

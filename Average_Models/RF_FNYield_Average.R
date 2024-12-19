@@ -28,7 +28,7 @@ test_numtree_average <- function(ntree_list) {
   for (i in 1:length(ntree_list)) {
     # Set seed for each model training step within the loop
     set.seed(123)
-    rf_model <- randomForest(median_GenConc ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = ntree_list[[i]])
+    rf_model <- randomForest(FNYield ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = ntree_list[[i]])
     MSE[[i]] <- rf_model$mse
   }
   return(MSE)
@@ -47,7 +47,7 @@ test_numtree_optimized <- function(ntree_list) {
 }
 
 # Function to remove outliers based on Z-scores
-cols_to_consider <- c("median_GenConc")
+cols_to_consider <- c("FNYield")
 sd_limit <- 3
 remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit = sd_limit) {
   z_scores <- sapply(data_to_filter[cols], function(data) abs((data - mean(data, na.rm = TRUE)) / sd(data, na.rm = TRUE)))
@@ -57,7 +57,7 @@ remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit =
 # Define a function to save RF variable importance plot as a PDF
 save_rf_importance_plot <- function(rf_model, output_dir) {
   pdf(sprintf("%s/RF_variable_importance.pdf", output_dir), width = 8, height = 6)
-  randomForest::varImpPlot(rf_model, main = "RF Variable Importance - Average Gen Concentration", col = "darkblue")
+  randomForest::varImpPlot(rf_model, main = "RF Variable Importance - Average FN Yield", col = "darkblue")
   dev.off()
 }
 
@@ -65,7 +65,7 @@ save_rf_importance_plot <- function(rf_model, output_dir) {
 save_lm_plot <- function(rf_model, observed, output_dir) {
   pdf(sprintf("%s/RF_lm_plot.pdf", output_dir), width = 8, height = 8)
   plot(rf_model$predicted, observed, pch = 16, cex = 1.5,
-       xlab = "Predicted", ylab = "Observed", main = "Observed vs Predicted - Average Gen Concentration",
+       xlab = "Predicted", ylab = "Observed", main = "Observed vs Predicted - Average FN Yield",
        cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5)
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2)
   legend("topleft", bty = "n", cex = 1.5, legend = paste("R² =", format(mean(rf_model$rsq), digits = 3)))
@@ -74,15 +74,15 @@ save_lm_plot <- function(rf_model, observed, output_dir) {
 }
 
 # Set the output directory path for saving PDFs
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/GenConc"
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/FNYield"
 
 # Read in and tidy data ----
 # Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
 
 drivers_df <- read.csv("AllDrivers_Harmonized_Average.csv") %>%
-  select(-contains("Yield"), -contains("FN")) %>%
-  dplyr::mutate_at(vars(13:28), ~replace(., is.na(.), 0)) %>%
+  select(-contains("Conc"), -contains("Gen"), -contains("Q"), -drainage_area) %>%
+  dplyr::mutate_at(vars(9:24), ~replace(., is.na(.), 0)) %>%
   mutate(across(where(is.integer), as.numeric)) %>%
   distinct(Stream_ID, .keep_all = TRUE) %>%
   select(-Stream_ID) %>%
@@ -92,13 +92,13 @@ drivers_df <- read.csv("AllDrivers_Harmonized_Average.csv") %>%
 # drivers_df <- remove_outlier_rows(drivers_df)
 
 # Plot correlation between driver variables ----
-numeric_drivers <- 2:34  # Indices for numeric drivers
+numeric_drivers <- 2:30  # Indices for numeric drivers
 driver_cor <- cor(drivers_df[, numeric_drivers])
 corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = F)
 
 pdf(sprintf("%s/correlation_plot.pdf", output_dir), width = 10, height = 10)
 corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = FALSE)
-title("Median Gen Si Concentration")  # Add title in the PDF
+title("Median FN Si Yield")  # Add title in the PDF
 dev.off()
 
 # Global seed before testing different numbers of trees (ntree) ----
@@ -123,11 +123,11 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE)) + geom_point() + geom_line() + theme_c
 
 # Global seed before tuning mtry based on optimized ntree ----
 set.seed(123)
-tuneRF(drivers_df[, numeric_drivers], drivers_df[, 1], ntreeTry = 2000, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(drivers_df[, numeric_drivers], drivers_df[, 1], ntreeTry = 1000, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
-rf_model1 <- randomForest(median_GenConc ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 11)
+rf_model1 <- randomForest(FNYield ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 1000, mtry = 9)
 
 # Visualize output for rf_model1
 print(rf_model1)
@@ -150,12 +150,12 @@ control <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = cv_r
                       number = cv_number, verbose = TRUE, allowParallel = FALSE)
 
 # Divide data into predictor variables (x) and response variable (y)
-x <- drivers_df[, !(colnames(drivers_df) == "median_GenConc")]
-y <- drivers_df$median_GenConc
+x <- drivers_df[, !(colnames(drivers_df) == "FNYield")]
+y <- drivers_df$FNYield
 
 # Run RFE to select the best features ----
 set.seed(123)
-result_rfe <- rfe(x = x, y = y, sizes = c(1:size), rfeControl = control)
+result_rfe <- rfe(x = x, y = y, sizes = c(1:size), rfeControl = control) # Change to 2 to prevent only 1 driver?
 
 # Print RFE results
 print(result_rfe)
@@ -164,7 +164,7 @@ print(result_rfe)
 new_rf_input <- paste(predictors(result_rfe), collapse = "+")
 
 # Format those features into a formula for the optimized random forest model
-rf_formula <- formula(paste("median_GenConc ~", new_rf_input))
+rf_formula <- formula(paste("FNYield ~", new_rf_input))
 
 # Global seed before re-tuning RF after RFE optimization ----
 set.seed(123)
@@ -189,19 +189,19 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE)) + geom_point() + geom_line() +
 # Global seed before re-tuning mtry
 set.seed(123)
 kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
-tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 1000, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 1200, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
-rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 1000, mtry = 6)
+rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 1200, mtry = 4)
 
 # Visualize output for rf_model2
 print(rf_model2)
 randomForest::varImpPlot(rf_model2)
 
 # Generate plots comparing predicted vs observed ----
-lm_plot <- plot(rf_model2$predicted, drivers_df$median_GenConc, pch = 16, cex = 1.5,
-                xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers - Gen Concentration",
+lm_plot <- plot(rf_model2$predicted, drivers_df$FNYield, pch = 16, cex = 1.5,
+                xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers - FN Yield",
                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
   theme(text = element_text(size = 40), face = "bold")
@@ -210,11 +210,11 @@ legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(
 
 # Save RF variable importance plot and LM plot for rf_model2
 save_rf_importance_plot(rf_model2, output_dir)
-save_lm_plot(rf_model2, drivers_df$median_GenConc, output_dir)
+save_lm_plot(rf_model2, drivers_df$FNYield, output_dir)
 
 # Save model and required objects for SHAP analysis
-save(rf_model2, file = "GenConc_Ave_rf_model2.RData")
+save(rf_model2, file = "FNYield_Ave_rf_model2.RData")
 kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
-save(kept_drivers, file = "GenConc_Ave_kept_drivers.RData")
-save(drivers_df, file = "GenConc_Ave_drivers_df.RData")
+save(kept_drivers, file = "FNYield_Ave_kept_drivers.RData")
+save(drivers_df, file = "FNYield_Ave_drivers_df.RData")
 

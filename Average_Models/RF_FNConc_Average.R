@@ -48,7 +48,7 @@ test_numtree_optimized <- function(ntree_list) {
 
 # Function to remove outliers based on Z-scores
 cols_to_consider <- c("median_FNConc")
-sd_limit <- 2
+sd_limit <- 3
 remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit = sd_limit) {
   z_scores <- sapply(data_to_filter[cols], function(data) abs((data - mean(data, na.rm = TRUE)) / sd(data, na.rm = TRUE)))
   return(data_to_filter[rowSums(z_scores > limit, na.rm = TRUE) == 0, ])
@@ -81,8 +81,8 @@ output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
 
 drivers_df <- read.csv("AllDrivers_Harmonized_Average.csv") %>%
-  select(-contains("Yield"), -contains("Gen")) %>%
-  dplyr::mutate_at(vars(14:29), ~replace(., is.na(.), 0)) %>%
+  select(-contains("Yield"), -contains("Gen"), -contains("Q")) %>%
+  dplyr::mutate_at(vars(10:25), ~replace(., is.na(.), 0)) %>%
   mutate(across(where(is.integer), as.numeric)) %>%
   distinct(Stream_ID, .keep_all = TRUE) %>%
   select(-Stream_ID) %>%
@@ -92,13 +92,13 @@ drivers_df <- read.csv("AllDrivers_Harmonized_Average.csv") %>%
 # drivers_df <- remove_outlier_rows(drivers_df)
 
 # Plot correlation between driver variables ----
-numeric_drivers <- 2:34  # Indices for numeric drivers
+numeric_drivers <- 2:31  # Indices for numeric drivers
 driver_cor <- cor(drivers_df[, numeric_drivers])
 corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = F)
 
 pdf(sprintf("%s/correlation_plot.pdf", output_dir), width = 10, height = 10)
 corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = FALSE)
-title("Median Flow Normalized Si Concentration")  # Add title in the PDF
+title("Median FN Si Concentration")  # Add title in the PDF
 dev.off()
 
 # Global seed before testing different numbers of trees (ntree) ----
@@ -123,11 +123,11 @@ ggplot(MSE_mean, aes(tree_num, mean_MSE)) + geom_point() + geom_line() + theme_c
 
 # Global seed before tuning mtry based on optimized ntree ----
 set.seed(123)
-tuneRF(drivers_df[, numeric_drivers], drivers_df[, 1], ntreeTry = 1300, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(drivers_df[, numeric_drivers], drivers_df[, 1], ntreeTry = 1000, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
-rf_model1 <- randomForest(median_FNConc ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 1300, mtry = 11)
+rf_model1 <- randomForest(median_FNConc ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 1000, mtry = 10)
 
 # Visualize output for rf_model1
 print(rf_model1)
@@ -145,7 +145,9 @@ for (i in 1:(cv_repeats * cv_number)) {
 }
 seeds[[total_repeats]] <- 123
 
-control <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = cv_repeats, number = cv_number, seeds = seeds, verbose = TRUE)
+#control <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = cv_repeats, number = cv_number, seeds = seeds, verbose = TRUE)
+control <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = cv_repeats, 
+                      number = cv_number, verbose = TRUE, allowParallel = FALSE)
 
 # Divide data into predictor variables (x) and response variable (y)
 x <- drivers_df[, !(colnames(drivers_df) == "median_FNConc")]
@@ -191,7 +193,7 @@ tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 1000, stepFactor = 1, improve =
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
-rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 1000, mtry = 7)
+rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 1000, mtry = 8)
 
 # Visualize output for rf_model2
 print(rf_model2)
@@ -210,165 +212,9 @@ legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(
 save_rf_importance_plot(rf_model2, output_dir)
 save_lm_plot(rf_model2, drivers_df$median_FNConc, output_dir)
 
-## Calculate SHAP values and make exploratory plots 
-# Set the output directory for plots
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/FNConc"
-
-# Set up a parallel backend for speed (adjust cores as needed)
-num_cores <- detectCores() - 1  # Leave one core free for other tasks
-registerDoParallel(cores = num_cores)
-
-# Function to create shapley_plot_data without any subsetting
-create_shapley_plot_data <- function(model, kept_drivers, drivers_df, sample_size = 30) {
-  # Create the predictor object for the full dataset
-  predictor <- Predictor$new(model = model, data = kept_drivers, y = drivers_df$median_FNConc)
-  
-  # Parallel Shapley calculations for each observation
-  set.seed(123)  # For reproducibility
-  shapley_list <- foreach(i = 1:nrow(kept_drivers), .packages = 'iml') %dopar% {
-    shap <- Shapley$new(predictor, x.interest = kept_drivers[i, ], sample.size = sample_size)
-    shap$results
-  }
-  
-  # Combine Shapley results into a single dataframe
-  shapley_df <- do.call(rbind, shapley_list) %>%
-    mutate(row_id = rep(1:nrow(kept_drivers), each = ncol(kept_drivers)))
-  
-  # Reshape kept_drivers for merging with Shapley values
-  kept_drivers_melted <- melt(kept_drivers)
-  kept_drivers_melted$row_id <- rep(1:nrow(kept_drivers), ncol(kept_drivers))
-  
-  # Merge Shapley values with feature values and drivers_df metadata
-  shapley_plot_data <- shapley_df %>%
-    left_join(kept_drivers_melted, by = c("feature" = "variable", "row_id")) %>%
-    left_join(drivers_df %>% mutate(row_id = 1:nrow(.)), by = "row_id")
-  
-  return(shapley_plot_data)
-}
-
-# Generate shapley_plot_data for the entire dataset
-shapley_plot_data <- create_shapley_plot_data(rf_model2, kept_drivers, drivers_df)
-
-# Create and save all required plots for full Shapley data, with optional color combinations for dependence plots
-create_all_shapley_plots <- function(shap_data, output_file, color_vars = NULL) {  # Accept color_vars as an argument
-  # Filter out silicate_weathering values > 20
-  shap_data <- shap_data %>%
-    filter(silicate_weathering <= 20)
-  dev.off()
-  
-  # Open a single PDF file for all plots
-  pdf(output_file, width = 8, height = 8)
-  
-  # 1. Overall Feature Importance Plot (based on mean absolute SHAP values)
-  overall_feature_importance <- shap_data %>%
-    group_by(feature) %>%
-    summarise(importance = mean(abs(phi))) %>%
-    arrange(desc(importance))
-  
-  overall_importance_plot <- ggplot(overall_feature_importance, aes(x = reorder(feature, importance), y = importance)) +
-    geom_bar(stat = "identity", fill = "steelblue") +
-    coord_flip() +
-    labs(x = "Feature", y = "Mean Absolute SHAP Value", title = "Overall Feature Importance - Average FN Concentration") +
-    theme_minimal()
-  
-  # Print plot to the PDF
-  print(overall_importance_plot)
-  
-  # Reorder feature levels for the SHAP Summary Plot based on importance
-  shap_data <- shap_data %>%
-    mutate(feature = factor(feature, levels = rev(overall_feature_importance$feature)))
-  
-  # 2. SHAP Summary Plot with low-to-high coloring (normalized for each feature)
-  shap_data_normalized <- shap_data %>%
-    group_by(feature) %>%
-    mutate(normalized_value = (value - min(value, na.rm = TRUE)) / (max(value, na.rm = TRUE) - min(value, na.rm = TRUE)))
-  
-  shap_summary_plot <- ggplot(shap_data_normalized, aes(x = phi, y = feature)) + 
-    geom_point(aes(color = normalized_value), alpha = 0.6) + 
-    scale_color_gradient(low = "blue", high = "red", name = "Feature Value", breaks = c(0, 1), labels = c("Low", "High")) +
-    labs(x = "SHAP Value", y = NULL, title = "SHAP Summary Plot - Average FN Concentration") + 
-    theme_bw() + 
-    theme(axis.text.y = element_text(size = 12), axis.text.x = element_text(size = 12), 
-          plot.title = element_text(size = 16, face = "bold"))
-  
-  # Print plot to the PDF
-  print(shap_summary_plot)
-  
-  # 3. Positive/Negative SHAP Impact Plot
-  pos_neg_summary <- shap_data %>%
-    group_by(feature) %>%
-    summarise(mean_phi = mean(phi)) %>%
-    mutate(feature = factor(feature, levels = rev(overall_feature_importance$feature)))
-  
-  pos_neg_plot <- ggplot(pos_neg_summary, aes(x = feature, y = mean_phi, fill = mean_phi > 0)) +
-    geom_bar(stat = "identity") +
-    scale_fill_manual(values = c("red", "blue"), labels = c("Negative Impact", "Positive Impact")) +
-    labs(x = "Feature", y = "Mean SHAP Value", title = "Overall SHAP Impact by Feature - Average FN Concentration") +
-    coord_flip() +
-    theme_minimal()
-  
-  # Print plot to the PDF
-  print(pos_neg_plot)
-  
-  # 4. SHAP Dependence Plots for each feature with all combinations of coloring variables
-  for (feature_name in unique(shap_data$feature)) {
-    for (color_var in color_vars) {
-      aes_mapping <- if (color_var %in% names(shap_data)) {
-        aes(x = value, y = phi, color = .data[[color_var]])
-      } else {
-        aes(x = value, y = phi)
-      }
-      
-      dependence_plot <- ggplot(shap_data[shap_data$feature == feature_name, ], aes_mapping) +
-        geom_point(alpha = 0.6) + 
-        labs(x = paste("Value of", feature_name), y = "SHAP Value", title = paste("Average FN Concentration SHAP Dependence Plot for", feature_name)) + 
-        theme_minimal() +
-        (if (color_var %in% names(shap_data)) scale_color_viridis_c(name = color_var) else NULL)
-      
-      # Print plot to the PDF
-      print(dependence_plot)
-    }
-  }
-  
-  # Close the PDF file
-  dev.off()
-}
-
-# Run the function to create all plots in a single PDF file, coloring dependence plots by specified variables (e.g., "precip", "temp")
-color_vars <- c("drainage_area", "snow_cover", "precip", 
-                "evapotrans", "temp", "npp", "permafrost", "greenup_day",
-                "rocks_volcanic", "NOx", "P", "max_daylength", "silicate_weathering", "q_95", "q_5")  # List of features to color by
-output_file <- sprintf("%s/all_shapley_plots.pdf", output_dir)  # Specify the output file path
-create_all_shapley_plots(shapley_plot_data, output_file, color_vars)
-
-
-# BASEMENT -------------------
-
-# # Define plot parameters for specific features
-# plot_parameters <- list(
-#   list(var = "P", threshold = 0.1, above_threshold = FALSE, color_var = "precip"),
-#   list(var = "P", threshold = 0.1, above_threshold = TRUE, color_var = "precip"),
-#   list(var = "max_daylength", threshold = 17, above_threshold = FALSE, color_var = "precip"),
-#   list(var = "max_daylength", threshold = 17, above_threshold = TRUE, color_var = "precip"),
-#   list(var = "land_shrubland_grassland", threshold = 50, above_threshold = FALSE, color_var = "precip"),
-#   list(var = "land_shrubland_grassland", threshold = 50, above_threshold = TRUE, color_var = "precip"),
-#   list(var = "silicate_weathering", threshold = 0.25, above_threshold = FALSE, color_var = "precip"),
-#   list(var = "silicate_weathering", threshold = 0.25, above_threshold = TRUE, color_var = "precip")
-# )
-# 
-# 
-# 
-# # Generate plots based on specified plot parameters
-# for (params in plot_parameters) {
-#   subset_shapley_plot(
-#     shap_data = shapley_plot_data,
-#     feature_name = params$var,
-#     threshold = params$threshold,
-#     above_threshold = params$above_threshold,
-#     color_var = params$color_var,
-#     output_dir = output_dir
-#   )
-# }
-# 
-
+# Save model and required objects for SHAP analysis
+save(rf_model2, file = "FNConc_Ave_rf_model2.RData")
+kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
+save(kept_drivers, file = "FNConc_Ave_kept_drivers.RData")
+save(drivers_df, file = "FNConc_Ave_drivers_df.RData")
 
