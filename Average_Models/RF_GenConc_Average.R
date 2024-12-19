@@ -191,13 +191,26 @@ set.seed(123)
 kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
 tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 1000, stepFactor = 1, improve = 0.5, plot = FALSE)
 
-# Run optimized random forest model, with re-tuned ntree and mtry parameters ----
+# Run optimized random forest model without formula interface
 set.seed(123)
-rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 1000, mtry = 6)
+rf_model2 <- randomForest(
+  x = drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)], # Predictors
+  y = drivers_df$median_GenConc,                                      # Response variable
+  importance = TRUE,
+  proximity = TRUE,
+  ntree = 1000,
+  mtry = 6
+)
 
 # Visualize output for rf_model2
 print(rf_model2)
 randomForest::varImpPlot(rf_model2)
+
+# Save model and required objects for SHAP analysis
+save(rf_model2, file = "GenConc_Ave_rf_model2.RData")  # Save model without formula interface
+kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
+save(kept_drivers, file = "GenConc_Ave_kept_drivers.RData")  # Save predictors
+save(drivers_df, file = "GenConc_Ave_drivers_df.RData")      # Save full drivers_df
 
 # Generate plots comparing predicted vs observed ----
 lm_plot <- plot(rf_model2$predicted, drivers_df$median_GenConc, pch = 16, cex = 1.5,
@@ -212,9 +225,4 @@ legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(
 save_rf_importance_plot(rf_model2, output_dir)
 save_lm_plot(rf_model2, drivers_df$median_GenConc, output_dir)
 
-# Save model and required objects for SHAP analysis
-save(rf_model2, file = "GenConc_Ave_rf_model2.RData")
-kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
-save(kept_drivers, file = "GenConc_Ave_kept_drivers.RData")
-save(drivers_df, file = "GenConc_Ave_drivers_df.RData")
-
+## End ----
