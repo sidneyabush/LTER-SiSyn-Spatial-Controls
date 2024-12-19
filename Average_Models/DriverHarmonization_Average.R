@@ -187,9 +187,24 @@ tot <- tot %>%
 ## ------------------------------------------------------- ##
             # Import Spatial Drivers ----
 ## ------------------------------------------------------- ##
+# Define renamed and old names directly
+name_conversion <- data.frame(
+  Stream_ID = c("Walker Branch__East Fork", "Walker Branch__West Fork"),
+  Updated_StreamName = c("Walker Branch__east fork", "Walker Branch__west fork")
+)
+
+# Read and preprocess spatial drivers
 spatial_drivers <- read.csv("all-data_si-extract_2_202412.csv", stringsAsFactors = FALSE) %>%
-  select(-contains("soil"))
-spatial_drivers$Stream_ID <- paste0(spatial_drivers$LTER, "__", spatial_drivers$Stream_Name)
+  select(-contains("soil")) %>%
+  # Create Stream_ID first using LTER and Stream_Name
+  mutate(Stream_ID = paste0(LTER, "__", Stream_Name)) %>%
+  # Incorporate site renaming
+  left_join(name_conversion, by = "Stream_ID") %>%
+  mutate(
+    Stream_ID = coalesce(Updated_StreamName, Stream_ID)  # Replace Stream_ID with Updated_StreamName if available
+  ) %>%
+  select(-Updated_StreamName)  # Remove temporary renaming column
+
 
 ## Before, using full abbrevs removed some of the spatial driver columns (e.g., "dec" in "deciduous" was causing
 #  deciduous land cover to be filtered out)

@@ -82,8 +82,8 @@ output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
 
 drivers_df <- read.csv("AllDrivers_Harmonized_Yearly.csv") %>%
-  select(-contains("Yield"), -contains("FN"), -contains("major"), -X, -Year, -Name, -ClimateZ) %>%
-  dplyr::mutate_at(vars(19:34), ~replace(., is.na(.), 0)) %>%
+  select(-contains("Yield"), -contains("FN"), -contains("major"), -X, -Year) %>%
+  dplyr::mutate_at(vars(17:32), ~replace(., is.na(.), 0)) %>%
   mutate(across(where(is.integer), as.numeric)) %>%
   select(GenConc, everything()) %>%
   select(-Stream_ID) %>%
@@ -91,7 +91,7 @@ drivers_df <- read.csv("AllDrivers_Harmonized_Yearly.csv") %>%
   drop_na()
 
 # Plot and save correlation matrix ----
-numeric_drivers <- 2:33
+numeric_drivers <- 2:31
 driver_cor <- cor(drivers_df[, numeric_drivers])
 save_correlation_plot(driver_cor, output_dir)
 

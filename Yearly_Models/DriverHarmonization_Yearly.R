@@ -83,7 +83,7 @@ name_conversion <- data.frame(
 
 # Filter and join in one step
 missing_sites <- left_join(area[area$Stream_ID %in% name_conversion$Stream_ID, ], 
-                           name_conversion, by = "Stream_ID")
+                           name_conversion, by = "Stream_ID") 
 
 # Remove the unnecessary column and rename the remaining one
 missing_sites <- missing_sites %>%
@@ -162,39 +162,102 @@ tot <- subset(tot, chemical == "DSi")
 ## ------------------------------------------------------- ##
 # Step 1: Load and preprocess spatial drivers
 ## ------------------------------------------------------- ##
-spatial_drivers <- fread("all-data_si-extract_2_202412.csv")  # Use fread for faster loading
-spatial_drivers[, Stream_ID := paste0(LTER, "__", Stream_Name)]
-spatial_drivers <- spatial_drivers[, !c("Shapefile_Name", "Discharge_File_Name"), with = FALSE]
-spatial_drivers <- spatial_drivers[, !grepl("soil", names(spatial_drivers)), with = FALSE]
-spatial_drivers <- spatial_drivers[, !grepl("_jan_|_feb_|_mar_|_apr_|_may_|_jun_|_jul_|_aug_|_sep_|_oct_|_nov_|_dec_", names(spatial_drivers)), with = FALSE]
+# Define renamed and old names directly
+name_conversion <- data.frame(
+  Stream_ID = c("Walker Branch__East Fork", "Walker Branch__West Fork"),
+  Updated_StreamName = c("Walker Branch__east fork", "Walker Branch__west fork")
+)
 
+# Read and preprocess spatial drivers
+spatial_drivers <- read.csv("all-data_si-extract_2_202412.csv", stringsAsFactors = FALSE) %>%
+  select(-contains("soil")) %>%
+  # Create Stream_ID first using LTER and Stream_Name
+  mutate(Stream_ID = paste0(LTER, "__", Stream_Name)) %>%
+  # Incorporate site renaming
+  left_join(name_conversion, by = "Stream_ID") %>%
+  mutate(
+    Stream_ID = coalesce(Updated_StreamName, Stream_ID)  # Replace Stream_ID with Updated_StreamName if available
+  ) %>%
+  select(-Updated_StreamName)  # Remove temporary renaming column
+
+
+## Before, using full abbrevs removed some of the spatial driver columns (e.g., "dec" in "deciduous" was causing
+#  deciduous land cover to be filtered out)
+months_abb <- c("_jan_|_feb_|_mar_|_apr_|_may_|_jun_|_jul_|_aug_|_sep_|_oct_|_nov_|_dec_")
+
+# Remove monthly drivers from spatial drivers
+spatial_drivers <- spatial_drivers[,-c(which(colnames(spatial_drivers) %like% months_abb))]
+
+# Confirm NA replacement for permafrost columns
+permafrost_cols <- grep("permafrost", colnames(spatial_drivers), value = TRUE)
+
+# Replace NA values with 0 for all permafrost columns
+spatial_drivers[, permafrost_cols] <- lapply(spatial_drivers[, permafrost_cols], function(x) {
+  x <- as.numeric(x)  # Convert to numeric to avoid issues
+  x[is.na(x)] <- 0
+  return(x)
+})
+
+## GREEEN-UP DAY
 # Define greenup cycles (excluding cycle1 as it's not needed)
 greenup_cycles <- c("cycle0")
 
 # Standardize column names by removing "MMDD" if present
 colnames(spatial_drivers) <- sub("MMDD$", "", colnames(spatial_drivers))
 
+# Extract years from tot to identify where DSi data exists
+dsi_years <- unique(floor(tot$DecYear))  # Extract integer years
+
+# Create a pattern for greenup_cycle0 columns corresponding to DSi years
+greenup_pattern <- paste0("greenup_", greenup_cycles, "_(", paste(dsi_years, collapse = "|"), ")")
+cycle_cols <- grep(greenup_pattern, colnames(spatial_drivers), value = TRUE)
+
+# Filter the spatial drivers for relevant sites and years with DSi data
+filtered_drivers <- spatial_drivers[spatial_drivers$Stream_ID %in% unique(tot$Stream_ID), ]
+
 # Convert greenup date columns to day-of-year values for cycle0
-for (cycle in greenup_cycles) {
-  cycle_cols <- grep(paste0("greenup_", cycle), colnames(spatial_drivers), value = TRUE)
-  for (col in cycle_cols) {
-    spatial_drivers[[paste0(col, "_doy")]] <- ifelse(
-      !is.na(as.Date(spatial_drivers[[col]], format = "%m/%d/%Y")),
-      yday(as.Date(spatial_drivers[[col]], format = "%m/%d/%Y")),
-      NA_real_
-    )
-  }
+for (col in cycle_cols) {
+  # Ensure the column is a character vector
+  filtered_drivers[[col]] <- as.character(filtered_drivers[[col]])
+  
+  # Convert to DOY
+  filtered_drivers[[paste0(col, "_doy")]] <- ifelse(
+    !is.na(as.Date(filtered_drivers[[col]], format = "%Y-%m-%d")),
+    yday(as.Date(filtered_drivers[[col]], format = "%Y-%m-%d")),
+    NA_real_
+  )
 }
 
-gc()
+
+# Remove greenup day columns that do not have "_doy" in their names
+columns_to_keep <- grep("_doy$", colnames(filtered_drivers), value = TRUE)
+columns_to_keep <- c("Stream_ID", columns_to_keep)  # Ensure essential columns are retained
+filtered_drivers <- filtered_drivers[, columns_to_keep]
+
+# Replace the greenup day columns in spatial_drivers with the DOY columns from filtered_drivers
+
+# Identify greenup day columns in spatial_drivers that need to be replaced
+columns_to_remove <- grep("^greenup_", colnames(spatial_drivers), value = TRUE)
+
+# Remove these columns from spatial_drivers
+spatial_drivers <- spatial_drivers[, !columns_to_remove, with = FALSE]
+
+# Add the updated DOY columns from filtered_drivers to spatial_drivers
+spatial_drivers <- merge(
+  spatial_drivers,
+  filtered_drivers,
+  by = c("Stream_ID"),
+  all.x = TRUE
+)
+
+## ------------------------------------------------------- ##
+# Step 2: Process annual data while retaining NA values
+## ------------------------------------------------------- ##
 
 # Identify columns with numbers in the header (annual data)
 year_columns <- grep("[0-9]", colnames(spatial_drivers), value = TRUE)
 non_year_columns <- setdiff(colnames(spatial_drivers), year_columns)
 
-## ------------------------------------------------------- ##
-# Step 2: Process annual data while retaining NA values
-## ------------------------------------------------------- ##
 spatial_drivers_with_years <- spatial_drivers[, ..year_columns]
 spatial_drivers_with_years[, Stream_ID := spatial_drivers$Stream_ID]
 
@@ -622,12 +685,20 @@ tot <- tot %>%
 
 # Tidy data for export: 
 tot_si <- tot %>%
-  dplyr::select(Stream_ID, Year, drainSqKm, ClimateZ, Name, NOx, P, precip,
-         temp, Max_Daylength, num_days, max_prop_area, npp, evapotrans,
+  dplyr::select(Stream_ID, Year, drainSqKm, NOx, P, precip,
+         temp, Max_Daylength, max_prop_area, npp, evapotrans,
          silicate_weathering, greenup_cycle0, permafrost_mean_m, elevation_mean_m, 
-         basin_slope_mean_degree, contains("Q"),
+         basin_slope_mean_degree,
          contains("Conc"), contains("Yield"),
-         contains("rock"), contains("land"))
+         contains("rocks"), contains("land_"))%>%
+  dplyr::rename(snow_cover = max_prop_area, 
+                greenup_day = greenup_cycle0,
+                drainage_area = drainSqKm,
+                elevation = elevation_mean_m,
+                permafrost = permafrost_mean_m,
+                basin_slope = basin_slope_mean_degree) %>%
+  dplyr::mutate(permafrost = ifelse(is.na(permafrost), 0, permafrost)) 
+
 
 duplicates <- tot_si %>%
   group_by(Stream_ID, Year) %>%
