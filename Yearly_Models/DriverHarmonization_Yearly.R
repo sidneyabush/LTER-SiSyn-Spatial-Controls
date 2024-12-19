@@ -16,23 +16,33 @@ rm(list = ls())
 ## Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
-## Download most up to date WRTDS outputs (annual kalman)
-# Read in WRTDS input file and process date and Stream_ID
 wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
   rename(LTER = LTER.x) %>%
-  dplyr::select(-Conc, -Flux, -PeriodLong, -PeriodStart, -LTER.y, -contains("date"), -contains("month"), -min_year, -max_year, -duration) %>%
+  dplyr::select(-Conc, -Flux, -PeriodLong, -PeriodStart, -LTER.y, -contains("date"), 
+                -contains("month"), -min_year, -max_year, -duration) %>%
   dplyr::mutate(
-    DecYear = as.Date(format(date_decimal(DecYear), "%Y-%m-%d")),
-    Year = as.integer(format(DecYear, "%Y")),
     Stream_Name = case_when(
       Stream_Name == "East Fork" ~ "east fork",
       Stream_Name == "West Fork" ~ "west fork",
       TRUE ~ Stream_Name
     ),
-    Stream_ID = paste0(LTER, "__", Stream_Name)  # Create Stream_ID after Stream_Name adjustment
-  )
+    Stream_ID = paste0(LTER, "__", Stream_Name),
+    .groups = "drop"
+  ) %>%
+  dplyr::mutate(
+    Year = floor(as.numeric(DecYear)) # Convert DecYear to Year
+  ) %>%
+  filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
+  filter(GenConc <= 60) %>%  # Remove rows where GenConc > 60 %>% 
+  filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc) # Remove rows where FNConc is ±50% of GenConc
 
 gc()
+
+num_unique_stream_ids <- wrtds_df %>%
+  pull(Stream_ID) %>%
+  n_distinct()
+
+print(num_unique_stream_ids)
 
 ## Need to tidy the Finnish site names:
 finn <- read.csv("FinnishSites.csv")
@@ -87,7 +97,8 @@ area <- bind_rows(area, missing_sites)
 tot <- wrtds_df %>%
   left_join(area %>% select(Stream_ID), by = "Stream_ID", relationship = "many-to-many") %>%
   mutate(
-    DecYear = as.numeric(format(DecYear, "%Y")) + as.numeric(format(DecYear, "%j")) / 365,
+    DecYear = as.numeric(DecYear), # Ensure DecYear is numeric
+    DecYear = floor(DecYear) + (DecYear %% 1) / 365, # Adjust year and day of year
     Year = floor(DecYear)
   )
 

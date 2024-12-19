@@ -35,8 +35,6 @@ num_unique_stream_ids <- wrtds_df %>%
 
 print(num_unique_stream_ids)
 
-
-
 ## Need to tidy the Finnish site names:
 finn <- read.csv("FinnishSites.csv")
 
