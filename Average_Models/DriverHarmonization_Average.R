@@ -24,6 +24,7 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
     .groups = "drop") %>%
   filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
   filter(chemical == "DSi") %>%
+  filter(GenConc <= 60) %>%  # Remove rows where GenConc > 60 %>% 
   filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc) # Remove rows where FNConc is ±50% of GenConc
 
 gc()
@@ -199,12 +200,18 @@ months_abb <- c("_jan_|_feb_|_mar_|_apr_|_may_|_jun_|_jul_|_aug_|_sep_|_oct_|_no
 # Remove monthly drivers from spatial drivers
 spatial_drivers <- spatial_drivers[,-c(which(colnames(spatial_drivers) %like% months_abb))]
 
-# Replace NA with 0 only for permafrost columns
+# Confirm NA replacement for permafrost columns
 permafrost_cols <- grep("permafrost", colnames(spatial_drivers), value = TRUE)
+
+# Replace NA values with 0 for all permafrost columns
 spatial_drivers[, permafrost_cols] <- lapply(spatial_drivers[, permafrost_cols], function(x) {
+  x <- as.numeric(x)  # Convert to numeric to avoid issues
   x[is.na(x)] <- 0
   return(x)
 })
+
+# Confirm updates
+summary(spatial_drivers[, permafrost_cols])
 
 # Extract years from wrtds_df
 dsi_years <- unique(floor(wrtds_df$DecYear))  # Extract integer year
@@ -223,29 +230,29 @@ cat_vars <- spatial_drivers[,c(major_cat_vars)]
 spatial_vars <- cbind(spatial_drivers, cat_vars)
 
 # Define the pattern to search for elevation and basin slope columns
-relevant_columns <- c("elevation", "basin")
+relevant_columns <- c("elevation", "basin", "permafrost")
 
 # Use grep to locate elevation and basin slope columns
-elevation_basin_cols <- grep(paste(relevant_columns, collapse = "|"), colnames(spatial_drivers))
+elevation_basin_permafrost_cols <- grep(paste(relevant_columns, collapse = "|"), colnames(spatial_drivers))
 
 # Combine major categorical columns with elevation and basin slope
-cat_vars <- spatial_drivers[, c(major_cat_vars, elevation_basin_cols)]
+cat_vars <- spatial_drivers[, c(major_cat_vars, elevation_basin_permafrost_cols)]
 
 # Add Stream_ID back to the resulting data
 cat_vars$Stream_ID <- spatial_drivers$Stream_ID
 
 # These are the quantitative drivers
-drivers_list_quant <- c("num_days", "prop_area", "precip", "evapotrans", "temp", "npp", "permafrost")
+drivers_list_quant <- c("num_days", "prop_area", "precip", "evapotrans", "temp", "npp")
 
 site_mean <- list()
 
 for (i in 1:length(drivers_list_quant)) {
-  # Filter columns matching driver and year
-  drive_cols <- grep(drivers_list_quant[i], matching_columns)
+  # Filter columns matching the driver and overlapping years
+  drive_cols <- grep(drivers_list_quant[i], matching_columns, value = TRUE)
   
   if (length(drive_cols) > 0) {
     # Subset spatial_drivers with matching columns
-    one_driver <- spatial_drivers[, c(293, drive_cols), drop = FALSE]  # Ensure it's still a dataframe
+    one_driver <- spatial_drivers[, c("Stream_ID", drive_cols), drop = FALSE]  # Include Stream_ID for grouping
     
     # Ensure columns are numeric
     numeric_driver <- one_driver[, -1, drop = FALSE]  # Exclude Stream_ID
@@ -264,6 +271,7 @@ mean_df <- as.data.frame(do.call(cbind, site_mean))
 colnames(mean_df) <- drivers_list_quant
 mean_df$Stream_ID <- spatial_drivers$Stream_ID
 
+## Need to combine the elevation_slope_permafrost variables with mean_df
 mean_df <- left_join(mean_df, cat_vars, by="Stream_ID")
 
 tot <- tot %>%
@@ -271,50 +279,48 @@ tot <- tot %>%
   distinct(Stream_ID, .keep_all = TRUE)
 
 ## ------------------------------------------------------- ##
-# Calculate Greenup Day ----
+# Calculate Greenup Day for `greenup_cycle0` Only
 ## ------------------------------------------------------- ##
 
-greenup <- c("cycle0", "cycle1")
-greenup_mean <- list()
+# Define greenup cycles (excluding cycle1 as it's not needed)
+greenup_cycles <- c("cycle0")
 
-# Calculate row means for Greenup Day
-for (i in 1:length(greenup)) {
-  # Filter columns matching greenup and year
-  drive_cols <- grep(greenup[i], matching_columns)
-  
-  if (length(drive_cols) > 0) {
-    # Subset the spatial_drivers dataframe with Stream_ID and greenup columns
-    one_driver <- spatial_drivers[, c(293, drive_cols), drop = FALSE]
-    
-    # Melt and process the data for Greenup Day
-    driver_melt <- melt(one_driver, id.vars = "Stream_ID")
-    driver_melt$doy <- suppressWarnings(yday(as.Date(driver_melt$value, "%m/%d/%Y")))
-    
-    # Replace invalid DOY (e.g., NAs due to bad dates) with NA
-    driver_melt$doy[is.na(driver_melt$doy)] <- NA
-    
-    # Reshape and calculate rowMeans ignoring NAs
-    one_driver <- dcast(driver_melt, Stream_ID ~ variable, value.var = "doy")
-    numeric_driver <- one_driver[, -1, drop = FALSE]  # Exclude Stream_ID
-    
-    # Calculate row means ignoring NAs
-    greenup_mean[[i]] <- rowMeans(numeric_driver, na.rm = TRUE)
-  } else {
-    warning(paste("No matching columns found for:", greenup[i]))
-    greenup_mean[[i]] <- rep(NA, nrow(spatial_drivers))
-  }
+# Standardize column names by removing "MMDD" if present
+colnames(spatial_drivers) <- sub("MMDD$", "", colnames(spatial_drivers))
+
+# Extract years from wrtds_df to identify where DSi data exists
+dsi_years <- unique(floor(wrtds_df$DecYear))  # Extract integer years
+
+# Create a pattern for greenup_cycle0 columns corresponding to DSi years
+greenup_pattern <- paste0("greenup_", greenup_cycles, "_(", paste(dsi_years, collapse = "|"), ")")
+cycle_cols <- grep(greenup_pattern, colnames(spatial_drivers), value = TRUE)
+
+# Filter the spatial drivers for relevant sites and years with DSi data
+filtered_drivers <- spatial_drivers[spatial_drivers$Stream_ID %in% unique(wrtds_df$Stream_ID), ]
+
+# Convert greenup date columns to day-of-year values for cycle0
+for (col in cycle_cols) {
+  filtered_drivers[[paste0(col, "_doy")]] <- ifelse(
+    !is.na(as.Date(filtered_drivers[[col]], format = "%Y-%m-%d")),
+    yday(as.Date(filtered_drivers[[col]], format = "%Y-%m-%d")),
+    NA_real_
+  )
 }
 
-# Combine results into a dataframe
-green_df <- as.data.frame(do.call(cbind, greenup_mean))
-colnames(green_df) <- greenup
-green_df$Stream_ID <- spatial_drivers$Stream_ID
+# Calculate the mean DOY for all sites with DSi data, ignoring NAs
+greenup_means <- rowMeans(filtered_drivers[, paste0(cycle_cols, "_doy"), drop = FALSE], na.rm = TRUE)
 
+# Create a dataframe with the calculated Greenup Day mean
+greenup_df <- data.frame(
+  Stream_ID = filtered_drivers$Stream_ID,
+  greenup_mean = greenup_means
+)
 
-
+# Merge the Greenup Day mean into the `tot` dataframe
 tot <- tot %>%
-  left_join(green_df, by="Stream_ID") %>%
+  left_join(greenup_df, by = "Stream_ID") %>%
   distinct(Stream_ID, .keep_all = TRUE)
+
 
 ## ------------------------------------------------------- ##
             # Import WRTDS N_P Conc ---- 
@@ -483,7 +489,7 @@ tot <- tot %>%
 tot <- tot %>%
   rename_with(~ str_replace(., "\\.x$", ""), ends_with(".x"))%>%  # Remove `.x` from column names
   select(-ends_with(".y"), -Use_WRTDS, -X, Stream_Name, -Latitude, -num_days,
-         -Longitude, -LTER, -contains("coord"), -major_land, -cycle1, 
+         -Longitude, -LTER, -contains("coord"), -major_land, 
          -contains("median_degree"), -contains("min_degree"),
          -contains("max_degree"), -contains("median_m"), -contains("min_m"), -contains("max_m"))  # Remove columns with `.y` in their names
   
@@ -565,7 +571,7 @@ tot <- tot %>%
   left_join(weathering_avg, by = "Stream_ID") %>%
   select(-major_rock, -Stream_Name, -min_daylength, -ClimateZ, -Name, -mean_q) %>%
   rename(snow_cover = prop_area, 
-         greenup_day = cycle0,
+         greenup_day = greenup_mean,
        drainage_area = drainSqKm,
        elevation = elevation_mean_m,
        basin_slope = basin_slope_mean_degree) %>%
@@ -573,15 +579,15 @@ tot <- tot %>%
 
 # Export Stream_IDs with NA values in "permafrost" or "snow_cover"
 na_stream_ids <- tot %>%
-  filter(is.na(permafrost) | is.na(snow_cover)) %>%
-  select(Stream_ID, permafrost, snow_cover)  # Include only relevant columns for clarity
+  filter(is.na(permafrost_mean_m) | is.na(snow_cover)) %>%
+  select(Stream_ID, permafrost_mean_m, snow_cover)  # Include only relevant columns for clarity
 
 write_csv(na_stream_ids, "na_permafrost_snow_cover_stream_ids.csv")
 
 # Replace NA values in the specified column range with 0
 drivers_df <- tot %>%
   # Replace NA values in the "permafrost" column with 0
-  mutate(permafrost = replace(permafrost, is.na(permafrost), 0), 
+  mutate(permafrost_mean_m = replace(permafrost_mean_m, is.na(permafrost_mean_m), 0), 
          snow_cover = replace(snow_cover, is.na(snow_cover), 0))
 
 # Clean up memory

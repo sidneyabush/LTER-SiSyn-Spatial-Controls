@@ -82,7 +82,7 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 drivers_df <- read.csv("AllDrivers_Harmonized_Average.csv") %>%
   select(-contains("Yield"), -contains("FN")) %>%
-  dplyr::mutate_at(vars(14:29), ~replace(., is.na(.), 0)) %>%
+  dplyr::mutate_at(vars(13:28), ~replace(., is.na(.), 0)) %>%
   mutate(across(where(is.integer), as.numeric)) %>%
   distinct(Stream_ID, .keep_all = TRUE) %>%
   select(-Stream_ID) %>%
@@ -145,7 +145,9 @@ for (i in 1:(cv_repeats * cv_number)) {
 }
 seeds[[total_repeats]] <- 123
 
-control <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = cv_repeats, number = cv_number, seeds = seeds, verbose = TRUE)
+#control <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = cv_repeats, number = cv_number, seeds = seeds, verbose = TRUE)
+control <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = cv_repeats, 
+                      number = cv_number, verbose = TRUE, allowParallel = FALSE)
 
 # Divide data into predictor variables (x) and response variable (y)
 x <- drivers_df[, !(colnames(drivers_df) == "median_GenConc")]
