@@ -4,17 +4,17 @@ librarian::shelf(iml, ggplot2, dplyr, tidyr, reshape2, parallel, foreach, random
 # Clear environment
 rm(list = ls())
 
-# Set working directory                 
+# Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 # Load required data and model from the RF script
-load("GenConc_Yearly_rf_model2.RData")
-load("GenConc_Yearly_kept_drivers.RData")
-load("GenConc_Yearly_drivers_df.RData")
+load("GenYield_Yearly_rf_model2.RData")
+load("GenYield_Yearly_kept_drivers.RData")
+load("GenYield_Yearly_drivers_df.RData")
 
 # Set global seed and output directory
 set.seed(123)
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model/GenConc"
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model/GenYield"
 
 # Function to create SHAP values
 generate_shap_values <- function(model, kept_drivers, sample_size = 30) {
@@ -59,18 +59,18 @@ create_all_shapley_plots <- function(shap_values, output_file) {
 }
 
 # Output full SHAP plots
-output_file <- sprintf("%s/GenConc_Yearly_Overall_SHAP_Variable_Importance.pdf", output_dir)
+output_file <- sprintf("%s/GenYield_Yearly_Overall_SHAP_Variable_Importance.pdf", output_dir)
 create_all_shapley_plots(shap_values, output_file)
 
 # Function to create SHAP-based partial dependence plots
-create_shap_partial_dependence_plots <- function(shap_values, kept_drivers, drivers_df, output_dir, color_var = "GenConc") {
+create_shap_partial_dependence_plots <- function(shap_values, kept_drivers, drivers_df, output_dir, color_var = "GenYield") {
   # Check if the specified coloring variable exists in drivers_df
   if (!(color_var %in% colnames(drivers_df))) {
     stop(paste("The specified color_var:", color_var, "is not in the drivers_df dataframe."))
   }
   
   # Open a PDF to save all SHAP partial dependence plots
-  pdf(file = file.path(output_dir, "GenConc_Yearly_SHAP_Partial_Dependence_Plots.pdf"), width = 8, height = 8)
+  pdf(file = file.path(output_dir, "GenYield_Yearly_SHAP_Partial_Dependence_Plots.pdf"), width = 8, height = 8)
   
   # Loop through each feature in shap_values
   for (feature in colnames(shap_values)) {
@@ -113,7 +113,7 @@ create_shap_partial_dependence_plots(
   kept_drivers = kept_drivers,
   drivers_df = drivers_df,
   output_dir = output_dir,
-  color_var = "GenConc"
+  color_var = "GenYield"
 )
 
 # Function to create variable importance plots for multiple flexible subsets

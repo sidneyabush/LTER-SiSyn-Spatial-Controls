@@ -85,8 +85,8 @@ drivers_df <- read.csv("AllDrivers_Harmonized_Yearly.csv") %>%
   filter(GenConc <= 60) %>%  # Remove rows where GenConc > 60 %>% 
   filter_all(all_vars(!is.infinite(.))) %>%
   filter(FNConc <= 1.5 * GenConc & FNConc >= 0.5 * GenConc) %>%  # Filter rows where FNConc is within 50% of GenConc
-  select(-contains("Conc"), -contains("FN"), -contains("major"), -X, -drainSqKm) %>%
-  dplyr::mutate_at(vars(18:33), ~replace(., is.na(.), 0)) %>%
+  select(-contains("Conc"), -contains("FN"), -contains("major"), -X, -drainage_area) %>%
+  dplyr::mutate_at(vars(17:32), ~replace(., is.na(.), 0)) %>%
   # mutate(
   #   permafrost_mean_m = ifelse(is.na(permafrost_mean_m), 0, permafrost_mean_m),  # Set NA values in permafrost_mean_m to 0
   #   # num_days = ifelse(is.na(num_days), 0, num_days),        # Set NA values in num_days to 0
@@ -99,7 +99,7 @@ drivers_df <- read.csv("AllDrivers_Harmonized_Yearly.csv") %>%
 ## NEED TO ALSO DECIDE WHICH YEARS TO FILTER (e.g., MODIS data only starts in 2001 so 2001 - 2022? 2023? see where wrtds_df ends)
 
 # Plot and save correlation matrix ----
-numeric_drivers <- 2:32
+numeric_drivers <- 2:30
 driver_cor <- cor(drivers_df[, numeric_drivers])
 save_correlation_plot(driver_cor, output_dir)
 
