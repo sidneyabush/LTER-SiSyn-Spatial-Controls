@@ -96,7 +96,11 @@ drivers_df <- read.csv("AllDrivers_Harmonized_Yearly.csv") %>%
   select(-Stream_ID, -Year) %>%
   drop_na()
 
-## NEED TO ALSO DECIDE WHICH YEARS TO FILTER (e.g., MODIS data only starts in 2001 so 2001 - 2022? 2023? see where wrtds_df ends)
+# # Create histogram -- to quickly check the NPP values after re-extracting
+# ggplot(drivers_df, aes(x = npp)) +
+#   geom_histogram(binwidth = 1, fill = "blue", color = "white") +
+#   labs(title = NULL, x = "npp kg C_m2_year", y = "Frequency") +
+#   theme_minimal()
 
 # Plot and save correlation matrix ----
 numeric_drivers <- 2:30

@@ -116,7 +116,6 @@ create_shap_partial_dependence_plots(
   color_var = "median_GenConc"
 )
 
-# Function to create variable importance plots for multiple flexible subsets
 create_subset_importance_plots <- function(shap_values, conditions, kept_drivers, output_dir) {
   for (condition in conditions) {
     condition_column <- condition$column
@@ -138,12 +137,19 @@ create_subset_importance_plots <- function(shap_values, conditions, kept_drivers
         TRUE ~ FALSE
       ))
     
+    # Exclude the condition_column from the drivers
+    subset_kept_drivers <- subset_kept_drivers %>%
+      select(-all_of(condition_column))
+    
     # Subset SHAP values to match filtered drivers
     subset_shap_values <- shap_values[rownames(subset_kept_drivers), ]
     
+    # Convert subset_shap_values to a data frame and exclude the condition_column
+    subset_shap_values <- as.data.frame(subset_shap_values) %>%
+      select(-all_of(condition_column))
+    
     # Summarize feature importance
     subset_importance <- subset_shap_values %>%
-      as.data.frame() %>%
       summarise(across(everything(), ~ mean(abs(.)))) %>%
       pivot_longer(cols = everything(), names_to = "feature", values_to = "importance") %>%
       arrange(desc(importance))
@@ -153,25 +159,27 @@ create_subset_importance_plots <- function(shap_values, conditions, kept_drivers
       geom_bar(stat = "identity", fill = "steelblue") +
       coord_flip() +
       labs(
-        title = paste("Variable Importance for", condition_column, operator, condition_value),
+        title = paste("Variable Importance for", condition_column, operator, condition_value, "(Excluding Subset Driver)"),
         x = "Feature",
         y = "Mean Absolute SHAP Value"
       ) +
       theme_minimal()
     
     # Save the plot
-    output_file <- file.path(output_dir, paste0("SHAP_Variable_Importance_", condition_column, "_", operator, "_", condition_value, ".pdf"))
+    output_file <- file.path(output_dir, paste0("SHAP_Variable_Importance_", condition_column, "_", operator, "_", condition_value, "_Excluding_Subset_Driver.pdf"))
     ggsave(output_file, plot = subset_importance_plot, width = 8, height = 6)
     message(paste("Subset variable importance plot saved:", output_file))
   }
 }
 
+
 # Define multiple flexible conditions for subsetting
 conditions <- list(
   list(column = "rocks_volcanic", value = 50, operator = ">"),
   list(column = "land_shrubland_grassland", value = 50, operator = ">"),
-  list(column = "drainage_area", value = 1000, operator = "<"),
-  list(column = "NOx", value = 0.1, operator = ">")
+  list(column = "land_shrubland_grassland", value = 50, operator = "<"),
+  list(column = "snow_cover", value = 0.4, operator = "<"),
+  list(column = "snow_cover", value = 0.4, operator = ">")
 )
 
 # Retain only conditions relevant to kept_drivers
