@@ -200,3 +200,19 @@ create_subset_importance_plots(
   kept_drivers = kept_drivers,
   output_dir = output_dir
 )
+
+# Define a threshold
+threshold <- 0.33
+
+# Calculate how many sites have a majority land use for each type
+result <- drivers_df %>%
+  select(starts_with("land_")) %>% # Select columns starting with "land_"
+  mutate(majority_land_use = apply(., 1, function(row) {
+    colnames(.)[which.max(row)] # Get the column name with the maximum value
+  })) %>%
+  filter(apply(., 1, max) > threshold) %>% # Keep rows where the maximum value is above the threshold
+  count(majority_land_use) # Count the number of occurrences of each land use type
+
+# View the result
+print(result)
+
