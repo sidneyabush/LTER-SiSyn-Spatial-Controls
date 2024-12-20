@@ -82,12 +82,18 @@ output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
 
 drivers_df <- read.csv("AllDrivers_Harmonized_Yearly.csv") %>%
-  select(-contains("Yield"), -contains("FN"), -contains("major"), -X, -Year) %>%
-  dplyr::mutate_at(vars(17:32), ~replace(., is.na(.), 0)) %>%
-  mutate(across(where(is.integer), as.numeric)) %>%
+  filter(GenConc <= 60) %>%  # Remove rows where GenConc > 60 %>% 
+  filter_all(all_vars(!is.infinite(.))) %>%
+  filter(FNConc <= 1.5 * GenConc & FNConc >= 0.5 * GenConc) %>%  # Filter rows where FNConc is within 50% of GenConc
+  select(-contains("Yield"), -contains("FN"), -contains("major"), -X) %>%
+  dplyr::mutate_at(vars(18:33), ~replace(., is.na(.), 0)) %>%
+  # mutate(
+  #   permafrost_mean_m = ifelse(is.na(permafrost_mean_m), 0, permafrost_mean_m),  # Set NA values in permafrost_mean_m to 0
+  #   # num_days = ifelse(is.na(num_days), 0, num_days),        # Set NA values in num_days to 0
+  #   # max_prop_area = ifelse(is.na(max_prop_area), 0, max_prop_area),  # Set NA values in max_prop_area to 0
+  #   across(where(is.integer), as.numeric)) %>%
   select(GenConc, everything()) %>%
-  select(-Stream_ID) %>%
-  filter(GenConc <= 60) %>%  # Remove rows where GenConc > 60
+  select(-Stream_ID, -Year) %>%
   drop_na()
 
 # Plot and save correlation matrix ----
