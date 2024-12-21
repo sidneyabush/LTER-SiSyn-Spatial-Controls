@@ -8,9 +8,9 @@ rm(list = ls())
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 # Load required data and model from the RF script
-load("GenConc_Yearly_rf_model2.RData")
-load("GenConc_Yearly_kept_drivers.RData")
-load("GenConc_Yearly_drivers_df.RData")
+load("GenConc_Yearly_rf_model2_noWeathering.RData")
+load("GenConc_Yearly_kept_drivers_noWeathering.RData")
+load("GenConc_Yearly_drivers_df_noWeathering.RData")
 
 # Set global seed and output directory
 set.seed(123)
@@ -59,7 +59,7 @@ create_all_shapley_plots <- function(shap_values, output_file) {
 }
 
 # Output full SHAP plots
-output_file <- sprintf("%s/GenConc_Yearly_Overall_SHAP_Variable_Importance.pdf", output_dir)
+output_file <- sprintf("%s/GenConc_Yearly_Overall_SHAP_Variable_Importance_noWeathering.pdf", output_dir)
 create_all_shapley_plots(shap_values, output_file)
 
 # Function to create SHAP-based partial dependence plots
@@ -70,7 +70,7 @@ create_shap_partial_dependence_plots <- function(shap_values, kept_drivers, driv
   }
   
   # Open a PDF to save all SHAP partial dependence plots
-  pdf(file = file.path(output_dir, "GenConc_Yearly_SHAP_Partial_Dependence_Plots.pdf"), width = 8, height = 8)
+  pdf(file = file.path(output_dir, "GenConc_Yearly_SHAP_Partial_Dependence_Plots_noWeathering.pdf"), width = 8, height = 8)
   
   # Loop through each feature in shap_values
   for (feature in colnames(shap_values)) {
@@ -160,7 +160,7 @@ create_subset_importance_plots <- function(shap_values, conditions, kept_drivers
       theme_minimal()
     
     # Save the plot
-    output_file <- file.path(output_dir, paste0("SHAP_Variable_Importance_", condition_column, "_", operator, "_", condition_value, ".pdf"))
+    output_file <- file.path(output_dir, paste0("SHAP_Variable_Importance_noWeathering", condition_column, "_", operator, "_", condition_value, ".pdf"))
     ggsave(output_file, plot = subset_importance_plot, width = 8, height = 6)
     message(paste("Subset variable importance plot saved:", output_file))
   }

@@ -12,7 +12,7 @@ set.seed(123)
 # Load Functions ----
 # Function to save correlation matrix as PDF
 save_correlation_plot <- function(driver_cor, output_dir) {
-  pdf(sprintf("%s/correlation_plot.pdf", output_dir), width = 10, height = 10)
+  pdf(sprintf("%s/correlation_plot_noWeathering.pdf", output_dir), width = 10, height = 10)
   corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = FALSE)
   title("Yearly Gen Si Concentration")
   dev.off()
@@ -20,14 +20,14 @@ save_correlation_plot <- function(driver_cor, output_dir) {
 
 # Save RF Variable Importance Plot
 save_rf_importance_plot <- function(rf_model, output_dir) {
-  pdf(sprintf("%s/RF_variable_importance.pdf", output_dir), width = 8, height = 6)
+  pdf(sprintf("%s/RF_variable_importance_noWeathering.pdf", output_dir), width = 8, height = 6)
   randomForest::varImpPlot(rf_model, main = "RF Variable Importance - Yearly Gen Concentration", col = "darkblue")
   dev.off()
 }
 
 # Save Linear Model (LM) Plot
 save_lm_plot <- function(rf_model, observed, output_dir) {
-  pdf(sprintf("%s/RF_lm_plot.pdf", output_dir), width = 8, height = 8)
+  pdf(sprintf("%s/RF_lm_plot_noWeathering.pdf", output_dir), width = 8, height = 8)
   plot(rf_model$predicted, observed, pch = 16, cex = 1.5,
        xlab = "Predicted", ylab = "Observed", main = "Observed vs Predicted - Yearly Gen Concentration",
        cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5)
@@ -85,8 +85,8 @@ drivers_df <- read.csv("AllDrivers_Harmonized_Yearly.csv") %>%
   filter(GenConc <= 60) %>%  # Remove rows where GenConc > 60 %>% 
   filter_all(all_vars(!is.infinite(.))) %>%
   filter(FNConc <= 1.5 * GenConc & FNConc >= 0.5 * GenConc) %>%  # Filter rows where FNConc is within 50% of GenConc
-  select(-contains("Yield"), -contains("FN"), -contains("major"), -X) %>%
-  dplyr::mutate_at(vars(18:33), ~replace(., is.na(.), 0)) %>%
+  select(-contains("Yield"), -contains("FN"), -contains("major"), -X, -silicate_weathering) %>%
+  dplyr::mutate_at(vars(17:32), ~replace(., is.na(.), 0)) %>%
   # mutate(
   #   permafrost_mean_m = ifelse(is.na(permafrost_mean_m), 0, permafrost_mean_m),  # Set NA values in permafrost_mean_m to 0
   #   # num_days = ifelse(is.na(num_days), 0, num_days),        # Set NA values in num_days to 0
@@ -97,7 +97,7 @@ drivers_df <- read.csv("AllDrivers_Harmonized_Yearly.csv") %>%
   drop_na()
 
 # Plot and save correlation matrix ----
-numeric_drivers <- 2:31
+numeric_drivers <- 2:30
 driver_cor <- cor(drivers_df[, numeric_drivers])
 save_correlation_plot(driver_cor, output_dir)
 
@@ -219,7 +219,12 @@ save_rf_importance_plot(rf_model2, output_dir)
 save_lm_plot(rf_model2, drivers_df$GenConc, output_dir)
 
 # Save model and required objects for SHAP analysis
-save(rf_model2, file = "GenConc_Yearly_rf_model2.RData")
+# save(rf_model2, file = "GenConc_Yearly_rf_model2.RData")
+# kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
+# save(kept_drivers, file = "GenConc_Yearly_kept_drivers.RData")
+# save(drivers_df, file = "GenConc_Yearly_drivers_df.RData")
+
+save(rf_model2, file = "GenConc_Yearly_rf_model2_noWeathering.RData")
 kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
-save(kept_drivers, file = "GenConc_Yearly_kept_drivers.RData")
-save(drivers_df, file = "GenConc_Yearly_drivers_df.RData")
+save(kept_drivers, file = "GenConc_Yearly_kept_drivers_noWeathering.RData")
+save(drivers_df, file = "GenConc_Yearly_drivers_df_noWeathering.RData")
