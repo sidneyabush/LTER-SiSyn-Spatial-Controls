@@ -1,5 +1,5 @@
 ## ------------------------------------------------------- ##
-# Silica WG - Harmonize Drivers: AnnualModels
+# Silica WG - Harmonize Drivers: Yearly Models
 ## ------------------------------------------------------- ##
 # Written by:
 ## Sidney A Bush, Keira Johnson
@@ -33,8 +33,9 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
     Year = floor(as.numeric(DecYear)) # Convert DecYear to Year
   ) %>%
   filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
-  filter(GenConc <= 60) %>%  # Remove rows where GenConc > 60 %>% 
-  filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc) # Remove rows where FNConc is ±50% of GenConc
+  filter(GenConc <= 60) %>%  # Remove rows where GenConc > 60
+  filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc)  %>%  # Remove rows where FNConc is ±50% of GenConc
+  dplyr::select(-contains("Gen"), -DecYear, -.groups) # Trying to tidy up this workflow by removing GenConc and GenFlux, this can be added back in in the future if GenConc/ GenFlux are desired for Yearly models.
 
 gc()
 
@@ -63,52 +64,12 @@ wrtds_df$Stream_ID <- ifelse(wrtds_df$Stream_ID=="Finnish Environmental Institut
                            "Finnish Environmental Institute__SIMOJOKI AS. 13500", wrtds_df$Stream_ID)
 
 ## ------------------------------------------------------- ##
-# Download Reference Table from GD for DA ----
-## ------------------------------------------------------- ##
-# ref_table_link <- "https://docs.google.com/spreadsheets/d/11t9YYTzN_T12VAQhHuY5TpVjGS50ymNmKznJK4rKTIU/edit#gid=357814834"
-# ref_table_folder = drive_get(as_id(ref_table_link))
-# ref_table <- drive_download(ref_table_folder$drive_resource, overwrite = T)
-# 
-# ref_table <- readxl::read_xlsx("Site_Reference_Table.xlsx")
-
-ref_table <- read.csv("Site_Reference_Table - WRTDS_Reference_Table_LTER_V2.csv")
-ref_table$Stream_ID <- paste0(ref_table$LTER, "__", ref_table$Stream_Name)
-area <- ref_table[,c("drainSqKm", "Stream_ID")]
-
-# Define renamed and old names directly
-name_conversion <- data.frame(
-  Stream_ID = c("Walker Branch__East Fork", "Walker Branch__West Fork"),
-  Updated_StreamName = c("Walker Branch__east fork", "Walker Branch__west fork")
-)
-
-# Filter and join in one step
-missing_sites <- left_join(area[area$Stream_ID %in% name_conversion$Stream_ID, ], 
-                           name_conversion, by = "Stream_ID") 
-
-# Remove the unnecessary column and rename the remaining one
-missing_sites <- missing_sites %>%
-  dplyr::select(-Stream_ID) %>%
-  dplyr::rename(Stream_ID = Updated_StreamName)
-
-# Append the updated sites to the original dataframe
-area <- bind_rows(area, missing_sites)
-
-# Perform left join and convert DecYear to Year
-tot <- wrtds_df %>%
-  left_join(area %>% select(Stream_ID), by = "Stream_ID", relationship = "many-to-many") %>%
-  mutate(
-    DecYear = as.numeric(DecYear), # Ensure DecYear is numeric
-    DecYear = floor(DecYear) + (DecYear %% 1) / 365, # Adjust year and day of year
-    Year = floor(DecYear)
-  )
-
-## ------------------------------------------------------- ##
             # Calculate Yields ----
 ## ------------------------------------------------------- ##
 tot <- wrtds_df %>%
-  mutate(FNYield = FNFlux / drainSqKm,
-         GenYield = GenFlux / drainSqKm) %>%
-  dplyr::select(-FNFlux, -GenFlux)
+  mutate(FNYield = FNFlux / drainSqKm) %>%
+        # GenYield = GenFlux / drainSqKm) %>% # removed this since we removed GenFlux on import
+  dplyr::select(-contains("Flux"))
 
 ## ------------------------------------------------------- ##
         # Add in KG Classifications ----
