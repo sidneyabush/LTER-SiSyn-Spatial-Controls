@@ -35,7 +35,7 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
   filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
   filter(GenConc <= 60) %>%  # Remove rows where GenConc > 60
   filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc)  %>%  # Remove rows where FNConc is ±50% of GenConc
-  dplyr::select(-contains("Gen"), -DecYear, -.groups) # Trying to tidy up this workflow by removing GenConc and GenFlux, this can be added back in in the future if GenConc/ GenFlux are desired for Yearly models.
+  dplyr::select(-contains("Gen"), -DecYear, -.groups, -LTER) # Trying to tidy up this workflow by removing GenConc and GenFlux, this can be added back in in the future if GenConc/ GenFlux are desired for Yearly models.
 
 gc()
 
@@ -66,7 +66,7 @@ wrtds_df$Stream_ID <- ifelse(wrtds_df$Stream_ID=="Finnish Environmental Institut
 ## ------------------------------------------------------- ##
             # Calculate Yields ----
 ## ------------------------------------------------------- ##
-tot <- wrtds_df %>%
+wrtds_df <- wrtds_df %>%
   mutate(FNYield = FNFlux / drainSqKm) %>%
         # GenYield = GenFlux / drainSqKm) %>% # removed this since we removed GenFlux on import
   dplyr::select(-contains("Flux"))
@@ -85,7 +85,13 @@ KG <- read.csv("Koeppen_Geiger_2.csv") %>%
     Stream_ID = paste0(LTER, "__", Stream_Name)
   )
 
-tot <- left_join(tot, KG %>% select(-Stream_Name), by = "Stream_ID", relationship = "many-to-many")
+tot <- inner_join(wrtds_df, KG %>% 
+                    select(-Stream_Name, -Use_WRTDS, -contains("Coord"), -LTER, -X, -Latitude, -Longitude), 
+                  by = "Stream_ID")
+
+## Subset to just DSi to make merging easier from here out
+## Now only wrtds_df has all chemicals, while tot has only DSi
+tot <- subset(tot, chemical == "DSi")
 
 ## ------------------------------------------------------- ##
           # Import Daylength ----
@@ -100,22 +106,21 @@ name_conversion <- data.frame(
   Updated_StreamName = c("east fork", "west fork")
 )
 
-# Calculate min and max daylength, update Stream_Name, and ensure all sites in "tot" are left-joined
+# Calculate min and max daylength per site
 daylen_range <- daylen %>%
   dplyr::group_by(Stream_Name) %>%
   dplyr::summarise(
-    Min_Daylength = min(mean_daylength),
-    Max_Daylength = max(mean_daylength)
+    Min_Daylength = min(mean_daylength, na.rm = TRUE),
+    Max_Daylength = max(mean_daylength, na.rm = TRUE),
+    .groups = "drop"  # Ungroup after summarization
   ) %>%
   left_join(name_conversion, by = "Stream_Name") %>%
   mutate(Stream_Name = coalesce(Updated_StreamName, Stream_Name)) %>%
   dplyr::select(-Updated_StreamName)
 
-# Ensure the result is left-joined to "tot"
-tot <- left_join(tot, daylen_range, by = "Stream_Name", relationship = "many-to-many")
-
-## Subset to just DSi to make merging easier from hereout
-tot <- subset(tot, chemical == "DSi")
+# Ensure the result is joined to "tot"
+tot <- tot %>%
+  inner_join(daylen_range, by = "Stream_Name")
 
 # ## ------------------------------------------------------- ##
 #           # On to the Dynamic Drivers ---- 
@@ -167,7 +172,7 @@ greenup_cycles <- c("cycle0")
 colnames(spatial_drivers) <- sub("MMDD$", "", colnames(spatial_drivers))
 
 # Extract years from tot to identify where DSi data exists
-dsi_years <- unique(floor(tot$DecYear))  # Extract integer years
+dsi_years <- unique(floor(tot$Year))  # Extract integer years
 
 # Create a pattern for greenup_cycle0 columns corresponding to DSi years
 greenup_pattern <- paste0("greenup_", greenup_cycles, "_(", paste(dsi_years, collapse = "|"), ")")
@@ -189,19 +194,17 @@ for (col in cycle_cols) {
   )
 }
 
-
 # Remove greenup day columns that do not have "_doy" in their names
 columns_to_keep <- grep("_doy$", colnames(filtered_drivers), value = TRUE)
 columns_to_keep <- c("Stream_ID", columns_to_keep)  # Ensure essential columns are retained
 filtered_drivers <- filtered_drivers[, columns_to_keep]
 
 # Replace the greenup day columns in spatial_drivers with the DOY columns from filtered_drivers
-
-# Identify greenup day columns in spatial_drivers that need to be replaced
+# Remove greenup day columns from spatial_drivers
 columns_to_remove <- grep("^greenup_", colnames(spatial_drivers), value = TRUE)
 
-# Remove these columns from spatial_drivers
-spatial_drivers <- spatial_drivers[, !columns_to_remove, with = FALSE]
+# Retain only the columns not in columns_to_remove
+spatial_drivers <- spatial_drivers[, !colnames(spatial_drivers) %in% columns_to_remove]
 
 # Add the updated DOY columns from filtered_drivers to spatial_drivers
 spatial_drivers <- merge(
@@ -219,8 +222,15 @@ spatial_drivers <- merge(
 year_columns <- grep("[0-9]", colnames(spatial_drivers), value = TRUE)
 non_year_columns <- setdiff(colnames(spatial_drivers), year_columns)
 
+# Convert to data.table
+setDT(spatial_drivers)
+
+# Subset columns corresponding to years
 spatial_drivers_with_years <- spatial_drivers[, ..year_columns]
+
+# Add the Stream_ID column
 spatial_drivers_with_years[, Stream_ID := spatial_drivers$Stream_ID]
+
 
 spatial_drivers_with_years[, (setdiff(names(spatial_drivers_with_years), "Stream_ID")) := 
                              lapply(.SD, as.numeric), .SDcols = setdiff(names(spatial_drivers_with_years), "Stream_ID")]
@@ -301,7 +311,7 @@ gc()
 # ## ------------------------------------------------------- ##
 # Filter for relevant chemicals and positive GenConc values, and simplify NO3/NOx to NOx
 wrtds_NP <- wrtds_df %>%
-  filter(chemical %in% c("P", "NO3", "NOx"), GenConc > 0) %>%  # Removes NAs and zero values
+  filter(chemical %in% c("P", "NO3", "NOx"), FNConc > 0) %>%  # Removes NAs and zero values
   mutate(chemical = ifelse(chemical %in% c("NOx", "NO3"), "NOx", chemical))
 
 # Reshape data to ensure NOx and P values are in the same row
@@ -309,7 +319,7 @@ wrtds_NP_annual_wide <- wrtds_NP %>%
   pivot_wider(
     id_cols = c(Stream_ID, Year),  # Keep Stream_ID and Year as unique identifiers
     names_from = chemical,         # Create separate columns for NOx and P
-    values_from = GenConc          # Values for NOx and P come from GenConc
+    values_from = FNConc          # Values for NOx and P come from GenConc
   )
 
 # Find duplicates in the wide dataframe
@@ -327,14 +337,13 @@ duplicate_count <- duplicates %>%
 # Print the count of duplicates
 print(duplicate_count)
 
-
 gc()
 
 setDT(wrtds_NP_annual_wide)
 
 # Merge with the "tot" dataframe to add annual NOx and P data in a single row per Stream_ID and Year
 tot <- final_combined_data %>%
-  left_join(wrtds_NP_annual_wide, by = c("Stream_ID", "Year"))
+  inner_join(wrtds_NP_annual_wide, by = c("Stream_ID", "Year"))
 
 # Count the number of years with NA values for NOx and P for each Stream_ID, showing only non-zero results
 na_counts <- tot %>%
@@ -353,7 +362,30 @@ tot <- tot %>%
 #           # Import WRTDS N_P Data ---- 
 # ## ------------------------------------------------------- ##
 # Filter for relevant chemicals (N and P) and simplify NO3/NOx to NOx
-wrtds_NP <- wrtds_df %>%
+
+wrtds_NP <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
+  rename(LTER = LTER.x) %>%
+  dplyr::select(-Conc, -Flux, -PeriodLong, -PeriodStart, -LTER.y, -contains("date"), 
+                -contains("month"), -min_year, -max_year, -duration) %>%
+  dplyr::mutate(
+    Stream_Name = case_when(
+      Stream_Name == "East Fork" ~ "east fork",
+      Stream_Name == "West Fork" ~ "west fork",
+      TRUE ~ Stream_Name
+    ),
+    Stream_ID = paste0(LTER, "__", Stream_Name),
+    .groups = "drop"
+  ) %>%
+  dplyr::mutate(
+    Year = floor(as.numeric(DecYear)) # Convert DecYear to Year
+  ) %>%
+  filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
+  filter(GenConc <= 60) %>%  # Remove rows where GenConc > 60
+  filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc)  %>%  # Remove rows where FNConc is ±50% of GenConc
+  dplyr::select(-DecYear, -.groups, -LTER, -contains("FN"), -GenFlux) # Trying to tidy up this workflow by removing GenConc and GenFlux, this can be added back in in the future if GenConc/ GenFlux are desired for Yearly models.
+
+
+wrtds_NP <- wrtds_NP %>%
   filter(chemical %in% c("P", "NO3", "NOx") & GenConc > 0) %>%  # Keep only positive GenConc
   mutate(
     chemical = ifelse(chemical %in% c("NOx", "NO3"), "NOx", chemical)  # Simplify to NOx
@@ -385,7 +417,7 @@ setDT(wrtds_NP_wide)
 
 # Merge with the "tot" dataframe to add annual NOx and P data
 tot <- final_combined_data %>%
-  left_join(wrtds_NP_wide, by = c("Stream_ID", "Year"))
+  inner_join(wrtds_NP_wide, by = c("Stream_ID", "Year"))
 
 str(tot)
 
@@ -458,7 +490,6 @@ num_duplicates <- duplicates_tot %>%
   ungroup()
 
 print(num_duplicates)
-
 
 ## ------------------------------------------------------- ##
             #  Silicate Weathering ----
