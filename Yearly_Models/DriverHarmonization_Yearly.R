@@ -231,7 +231,6 @@ spatial_drivers_with_years <- spatial_drivers[, ..year_columns]
 # Add the Stream_ID column
 spatial_drivers_with_years[, Stream_ID := spatial_drivers$Stream_ID]
 
-
 spatial_drivers_with_years[, (setdiff(names(spatial_drivers_with_years), "Stream_ID")) := 
                              lapply(.SD, as.numeric), .SDcols = setdiff(names(spatial_drivers_with_years), "Stream_ID")]
 
@@ -263,12 +262,48 @@ gc()
 # Step 3: Pivot all driver types to wide format
 ## ------------------------------------------------------- ##
 
-# Pivot long data into a wide format, ensuring each driver type becomes a column
+# Step 1: Summarize to ensure one row per Stream_ID, year, and driver_type
+spatial_drivers_long <- spatial_drivers_long %>%
+  group_by(Stream_ID, year, driver_type) %>%
+  summarise(value = first(value), .groups = "drop")  # Keep only the first value if duplicates exist
+
+# Step 2: Check for duplicates in long format
+duplicates_long <- spatial_drivers_long %>%
+  group_by(Stream_ID, year, driver_type) %>%
+  filter(n() > 1)
+
+if (nrow(duplicates_long) > 0) stop("Duplicate rows detected in long format after summarization.")
+
+# Step 3: Pivot to wide format
 spatial_drivers_wide <- spatial_drivers_long %>%
   pivot_wider(
-    names_from = driver_type,  # Create columns for each driver type
+    names_from = driver_type,  # Create columns for each feature
     values_from = value
   )
+
+# Step 4: Ensure no duplicates in wide format
+duplicates_wide <- spatial_drivers_wide %>%
+  group_by(Stream_ID, year) %>%
+  filter(n() > 1)
+
+if (nrow(duplicates_wide) > 0) stop("Duplicate rows detected in wide format. Check grouping logic.")
+
+# Step 5: Rename `year` to `Year`
+spatial_drivers_wide <- spatial_drivers_wide %>%
+  rename(Year = year)
+
+# Step 6: Validate that all Stream_ID-Year pairs are accounted for
+expected_keys <- spatial_drivers_long %>%
+  select(Stream_ID, year) %>%
+  distinct() %>%
+  rename(Year = year)
+
+actual_keys <- spatial_drivers_wide %>%
+  select(Stream_ID, Year)
+
+missing_keys <- anti_join(expected_keys, actual_keys, by = c("Stream_ID", "Year"))
+
+if (nrow(missing_keys) > 0) stop("Some Stream_ID-Year pairs are missing in the wide format.")
 
 ## ------------------------------------------------------- ##
 # Step 4: Combine static (non-annual) data
@@ -284,10 +319,6 @@ combined_spatial_drivers <- merge(
   by = "Stream_ID",
   all.x = TRUE
 )
-
-# Rename "year" to "Year" in combined_spatial_drivers
-combined_spatial_drivers <- combined_spatial_drivers %>%
-  rename(Year = year)
 
 ## ------------------------------------------------------- ##
 # Step 5: Final merge to consolidate all rows by site and year
