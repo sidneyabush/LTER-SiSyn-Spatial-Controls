@@ -12,7 +12,7 @@ set.seed(123)
 # Load Functions ----
 # Function to save correlation matrix as PDF
 save_correlation_plot <- function(driver_cor, output_dir) {
-  pdf(sprintf("%s/correlation_plot_noWeathering.pdf", output_dir), width = 10, height = 10)
+  pdf(sprintf("%s/correlation_plot.pdf", output_dir), width = 10, height = 10)
   corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = FALSE)
   title("Yearly FN Si Concentration")
   dev.off()
@@ -20,14 +20,14 @@ save_correlation_plot <- function(driver_cor, output_dir) {
 
 # Save RF Variable Importance Plot
 save_rf_importance_plot <- function(rf_model, output_dir) {
-  pdf(sprintf("%s/RF_variable_importance_noWeathering.pdf", output_dir), width = 8, height = 6)
+  pdf(sprintf("%s/RF_variable_importance.pdf", output_dir), width = 8, height = 6)
   randomForest::varImpPlot(rf_model, main = "RF Variable Importance - Yearly FN Concentration", col = "darkblue")
   dev.off()
 }
 
 # Save Linear Model (LM) Plot
 save_lm_plot <- function(rf_model, observed, output_dir) {
-  pdf(sprintf("%s/RF_lm_plot_noWeathering.pdf", output_dir), width = 8, height = 8)
+  pdf(sprintf("%s/RF_lm_plot.pdf", output_dir), width = 8, height = 8)
   plot(rf_model$predicted, observed, pch = 16, cex = 1.5,
        xlab = "Predicted", ylab = "Observed", main = "Observed vs Predicted - Yearly FN Concentration",
        cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5)
@@ -113,13 +113,13 @@ ggplot(MSE_df_rf1, aes(ntree, mean_MSE)) +
 
 
 # Manually select ntree for rf_model1 ----
-manual_ntree_rf1 <- 1000  # Replace with your chosen value
+manual_ntree_rf1 <- 1000  # Replace with chosen value
 
 # Tune mtry for rf_model1 ----
 tuneRF(drivers_df[, 2:ncol(drivers_df)], drivers_df[, 1], ntreeTry = manual_ntree_rf1, stepFactor = 1, improve = 0.5, plot = TRUE)
 
 # Manually select mtry for rf_model1 ----
-manual_mtry_rf1 <- 10  # Replace with your chosen value
+manual_mtry_rf1 <- 10  # Replace with chosen value
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
@@ -165,8 +165,8 @@ new_rf_input <- paste(predictors(result_rfe), collapse = "+")
 # Format those features into a formula for the optimized random forest model
 rf_formula <- formula(paste("FNConc ~", new_rf_input))
 
-# Test different ntree values using parallel processing
-ntree_values <- seq(100, 2000, by = 100)  # Define ntree values to test
+# Test different ntree values 
+ntree_values <- seq(100, 2000, by = 100)  
 set.seed(123)
 MSE_list_parallel <- test_numtree_parallel_optimized(ntree_values, rf_formula, drivers_df)
 
@@ -211,12 +211,13 @@ save_rf_importance_plot(rf_model2, output_dir)
 save_lm_plot(rf_model2, drivers_df$FNConc, output_dir)
 
 # Save model and required objects for SHAP analysis
-# save(rf_model2, file = "FNConc_Yearly_rf_model2.RData")
-# kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
-# save(kept_drivers, file = "FNConc_Yearly_kept_drivers.RData")
-# save(drivers_df, file = "FNConc_Yearly_drivers_df.RData")
-
-save(rf_model2, file = "FNConc_Yearly_rf_model2_noWeathering.RData")
+save(rf_model2, file = "FNConc_Yearly_rf_model2.RData")
 kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
-save(kept_drivers, file = "FNConc_Yearly_kept_drivers_noWeathering.RData")
-save(drivers_df, file = "FNConc_Yearly_drivers_df_noWeathering.RData")
+save(kept_drivers, file = "FNConc_Yearly_kept_drivers.RData")
+save(drivers_df, file = "FNConc_Yearly_drivers_df.RData")
+
+# For testing RF model performance without silicate weathering 
+# save(rf_model2, file = "FNConc_Yearly_rf_model2_noWeathering.RData")
+# kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
+# save(kept_drivers, file = "FNConc_Yearly_kept_drivers_noWeathering.RData")
+# save(drivers_df, file = "FNConc_Yearly_drivers_df_noWeathering.RData")
