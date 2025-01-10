@@ -33,9 +33,9 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
     Year = floor(as.numeric(DecYear)) # Convert DecYear to Year
   ) %>%
   filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
-  filter(GenConc <= 60) %>%  # Remove rows where GenConc > 60
+  #filter(GenConc <= 60) %>%  # Remove rows where GenConc > 60
   filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc)  %>%  # Remove rows where FNConc is ±50% of GenConc
-  dplyr::select(-contains("Gen"), -DecYear, -.groups, -LTER) # Trying to tidy up this workflow by removing GenConc and GenFlux, this can be added back in in the future if GenConc/ GenFlux are desired for Yearly models.
+  dplyr::select(-DecYear, -.groups, -LTER) # Trying to tidy up this workflow by removing GenConc and GenFlux, this can be added back in in the future if GenConc/ GenFlux are desired for Yearly models.
 
 gc()
 
@@ -67,8 +67,8 @@ wrtds_df$Stream_ID <- ifelse(wrtds_df$Stream_ID=="Finnish Environmental Institut
             # Calculate Yields ----
 ## ------------------------------------------------------- ##
 wrtds_df <- wrtds_df %>%
-  mutate(FNYield = FNFlux / drainSqKm) %>%
-        # GenYield = GenFlux / drainSqKm) %>% # removed this since we removed GenFlux on import
+  mutate(FNYield = FNFlux / drainSqKm,
+        GenYield = GenFlux / drainSqKm) %>% # removed this since we removed GenFlux on import
   dplyr::select(-contains("Flux"))
 
 ## ------------------------------------------------------- ##
@@ -125,6 +125,7 @@ tot <- tot %>%
 # ## ------------------------------------------------------- ##
 #           # On to the Dynamic Drivers ---- 
 # ## ------------------------------------------------------- ##
+
 ## ------------------------------------------------------- ##
 # Step 1: Load and preprocess spatial drivers
 ## ------------------------------------------------------- ##
@@ -342,7 +343,7 @@ gc()
 # ## ------------------------------------------------------- ##
 # Filter for relevant chemicals and positive GenConc values, and simplify NO3/NOx to NOx
 wrtds_NP <- wrtds_df %>%
-  filter(chemical %in% c("P", "NO3", "NOx"), FNConc > 0) %>%  # Removes NAs and zero values
+  filter(chemical %in% c("P", "NO3", "NOx"), GenConc > 0) %>%  # Removes NAs and zero values
   mutate(chemical = ifelse(chemical %in% c("NOx", "NO3"), "NOx", chemical))
 
 # Reshape data to ensure NOx and P values are in the same row
@@ -350,7 +351,7 @@ wrtds_NP_annual_wide <- wrtds_NP %>%
   pivot_wider(
     id_cols = c(Stream_ID, Year),  # Keep Stream_ID and Year as unique identifiers
     names_from = chemical,         # Create separate columns for NOx and P
-    values_from = FNConc          # Values for NOx and P come from GenConc
+    values_from = GenConc          # Values for NOx and P come from GenConc
   )
 
 # Find duplicates in the wide dataframe
