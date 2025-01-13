@@ -165,7 +165,7 @@ spatial_drivers[, permafrost_cols] <- lapply(spatial_drivers[, permafrost_cols],
   return(x)
 })
 
-## GREEEN-UP DAY
+## GREEEN-UP DAY ----
 # Define greenup cycles (excluding cycle1 as it's not needed)
 greenup_cycles <- c("cycle0")
 
