@@ -23,10 +23,11 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
     Stream_ID = paste0(LTER, "__", Stream_Name),
     Year = floor(as.numeric(DecYear))
   ) %>%
-  filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
-  filter(chemical == "DSi") %>%
-  filter(GenConc <= 60) %>%
-  filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc)
+  filter(chemical == "DSi") 
+  # %>%
+  # filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
+  # filter(GenConc <= 60) %>%
+  # filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc)
 
 gc()
 
@@ -576,7 +577,7 @@ tryCatch({
 gc()
 
 ## ------------------------------------------------------- ##
-#  Gap Filling Missing Data ----
+        #  Gap Filling Missing Data ----
 ## ------------------------------------------------------- ##
 # Import streams with na slopes
 # Load and process Krycklan slopes
@@ -672,7 +673,7 @@ tot <- tot %>%
 
 # Tidy data for export: 
 tot_si <- tot %>%
-  dplyr::select(Stream_ID, Year, drainSqKm, NOx, P, precip,
+  dplyr::select(Stream_ID, Year, drainSqKm, NOx, P, precip, Q,
                 temp, Max_Daylength, prop_area, npp, evapotrans,
                 silicate_weathering, cycle0, permafrost_mean_m, elevation_mean_m, 
                 basin_slope_mean_degree,
