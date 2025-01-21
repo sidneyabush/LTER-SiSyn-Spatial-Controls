@@ -606,12 +606,12 @@ Krycklan_slopes <- left_join(Krycklan_slopes, stream_key, by = "Stream_Name") %>
 US_slopes <- left_join(US_slopes, stream_key, by = "Stream_Name") %>%
   filter(!is.na(basin_slope_mean_degree))  # Remove rows with NA values after merging with key
 
-# Filter tot for rows with NA basin slope values
+# Filter rows with NA slopes from 'tot'
 tot_with_na_slope <- tot %>%
   filter(is.na(basin_slope_mean_degree)) %>%
   select(Stream_ID)
 
-# Merge tot_with_na_slope with US_slopes and Krycklan_slopes to fill missing values
+# Merge 'tot_with_na_slope' with US and Krycklan slope data
 tot_with_slope_filled <- tot_with_na_slope %>%
   left_join(US_slopes %>% select(Stream_ID, basin_slope_mean_degree), by = "Stream_ID") %>%
   left_join(Krycklan_slopes %>% select(Stream_ID, basin_slope_mean_degree), by = "Stream_ID", suffix = c("_US", "_Krycklan")) %>%
@@ -620,17 +620,19 @@ tot_with_slope_filled <- tot_with_na_slope %>%
   ) %>%
   select(Stream_ID, basin_slope_mean_degree)
 
+# Convert to data.table for efficient key-based operations
 tot_with_slope_filled <- as.data.table(tot_with_slope_filled)
-
-# Convert tot to data.table
 tot <- as.data.table(tot)
 
-# Set keys on Stream_ID for both tables
+# Set keys for efficient join
 setkey(tot, Stream_ID)
 setkey(tot_with_slope_filled, Stream_ID)
 
-# Update in-place: replace NA values in basin_slope_mean_degree only
-tot[tot_with_slope_filled, basin_slope_mean_degree := i.basin_slope_mean_degree, on = .(Stream_ID)]
+# Update 'tot' with gap-filled slopes, retaining original values where present
+tot[tot_with_slope_filled, basin_slope_mean_degree := 
+      ifelse(is.na(basin_slope_mean_degree), i.basin_slope_mean_degree, basin_slope_mean_degree),
+    on = .(Stream_ID)]
+
 
 # Load the US elevation data without headers
 US_elev <- read.csv("DSi_Basin_Elevation_missing_sites.csv", header = FALSE)
