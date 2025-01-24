@@ -494,7 +494,11 @@ tot <- tot %>%
     elevation_mean_m = coalesce(elevation_mean_m_filled, elevation_mean_m)
   ) %>%
   select(-elevation_mean_m_filled) %>%
-  distinct(Stream_ID, .keep_all = TRUE)  
+  distinct(Stream_ID, .keep_all = TRUE)
+
+# Need to re-merge with wrtds_df to incorporate sites that DO have elevation and basin slope already from
+# WRTDS outputs
+
 
 # ------------------------------------------------------- #
 # Tidy-up Full Dataset ----

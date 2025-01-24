@@ -74,26 +74,65 @@ test_numtree_parallel_optimized <- function(ntree_list, formula, data) {
   return(MSE)
 }
 
-
 # Set the output directory path for saving PDFs
 output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model/FNConc"
 
 # Read in and tidy data ----
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
 
+# Load and preprocess the data
 drivers_df <- read.csv("AllDrivers_Harmonized_Yearly.csv") %>%
+  filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc) %>%
   select(-contains("Yield"), -contains("Gen"), -contains("major"), -X) %>%
-  dplyr::mutate_at(vars(18:33), ~replace(., is.na(.), 0)) %>%
+  dplyr::mutate_at(vars(19:34), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
+  mutate(greenup_day = as.numeric(greenup_day)) %>%  # Convert greenup_day to numeric
   select(FNConc, everything()) %>%
-  drop_na() %>%
+  filter(Year >= 2001 & Year <= 2024) %>%  # Filter rows with dates between 2001 and 2024
+  drop_na()
+
+# Here we can optionally remove data above and below a determined standard deviation about the mean
+# Calculate mean and standard deviation of FNConc
+mean_FNConc <- mean(drivers_df$FNConc, na.rm = TRUE)  # Calculate the mean
+std_FNConc <- sd(drivers_df$FNConc, na.rm = TRUE)  # Calculate the standard deviation
+threshold_FNConc <- mean_FNConc + 7 * std_FNConc  # Calculate 5 standard deviations above the mean
+
+# Output the results
+cat("Mean of FNConc:", mean_FNConc, "\n")
+cat("Standard Deviations of FNConc:", threshold_FNConc, "\n")
+
+# Remove rows with FNConc greater than the threshold
+drivers_df <- drivers_df %>%
+  filter(FNConc <= threshold_FNConc)
+
+# Output the number of rows remaining in the dataframe
+cat("Rows remaining after removing rows with FNConc greater than the threshold:", nrow(drivers_df), "\n")
+
+# Count the number of unique Stream_IDs before removing it
+unique_stream_id_count <- drivers_df %>%
+  summarise(n_unique_stream_ids = n_distinct(Stream_ID)) %>%
+  pull(n_unique_stream_ids)
+
+# Print the result
+cat("Number of unique Stream_IDs:", unique_stream_id_count, "\n")
+
+# Final step: Remove Stream_ID and Year
+drivers_df <- drivers_df %>%
   select(-Stream_ID, -Year)
 
 # Plot and save correlation matrix ----
-numeric_drivers <- 2:31
+numeric_drivers <- 2:32 # Change this range to reflect data frame length
 driver_cor <- cor(drivers_df[, numeric_drivers])
 save_correlation_plot(driver_cor, output_dir)
 
-# Test different ntree values for rf_model1 ----
+# ---- Split Data into Train/Test ----
+# Add the new training and testing workflow here
+set.seed(123)
+split_index <- sample(2, nrow(drivers_df), replace = TRUE, prob = c(0.7, 0.3))
+train <- drivers_df[split_index == 1, ]
+test <- drivers_df[split_index == 2, ]
+
+# ---- Train Initial RF Model ----
+# Test different ntree values for rf_model1
 ntree_values <- seq(100, 2000, by = 100)  # Define ntree values
 set.seed(123)
 MSE_list_rf1 <- test_numtree_parallel(ntree_values, FNConc ~ ., drivers_df)
@@ -116,21 +155,38 @@ ggplot(MSE_df_rf1, aes(ntree, mean_MSE)) +
 manual_ntree_rf1 <- 1000  # Replace with chosen value
 
 # Tune mtry for rf_model1 ----
-tuneRF(drivers_df[, 2:ncol(drivers_df)], drivers_df[, 1], ntreeTry = manual_ntree_rf1, stepFactor = 1, improve = 0.5, plot = TRUE)
+tuneRF(train[, 2:ncol(train)], train[, 1], ntreeTry = manual_ntree_rf1, stepFactor = 1, improve = 0.5, plot = TRUE)
 
 # Manually select mtry for rf_model1 ----
 manual_mtry_rf1 <- 10  # Replace with chosen value
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
-rf_model1 <- randomForest(FNConc ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = manual_ntree_rf1, mtry = manual_mtry_rf1)
+rf_model1 <- randomForest(FNConc ~ ., data = train, importance = TRUE, proximity = TRUE, ntree = manual_ntree_rf1, mtry = manual_mtry_rf1)
 
 # Visualize output for rf_model1
 print(rf_model1)
 randomForest::varImpPlot(rf_model1)
 
+# Generate plots comparing predicted vs observed ----
+lm_plot <- plot(rf_model1$predicted, train$FNConc, pch = 16, cex = 1.5,
+                xlab = "Predicted", ylab = "Observed", main = "Trained RF Model 1 Yearly FN Concentration",
+                cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
+  abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
+  theme(text = element_text(size = 40), face = "bold")
+legend("topleft", bty = "n", cex = 1.5, legend = paste("R2 =", format(mean(rf_model1$rsq), digits = 3)))
+legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(rf_model1$mse), digits = 3)))
+
+# Evaluate RF Model on Train/Test Datasets
+train_pred <- predict(rf_model, train)
+test_pred <- predict(rf_model, test)
+
+cat("Train R²:", cor(train_pred, train$FNConc)^2, "\n")
+cat("Test R²:", cor(test_pred, test$FNConc)^2, "\n")
+
+# Start Tuning with RFE and 2nd RFModel ----
 # Global seed for RFE ----
-size <- ncol(drivers_df) - 1  # This is the number of predictor variables
+size <- ncol(train) - 1  # This is the number of predictor variables
 cv_repeats <- 5
 cv_number <- 5
 total_repeats <- (cv_repeats * cv_number) + 1
@@ -145,8 +201,8 @@ control <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = cv_r
                       number = cv_number, verbose = TRUE, allowParallel = FALSE)
 
 # Divide data into predictor variables (x) and response variable (y)
-x <- drivers_df[, !(colnames(drivers_df) == "FNConc")]
-y <- drivers_df$FNConc
+x <- train[, !(colnames(train) == "FNConc")]
+y <- train$FNConc
 
 sink(NULL)  # Reset output sink
 closeAllConnections()  # Close all connections
@@ -168,7 +224,7 @@ rf_formula <- formula(paste("FNConc ~", new_rf_input))
 # Test different ntree values 
 ntree_values <- seq(100, 2000, by = 100)  
 set.seed(123)
-MSE_list_parallel <- test_numtree_parallel_optimized(ntree_values, rf_formula, drivers_df)
+MSE_list_parallel <- test_numtree_parallel_optimized(ntree_values, rf_formula, train)
 
 # Create a data frame for visualization
 MSE_df_parallel <- data.frame(
@@ -186,19 +242,19 @@ ggplot(MSE_df_parallel, aes(x = ntree, y = mean_MSE)) +
 
 # Global seed before re-tuning mtry
 set.seed(123)
-kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
-tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 1000, stepFactor = 1, improve = 0.5, plot = FALSE)
+kept_drivers <- train[, colnames(train) %in% predictors(result_rfe)]
+tuneRF(kept_drivers, train[, 1], ntreeTry = 1000, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
-rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 1000, mtry = 5)
+rf_model2 <- randomForest(rf_formula, data = train, importance = TRUE, proximity = TRUE, ntree = 1000, mtry = 5)
 
 # Visualize output for rf_model2
 print(rf_model2)
 randomForest::varImpPlot(rf_model2)
 
 # Generate plots comparing predicted vs observed ----
-lm_plot <- plot(rf_model2$predicted, drivers_df$FNConc, pch = 16, cex = 1.5,
+lm_plot <- plot(rf_model2$predicted, train$FNConc, pch = 16, cex = 1.5,
                 xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers - Yearly FN Concentration",
                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
@@ -208,16 +264,52 @@ legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(
 
 # Save RF variable importance plot and LM plot for rf_model2
 save_rf_importance_plot(rf_model2, output_dir)
-save_lm_plot(rf_model2, drivers_df$FNConc, output_dir)
+save_lm_plot(rf_model2, train$FNConc, output_dir)
 
 # Save model and required objects for SHAP analysis
 save(rf_model2, file = "FNConc_Yearly_rf_model2.RData")
-kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
+kept_drivers <- train[, colnames(train) %in% predictors(result_rfe)]
 save(kept_drivers, file = "FNConc_Yearly_kept_drivers.RData")
-save(drivers_df, file = "FNConc_Yearly_drivers_df.RData")
+save(train, file = "FNConc_Yearly_train.RData")
 
-# For testing RF model performance without silicate weathering 
-# save(rf_model2, file = "FNConc_Yearly_rf_model2_noWeathering.RData")
-# kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
-# save(kept_drivers, file = "FNConc_Yearly_kept_drivers_noWeathering.RData")
-# save(drivers_df, file = "FNConc_Yearly_drivers_df_noWeathering.RData")
+# ---- Use Predict Function on Test Data ----
+# Predict on test data using rf_model2
+test_predictions <- predict(rf_model2, test)
+
+# Evaluate predictions: Calculate R² and Mean Squared Error
+test_r2 <- cor(test_predictions, test$FNConc)^2
+test_mse <- mean((test_predictions - test$FNConc)^2)
+
+cat("Test R² for rf_model2:", test_r2, "\n")
+cat("Test MSE for rf_model2:", test_mse, "\n")
+
+# ---- Visualize Observed vs Predicted ----
+# Save observed vs predicted plot for test data
+pdf(sprintf("%s/RF_Observed_vs_Predicted_Test_rf_model2.pdf", output_dir), width = 8, height = 8)
+plot(
+  test_predictions, test$FNConc, 
+  pch = 16, cex = 1.5,
+  xlab = "Predicted", ylab = "Observed", 
+  main = "Observed vs Predicted - Test Data (rf_model2)",
+  cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5
+)
+abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2)
+legend(
+  "topleft", bty = "n", cex = 1.5,
+  legend = paste("R² =", format(test_r2, digits = 3))
+)
+legend(
+  "bottomright", bty = "n", cex = 1.5,
+  legend = paste("MSE =", format(test_mse, digits = 3))
+)
+dev.off()
+
+# ---- Save Test Predictions ----
+test_results <- test %>%
+  mutate(Predicted_FNConc = test_predictions)  # Add predictions to test data
+
+write.csv(test_results, "Test_Predictions_rf_model2.csv", row.names = FALSE)
+
+cat("Test predictions saved to Test_Predictions_rf_model2.csv\n")
+
+
