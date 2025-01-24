@@ -46,14 +46,6 @@ test_numtree_optimized <- function(ntree_list) {
   return(MSE)
 }
 
-# Function to remove outliers based on Z-scores
-cols_to_consider <- c("median_GenConc")
-sd_limit <- 3
-remove_outlier_rows <- function(data_to_filter, cols = cols_to_consider, limit = sd_limit) {
-  z_scores <- sapply(data_to_filter[cols], function(data) abs((data - mean(data, na.rm = TRUE)) / sd(data, na.rm = TRUE)))
-  return(data_to_filter[rowSums(z_scores > limit, na.rm = TRUE) == 0, ])
-}
-
 # Define a function to save RF variable importance plot as a PDF
 save_rf_importance_plot <- function(rf_model, output_dir) {
   pdf(sprintf("%s/RF_variable_importance.pdf", output_dir), width = 8, height = 6)
@@ -85,11 +77,44 @@ drivers_df <- read.csv("AllDrivers_Harmonized_Average.csv") %>%
   dplyr::mutate_at(vars(13:28), ~replace(., is.na(.), 0)) %>%
   mutate(across(where(is.integer), as.numeric)) %>%
   distinct(Stream_ID, .keep_all = TRUE) %>%
-  select(-Stream_ID) %>%
+  # select(-Stream_ID) %>%
   drop_na()
 
-# Remove outliers using custom function
-# drivers_df <- remove_outlier_rows(drivers_df)
+# Here we can optionally remove data above and below a determined standard deviation about the mean
+# Calculate mean and standard deviation of median_GenConc
+mean_median_GenConc <- mean(drivers_df$median_GenConc, na.rm = TRUE)  # Calculate the mean
+std_median_GenConc <- sd(drivers_df$median_GenConc, na.rm = TRUE)  # Calculate the standard deviation
+threshold_median_GenConc <- mean_median_GenConc + 7 * std_median_GenConc  # Calculate 5 standard deviations above the mean
+
+# Output the results
+cat("Mean of median_GenConc:", mean_median_GenConc, "\n")
+cat("Standard Deviations of median_GenConc:", threshold_median_GenConc, "\n")
+
+# Remove rows with median_GenConc greater than the threshold
+drivers_df <- drivers_df %>%
+  filter(median_GenConc <= threshold_median_GenConc)
+
+# Output the number of rows remaining in the dataframe
+cat("Rows remaining after removing rows with median_GenConc greater than the threshold:", nrow(drivers_df), "\n")
+
+# Export unique Stream_IDs to a CSV file
+unique_stream_ids <- drivers_df %>%
+  select(Stream_ID) %>%
+  distinct()
+
+write.csv(unique_stream_ids, "unique_stream_ids_average.csv", row.names = FALSE)
+
+# Count the number of unique Stream_IDs before removing it
+unique_stream_id_count <- drivers_df %>%
+  summarise(n_unique_stream_ids = n_distinct(Stream_ID)) %>%
+  pull(n_unique_stream_ids)
+
+# Print the result
+cat("Number of unique Stream_IDs:", unique_stream_id_count, "\n")
+
+# Final step: Remove Stream_ID and Year
+drivers_df <- drivers_df %>%
+  select(-Stream_ID, -Year)
 
 # Plot correlation between driver variables ----
 numeric_drivers <- 2:34  # Indices for numeric drivers

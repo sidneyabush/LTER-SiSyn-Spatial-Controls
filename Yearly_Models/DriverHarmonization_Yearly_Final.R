@@ -12,6 +12,7 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
   rename(LTER = LTER.x) %>%
+  filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc) %>%
   dplyr::select(-Conc, -Flux, -PeriodLong, -PeriodStart, -LTER.y, -contains("date"), 
                 -contains("month"), -min_year, -max_year, -duration) %>%
   dplyr::mutate(
@@ -21,13 +22,9 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
       TRUE ~ Stream_Name
     ),
     Stream_ID = paste0(LTER, "__", Stream_Name),
-    Year = floor(as.numeric(DecYear))
-  ) %>%
+    Year = floor(as.numeric(DecYear))) %>%
+  dplyr:: filter(Year >= 2001 & Year <= 2024) %>%  # Filter rows with dates between 2001 and 2024
   filter(chemical == "DSi") 
-  # %>%
-  # filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
-  # filter(GenConc <= 60) %>%
-  # filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc)
 
 gc()
 
@@ -63,7 +60,6 @@ yields <- wrtds_df %>%
          GenYield = GenFlux / drainSqKm) %>%
   dplyr::select(-FNFlux, -GenFlux)
 
-# Combine si_stats and q_stats, handling duplicate columns with coalesce
 tot <- wrtds_df %>%
   left_join(yields, by = c("Stream_ID", "Year")) %>%
   distinct(Stream_ID, Year, .keep_all = TRUE)
@@ -83,7 +79,6 @@ gc()
 KG <- read.csv("Koeppen_Geiger_2.csv")
 KG$Stream_ID<-paste0(KG$LTER, "__", KG$Stream_Name)
 
-# Combine si_stats and q_stats, handling duplicate columns with coalesce
 tot <- tot %>%
   left_join(KG, by = "Stream_ID") %>%
   distinct(Stream_ID, Year, .keep_all = TRUE)

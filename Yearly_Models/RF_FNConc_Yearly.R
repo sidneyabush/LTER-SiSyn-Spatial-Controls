@@ -82,12 +82,10 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 # Load and preprocess the data
 drivers_df <- read.csv("AllDrivers_Harmonized_Yearly.csv") %>%
-  filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc) %>%
   select(-contains("Yield"), -contains("Gen"), -contains("major"), -X) %>%
   dplyr::mutate_at(vars(19:34), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
   mutate(greenup_day = as.numeric(greenup_day)) %>%  # Convert greenup_day to numeric
   select(FNConc, everything()) %>%
-  filter(Year >= 2001 & Year <= 2024) %>%  # Filter rows with dates between 2001 and 2024
   drop_na()
 
 # Here we can optionally remove data above and below a determined standard deviation about the mean
@@ -106,6 +104,13 @@ drivers_df <- drivers_df %>%
 
 # Output the number of rows remaining in the dataframe
 cat("Rows remaining after removing rows with FNConc greater than the threshold:", nrow(drivers_df), "\n")
+
+# Export unique Stream_IDs to a CSV file
+unique_stream_ids <- drivers_df %>%
+  select(Stream_ID) %>%
+  distinct()
+
+write.csv(unique_stream_ids, "unique_stream_ids_yearly.csv", row.names = FALSE)
 
 # Count the number of unique Stream_IDs before removing it
 unique_stream_id_count <- drivers_df %>%
@@ -152,7 +157,7 @@ ggplot(MSE_df_rf1, aes(ntree, mean_MSE)) +
 
 
 # Manually select ntree for rf_model1 ----
-manual_ntree_rf1 <- 1000  # Replace with chosen value
+manual_ntree_rf1 <- 700  # Replace with chosen value
 
 # Tune mtry for rf_model1 ----
 tuneRF(train[, 2:ncol(train)], train[, 1], ntreeTry = manual_ntree_rf1, stepFactor = 1, improve = 0.5, plot = TRUE)

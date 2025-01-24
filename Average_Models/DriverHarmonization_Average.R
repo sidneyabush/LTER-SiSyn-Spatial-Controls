@@ -5,13 +5,14 @@ librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr, stri
 rm(list = ls())
 
 ## ------------------------------------------------------- ##
-# Read in and Tidy Data ----
+            # Read in and Tidy Data ----
 ## ------------------------------------------------------- ##
 ## Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
   rename(LTER = LTER.x) %>%
+  filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc) %>%
   dplyr::select(-Conc, -Flux, -PeriodLong, -PeriodStart, -LTER.y, -contains("date"), 
                 -contains("month"), -min_year, -max_year, -duration) %>%
   dplyr::mutate(
@@ -21,11 +22,9 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
       TRUE ~ Stream_Name
     ),
     Stream_ID = paste0(LTER, "__", Stream_Name),
-    .groups = "drop") %>%
-  filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
-  filter(chemical == "DSi") %>%
-  filter(GenConc <= 60) %>%  # Remove rows where GenConc > 60 %>% 
-  filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc) # Remove rows where FNConc is ±50% of GenConc
+    Year = floor(as.numeric(DecYear))) %>%
+  dplyr:: filter(Year >= 2001 & Year <= 2024) %>%  # Filter rows with dates between 2001 and 2024
+  filter(chemical == "DSi") 
 
 gc()
 
@@ -54,92 +53,24 @@ wrtds_df$Stream_ID <- ifelse(wrtds_df$Stream_ID=="Finnish Environmental Institut
                              "Finnish Environmental Institute__SIMOJOKI AS. 13500", wrtds_df$Stream_ID)
 
 ## ------------------------------------------------------- ##
-# Calculate Stats ----
+            # Calculate Yields ----
 ## ------------------------------------------------------- ##
-# Calculate si_stats without CV columns
-si_stats <- wrtds_df %>%
-  group_by(Stream_ID) %>%
-  summarise(
-    across(
-      c(FNConc, GenConc, FNFlux, GenFlux),
-      list(median = median),
-      .names = "{.fn}_{.col}"
-    ),
-    .groups = "drop"  # Ungroup after summarise for a clean output
-  )
-
-
-# Calculate q_stats with CV for Q
-q_stats <- wrtds_df %>%
-  group_by(Stream_ID) %>%
-  summarise(
-    mean_q = mean(Q),
-    sd_q = sd(Q),  # Calculate standard deviation for Q
-    CV_Q = sd(Q) / mean(Q),  # Calculate coefficient of variation for Q
-    q_95 = quantile(Q, 0.95),
-    q_5 = quantile(Q, 0.05),
-    .groups = "drop"
-  )
-
-# Combine si_stats and q_stats
-tot <- si_stats %>%
-  left_join(q_stats, by = c("Stream_ID")) %>%
-  select(-sd_q) %>%
-  distinct(Stream_ID, .keep_all = TRUE)
-
-## ------------------------------------------------------- ##
-    # Download Reference Table from GD for DA ----
-## ------------------------------------------------------- ##
-# ref_table_link <- "https://docs.google.com/spreadsheets/d/11t9YYTzN_T12VAQhHuY5TpVjGS50ymNmKznJK4rKTIU/edit#gid=357814834"
-# ref_table_folder = drive_get(as_id(ref_table_link))
-# ref_table <- drive_download(ref_table_folder$drive_resource, overwrite = T)
-# 
-# ref_table <- readxl::read_xlsx("Site_Reference_Table.xlsx")
-# ref_table$Stream_ID <- paste0(ref_table$LTER, "__", ref_table$Stream_Name)
-# area <- ref_table[,c("drainSqKm", "Stream_ID")]
-
-ref_table <- read.csv("Site_Reference_Table - WRTDS_Reference_Table_LTER_V2.csv")
-ref_table$Stream_ID <- paste0(ref_table$LTER, "__", ref_table$Stream_Name)
-area <- ref_table[,c("drainSqKm", "Stream_ID")]
-
-# Define renamed and old names directly
-name_conversion <- data.frame(
-  Stream_ID = c("Walker Branch__East Fork", "Walker Branch__West Fork"),
-  Updated_StreamName = c("Walker Branch__east fork", "Walker Branch__west fork")
-)
-
-# Filter and join in one step
-missing_sites <- left_join(area[area$Stream_ID %in% name_conversion$Stream_ID, ], 
-                           name_conversion, by = "Stream_ID") 
-
-# Remove the unnecessary column and rename the remaining one
-missing_sites <- missing_sites %>%
-  dplyr::select(-Stream_ID) %>%
-  dplyr::rename(Stream_ID = Updated_StreamName)
-
-# Append the updated sites to the original dataframe
-area <- bind_rows(area, missing_sites)
-
-# Perform a left join while selecting only specific columns from area
-tot <- tot %>%
-  left_join(area, by = "Stream_ID")%>%
-  distinct(Stream_ID, .keep_all = TRUE)
-
-gc()
-
-## ------------------------------------------------------- ##
-# Calculate Yields ----
-## ------------------------------------------------------- ##
-yields <- tot %>%
-  mutate(FNYield = median_FNFlux / drainSqKm,
-         GenYield = median_GenFlux / drainSqKm) %>%
-  dplyr::select(-median_FNFlux, -median_GenFlux)
+yields <- wrtds_df %>%
+  mutate(FNYield = FNFlux / drainSqKm,
+         GenYield = GenFlux / drainSqKm) %>%
+  dplyr::select(-FNFlux, -GenFlux)
 
 # Combine si_stats and q_stats, handling duplicate columns with coalesce
-tot <- tot %>%
+tot <- wrtds_df %>%
   left_join(yields, by = "Stream_ID") %>%
-  dplyr::select(-median_FNFlux, -median_GenFlux) %>%
+  dplyr::select(-FNFlux, -GenFlux) %>%
   distinct(Stream_ID, .keep_all = TRUE)
+
+num_unique_stream_ids <- tot %>%
+  pull(Stream_ID) %>%
+  n_distinct()
+
+print(num_unique_stream_ids)
 
 gc()
 
@@ -150,7 +81,6 @@ gc()
 KG <- read.csv("Koeppen_Geiger_2.csv")
 KG$Stream_ID<-paste0(KG$LTER, "__", KG$Stream_Name)
 
-# Combine si_stats and q_stats, handling duplicate columns with coalesce
 tot <- tot %>%
   left_join(KG, by = "Stream_ID") %>%
   distinct(Stream_ID, .keep_all = TRUE)
@@ -183,6 +113,12 @@ daylen_range <- daylen %>%
 tot <- tot %>% 
   left_join(daylen_range, by = "Stream_Name") %>%
   distinct(Stream_ID, .keep_all = TRUE)
+
+num_unique_stream_ids <- tot %>%
+  pull(Stream_ID) %>%
+  n_distinct()
+
+print(num_unique_stream_ids)
 
 ## ------------------------------------------------------- ##
             # Import Spatial Drivers ----
@@ -292,7 +228,7 @@ tot <- tot %>%
   distinct(Stream_ID, .keep_all = TRUE)
 
 ## ------------------------------------------------------- ##
-# Calculate Greenup Day for `greenup_cycle0` Only
+      # Calculate Greenup Day for `greenup_cycle0` Only
 ## ------------------------------------------------------- ##
 
 # Define greenup cycles (excluding cycle1 as it's not needed)
@@ -608,11 +544,41 @@ drivers_df <- tot %>%
   mutate(permafrost_mean_m = replace(permafrost_mean_m, is.na(permafrost_mean_m), 0), 
          snow_cover = replace(snow_cover, is.na(snow_cover), 0))
 
-# Clean up memory
-gc()
+## ------------------------------------------------------- ##
+# Calculate Stats ----
+## ------------------------------------------------------- ##
+# Calculate si_stats without CV columns
+# This is different from the Yearly workflow since we're taking an average per site
+si_stats <- tot %>%
+  group_by(Stream_ID) %>%
+  summarise(
+    across(
+      c(FNConc, GenConc, FNFlux, GenFlux),
+      list(median = median),
+      .names = "{.fn}_{.col}"
+    ),
+    .groups = "drop"  # Ungroup after summarise for a clean output
+  )
+
+
+# Calculate q_stats with CV for Q
+q_stats <- tot %>%
+  group_by(Stream_ID) %>%
+  summarise(
+    mean_q = mean(Q),
+    sd_q = sd(Q),  # Calculate standard deviation for Q
+    CV_Q = sd(Q) / mean(Q),  # Calculate coefficient of variation for Q
+    q_95 = quantile(Q, 0.95),
+    q_5 = quantile(Q, 0.05),
+    .groups = "drop"
+  )
+
+# Combine si_stats and q_stats
+tot <- si_stats %>%
+  left_join(q_stats, by = c("Stream_ID")) %>%
+  select(-sd_q) %>%
+  distinct(Stream_ID, .keep_all = TRUE)
 
 # Export the resulting dataframe to a .csv file
 write.csv(drivers_df, "AllDrivers_Harmonized_Average.csv", row.names = FALSE)
-
-
 
