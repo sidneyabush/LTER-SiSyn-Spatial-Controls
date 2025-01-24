@@ -170,20 +170,20 @@ si_drivers <- si_drivers %>%
 months_abb <- c("_jan_|_feb_|_mar_|_apr_|_may_|_jun_|_jul_|_aug_|_sep_|_oct_|_nov_|_dec_")
 
 # Remove monthly drivers from spatial drivers
-spatial_drivers <- spatial_drivers[,-c(which(colnames(spatial_drivers) %like% months_abb))]
+si_drivers <- si_drivers[,-c(which(colnames(si_drivers) %like% months_abb))]
 
 # Confirm NA replacement for permafrost columns
-permafrost_cols <- grep("permafrost", colnames(spatial_drivers), value = TRUE)
+permafrost_cols <- grep("permafrost", colnames(si_drivers), value = TRUE)
 
 # Replace NA values with 0 for all permafrost columns
-spatial_drivers[, permafrost_cols] <- lapply(spatial_drivers[, permafrost_cols], function(x) {
+si_drivers[, permafrost_cols] <- lapply(si_drivers[, permafrost_cols], function(x) {
   x <- as.numeric(x)  # Convert to numeric to avoid issues
   x[is.na(x)] <- 0
   return(x)
 })
 
 # Confirm updates
-summary(spatial_drivers[, permafrost_cols])
+summary(si_drivers[, permafrost_cols])
 
 # Extract years from wrtds_df
 dsi_years <- unique(floor(wrtds_df$DecYear))  # Extract integer year
@@ -191,27 +191,27 @@ dsi_years <- unique(floor(wrtds_df$DecYear))  # Extract integer year
 # Create a pattern for DSi years
 year_pattern <- paste0("_", dsi_years, "_", collapse = "|")
 
-# Filter columns in spatial_drivers that match DSi years
-matching_columns <- grep(year_pattern, colnames(spatial_drivers), value = TRUE)
+# Filter columns in si_drivers that match DSi years
+matching_columns <- grep(year_pattern, colnames(si_drivers), value = TRUE)
 
 # These are the categorical variables like "major_land", "major_soil", and "major_rock" and the numerical % of each
-major_cat_vars <- which(colnames(spatial_drivers) %like% c("soil|land|rock"))
-cat_vars <- spatial_drivers[,c(major_cat_vars)]
+major_cat_vars <- which(colnames(si_drivers) %like% c("soil|land|rock"))
+cat_vars <- si_drivers[,c(major_cat_vars)]
 
 # Combine spatial drivers and categorical variables
-spatial_vars <- cbind(spatial_drivers, cat_vars)
+spatial_vars <- cbind(si_drivers, cat_vars)
 
 # Define the pattern to search for elevation and basin slope columns
 relevant_columns <- c("elevation", "basin", "permafrost")
 
 # Use grep to locate elevation and basin slope columns
-elevation_basin_permafrost_cols <- grep(paste(relevant_columns, collapse = "|"), colnames(spatial_drivers))
+elevation_basin_permafrost_cols <- grep(paste(relevant_columns, collapse = "|"), colnames(si_drivers))
 
 # Combine major categorical columns with elevation and basin slope
-cat_vars <- spatial_drivers[, c(major_cat_vars, elevation_basin_permafrost_cols)]
+cat_vars <- si_drivers[, c(major_cat_vars, elevation_basin_permafrost_cols)]
 
 # Add Stream_ID back to the resulting data
-cat_vars$Stream_ID <- spatial_drivers$Stream_ID
+cat_vars$Stream_ID <- si_drivers$Stream_ID
 
 # These are the quantitative drivers
 drivers_list_quant <- c("num_days", "prop_area", "precip", "evapotrans", "temp", "npp")
@@ -223,8 +223,8 @@ for (i in 1:length(drivers_list_quant)) {
   drive_cols <- grep(drivers_list_quant[i], matching_columns, value = TRUE)
   
   if (length(drive_cols) > 0) {
-    # Subset spatial_drivers with matching columns
-    one_driver <- spatial_drivers[, c("Stream_ID", drive_cols), drop = FALSE]  # Include Stream_ID for grouping
+    # Subset si_drivers with matching columns
+    one_driver <- si_drivers[, c("Stream_ID", drive_cols), drop = FALSE]  # Include Stream_ID for grouping
     
     # Ensure columns are numeric
     numeric_driver <- one_driver[, -1, drop = FALSE]  # Exclude Stream_ID
@@ -234,14 +234,14 @@ for (i in 1:length(drivers_list_quant)) {
     site_mean[[i]] <- rowMeans(numeric_driver, na.rm = TRUE)
   } else {
     warning(paste("No matching columns found for:", drivers_list_quant[i]))
-    site_mean[[i]] <- rep(NA, nrow(spatial_drivers))
+    site_mean[[i]] <- rep(NA, nrow(si_drivers))
   }
 }
 
 # Combine results into a dataframe
 mean_df <- as.data.frame(do.call(cbind, site_mean))
 colnames(mean_df) <- drivers_list_quant
-mean_df$Stream_ID <- spatial_drivers$Stream_ID
+mean_df$Stream_ID <- si_drivers$Stream_ID
 
 ## Need to combine the elevation_slope_permafrost variables with mean_df
 mean_df <- left_join(mean_df, cat_vars, by="Stream_ID")
@@ -258,17 +258,17 @@ tot <- tot %>%
 greenup_cycles <- c("cycle0")
 
 # Standardize column names by removing "MMDD" if present
-colnames(spatial_drivers) <- sub("MMDD$", "", colnames(spatial_drivers))
+colnames(si_drivers) <- sub("MMDD$", "", colnames(si_drivers))
 
 # Extract years from wrtds_df to identify where DSi data exists
 dsi_years <- unique(floor(wrtds_df$DecYear))  # Extract integer years
 
 # Create a pattern for greenup_cycle0 columns corresponding to DSi years
 greenup_pattern <- paste0("greenup_", greenup_cycles, "_(", paste(dsi_years, collapse = "|"), ")")
-cycle_cols <- grep(greenup_pattern, colnames(spatial_drivers), value = TRUE)
+cycle_cols <- grep(greenup_pattern, colnames(si_drivers), value = TRUE)
 
 # Filter the spatial drivers for relevant sites and years with DSi data
-filtered_drivers <- spatial_drivers[spatial_drivers$Stream_ID %in% unique(wrtds_df$Stream_ID), ]
+filtered_drivers <- si_drivers[si_drivers$Stream_ID %in% unique(wrtds_df$Stream_ID), ]
 
 # Convert greenup date columns to day-of-year values for cycle0
 for (col in cycle_cols) {
