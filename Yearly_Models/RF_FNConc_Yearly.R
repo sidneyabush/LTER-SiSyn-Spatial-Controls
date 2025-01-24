@@ -178,8 +178,8 @@ legend("topleft", bty = "n", cex = 1.5, legend = paste("R2 =", format(mean(rf_mo
 legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(rf_model1$mse), digits = 3)))
 
 # Evaluate RF Model on Train/Test Datasets
-train_pred <- predict(rf_model, train)
-test_pred <- predict(rf_model, test)
+train_pred <- predict(rf_model1, train)
+test_pred <- predict(rf_model1, test)
 
 cat("Train R²:", cor(train_pred, train$FNConc)^2, "\n")
 cat("Test R²:", cor(test_pred, test$FNConc)^2, "\n")
