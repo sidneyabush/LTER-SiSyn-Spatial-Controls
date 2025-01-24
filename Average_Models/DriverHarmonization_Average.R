@@ -92,6 +92,12 @@ tot <- tot %>%
 daylen <- read.csv("Monthly_Daylength_2.csv") %>%
   dplyr::select(-1)
 
+num_unique_stream_ids <- daylen %>%
+  pull(Stream_Name) %>%
+  n_distinct()
+
+print(num_unique_stream_ids)
+
 # Define renamed and old names directly in a streamlined manner
 name_conversion <- data.frame(
   Stream_Name = c("East Fork", "West Fork"),
@@ -102,8 +108,8 @@ name_conversion <- data.frame(
 daylen_range <- daylen %>%
   dplyr::group_by(Stream_Name) %>%
   dplyr::summarise(
-    min_daylength = min(mean_daylength),
-    max_daylength = max(mean_daylength)
+    Min_Daylength = min(mean_daylength),
+    Max_Daylength = max(mean_daylength)
   ) %>%
   left_join(name_conversion, by = "Stream_Name") %>%
   mutate(Stream_Name = coalesce(Updated_StreamName, Stream_Name)) %>%
@@ -121,7 +127,7 @@ num_unique_stream_ids <- tot %>%
 print(num_unique_stream_ids)
 
 ## ------------------------------------------------------- ##
-            # Import Spatial Drivers ----
+# Spatial Drivers
 ## ------------------------------------------------------- ##
 # Define renamed and old names directly
 name_conversion <- data.frame(
@@ -130,7 +136,7 @@ name_conversion <- data.frame(
 )
 
 # Read and preprocess spatial drivers
-spatial_drivers <- read.csv("all-data_si-extract_2_202412.csv", stringsAsFactors = FALSE) %>%
+si_drivers <- read.csv("all-data_si-extract_2_202412.csv", stringsAsFactors = FALSE) %>%
   select(-contains("soil")) %>%
   # Create Stream_ID first using LTER and Stream_Name
   mutate(Stream_ID = paste0(LTER, "__", Stream_Name)) %>%
@@ -141,6 +147,23 @@ spatial_drivers <- read.csv("all-data_si-extract_2_202412.csv", stringsAsFactors
   ) %>%
   select(-Updated_StreamName)  # Remove temporary renaming column
 
+# Need to also do this for the Finnish sites in si drivers to names are all consistent: 
+for (i in 1:nrow(finn)) {
+  site_id<-finn[i,3]
+  row_num<-which(si_drivers$Stream_ID==site_id)
+  si_drivers[row_num, "Stream_ID"]<-finn[i,4]
+}
+
+si_drivers$Stream_ID <- ifelse(si_drivers$Stream_ID=="Finnish Environmental Institute__TORNIONJ KUKKOLA 14310  ",
+                               "Finnish Environmental Institute__TORNIONJ KUKKOLA 14310", si_drivers$Stream_ID)
+
+si_drivers$Stream_ID <- ifelse(si_drivers$Stream_ID=="Finnish Environmental Institute__SIMOJOKI AS. 13500      ",
+                               "Finnish Environmental Institute__SIMOJOKI AS. 13500", si_drivers$Stream_ID)
+
+# Remove rows where Stream_Name starts with "Site" and duplicates based on shapefile name
+si_drivers <- si_drivers %>%
+  filter(!grepl("^Site", Stream_Name)) %>%  # Remove rows starting with "Site"
+  distinct(Shapefile_Name, .keep_all = TRUE)  # Remove duplicates by Shapefile_Name
 
 ## Before, using full abbrevs removed some of the spatial driver columns (e.g., "dec" in "deciduous" was causing
 #  deciduous land cover to be filtered out)

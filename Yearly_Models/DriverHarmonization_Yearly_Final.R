@@ -133,7 +133,6 @@ print(num_unique_stream_ids)
 ## ------------------------------------------------------- ##
               # Spatial Drivers
 ## ------------------------------------------------------- ##
-# Doing this Keira's way to test workflow (January 2025)
 # Define renamed and old names directly
 name_conversion <- data.frame(
   Stream_ID = c("Walker Branch__East Fork", "Walker Branch__West Fork"),
