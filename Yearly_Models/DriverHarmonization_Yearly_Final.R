@@ -130,6 +130,8 @@ num_unique_stream_ids <- tot %>%
 
 print(num_unique_stream_ids)
 
+## We lose one stream here that we don't lose in the average dataset ---- revisit this:
+
 ## ------------------------------------------------------- ##
               # Spatial Drivers----
 ## ------------------------------------------------------- ##
@@ -224,27 +226,25 @@ num_unique_stream_ids <- year_cols_melt %>%
 
 print(num_unique_stream_ids)
 
-# write.csv(year_cols_melt, "Annual_Driver_Data_test.csv")  
-
 # Parse out character data
 character_cols <- si_drivers[,(colnames(si_drivers) %like% character_vars)]
 character_cols$Stream_Name <- si_drivers$Stream_Name
 
-num_unique_stream_ids <- character_cols %>%
+num_unique_stream_ids <- tot %>%
   pull(Stream_Name) %>%
   n_distinct()
 
 print(num_unique_stream_ids)
 
-# write.csv(character_cols, "Character_Driver_Data_test.csv")
 
-## Incorporating Keira's way of handling Spatial Drivers Data
-
+## ------------------------------------------------------- ##
+    # Calculate Greenup Day ----
+## ------------------------------------------------------- ##
 drivers <- year_cols_melt
 
 drivers <- subset(drivers, !drivers$driver %in% c("cycle1","num_days"))
 
-drivers_cropped <- subset(drivers, drivers$year > 2001 & drivers$year < 2023)
+drivers_cropped <- subset(drivers, drivers$year > 2001 & drivers$year < 2024)
 
 # drivers_cast <- drivers_cropped %>%
 #   dplyr::select(!c(units_annual,X)) %>%
@@ -290,80 +290,6 @@ print(num_unique_stream_ids)
 tot <- tot %>%
   left_join(wrtds_df, by = c("Stream_Name", "Year")) %>%
   rename(Stream_ID = Stream_ID.y)
-
-num_unique_stream_ids <- tot %>%
-  pull(Stream_Name) %>%
-  n_distinct()
-
-print(num_unique_stream_ids)
-
-# ## ------------------------------------------------------- ##
-#           # Import WRTDS N_P Conc ---- 
-# ## ------------------------------------------------------- ##
-# Filter for relevant chemicals and positive GenConc values, and simplify NO3/NOx to NOx
-wrtds_NP <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
-  rename(LTER = LTER.x) %>%
-  dplyr::select(-Conc, -Flux, -PeriodLong, -PeriodStart, -LTER.y, -contains("date"), 
-                -contains("month"), -min_year, -max_year, -duration) %>%
-  dplyr::mutate(
-    Stream_Name = case_when(
-      Stream_Name == "East Fork" ~ "east fork",
-      Stream_Name == "West Fork" ~ "west fork",
-      TRUE ~ Stream_Name
-    ),
-    Stream_ID = paste0(LTER, "__", Stream_Name),
-    Year = floor(as.numeric(DecYear))
-  ) %>%
-  filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
-  filter(chemical %in% c("P", "NO3", "NOx"), GenConc > 0) %>%  # Removes NAs and zero values
-  mutate(chemical = ifelse(chemical %in% c("NOx", "NO3"), "NOx", chemical))
-
-# Reshape data to ensure NOx and P values are in the same row
-wrtds_NP_annual_wide <- wrtds_NP %>%
-  dplyr::select(-DecYear, -Q, -drainSqKm, -contains("FN"), -contains("Flux"), -Stream_Name) %>%
-  # Remove duplicates based on relevant columns
-  distinct(Stream_ID, chemical, Year, .keep_all = TRUE) %>%
-  pivot_wider(
-    id_cols = c(Stream_ID, Year),  # Keep Stream_ID and Year as unique identifiers
-    names_from = chemical,         # Create separate columns for NOx and P
-    values_from = GenConc          # Values for NOx and P come from GenConc
-  )
-
-# Find duplicates in the wide dataframe
-duplicates <- wrtds_NP_annual_wide %>%
-  group_by(Stream_ID, Year) %>%
-  filter(n() > 1)  # Keep rows where there are duplicate Stream_ID-Year combinations
-
-# Print duplicates for review
-print(duplicates)
-
-# Optional: Count the number of duplicates
-duplicate_count <- duplicates %>%
-  summarize(duplicate_count = n())
-
-# Print the count of duplicates
-print(duplicate_count)
-
-gc()
-
-setDT(wrtds_NP_annual_wide)
-
-# Merge with the "tot" dataframe to add annual NOx and P data in a single row per Stream_ID and Year
-tot <- tot %>%
-  inner_join(wrtds_NP_annual_wide, by = c("Stream_ID", "Year")) 
-
-# Count the number of years with NA values for NOx and P for each Stream_ID, showing only non-zero results
-na_counts <- tot %>%
-  group_by(Stream_ID) %>%
-  summarise(
-    na_years_NOx = sum(is.na(NOx)),
-    na_years_P = sum(is.na(P)),
-    .groups = "drop"
-  ) %>%
-  filter(na_years_NOx > 0 | na_years_P > 0)  # Keep only rows with non-zero counts
-
-# tot <- tot %>%
-#   rename(Stream_Name = Stream_Name.x)
 
 num_unique_stream_ids <- tot %>%
   pull(Stream_Name) %>%
@@ -430,9 +356,10 @@ setDT(wrtds_NP_wide)
 # Merge with the "tot" dataframe to add annual NOx and P data
 tot <- tot %>%
   inner_join(wrtds_NP_wide, by = c("Stream_ID", "Year")) %>%
-  dplyr::select(-contains(".y")) %>%
-  # Rename P.x and NOx.x to P and NOx
-  rename(P = P.x, NOx = NOx.x)
+  dplyr::select(-contains(".y")) 
+  # %>%
+  # # Rename P.x and NOx.x to P and NOx
+  # rename(P = P.x, NOx = NOx.x)
 
 num_unique_stream_ids <- tot %>%
   pull(Stream_Name) %>%

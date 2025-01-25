@@ -5,7 +5,7 @@ librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr, stri
 rm(list = ls())
 
 ## ------------------------------------------------------- ##
-            # Read in and Tidy Data ----
+              # Read in and Tidy Data ----
 ## ------------------------------------------------------- ##
 ## Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
@@ -60,11 +60,9 @@ yields <- wrtds_df %>%
          GenYield = GenFlux / drainSqKm) %>%
   dplyr::select(-FNFlux, -GenFlux)
 
-# Combine si_stats and q_stats, handling duplicate columns with coalesce
 tot <- wrtds_df %>%
-  left_join(yields, by = "Stream_ID") %>%
-  dplyr::select(-FNFlux, -GenFlux) %>%
-  distinct(Stream_ID, .keep_all = TRUE)
+  left_join(yields, by = c("Stream_ID", "Year")) %>%
+  distinct(Stream_ID, Year, .keep_all = TRUE)
 
 num_unique_stream_ids <- tot %>%
   pull(Stream_ID) %>%
@@ -75,7 +73,7 @@ print(num_unique_stream_ids)
 gc()
 
 ## ------------------------------------------------------- ##
-          # Add in KG Classifications ----
+            # Add in KG Classifications ----
 ## ------------------------------------------------------- ##
 # Read in climate data produced in KoeppenGeigerClassification.R
 KG <- read.csv("Koeppen_Geiger_2.csv")
@@ -85,8 +83,14 @@ tot <- tot %>%
   left_join(KG, by = "Stream_ID") %>%
   distinct(Stream_ID, .keep_all = TRUE)
 
+num_unique_stream_ids <- tot %>%
+  pull(Stream_ID) %>%
+  n_distinct()
+
+print(num_unique_stream_ids)
+
 ## ------------------------------------------------------- ##
-            # Import Daylength ----
+              # Import Daylength ----
 ## ------------------------------------------------------- ##
 # Load and clean daylength data
 daylen <- read.csv("Monthly_Daylength_2.csv") %>%
@@ -127,171 +131,161 @@ num_unique_stream_ids <- tot %>%
 print(num_unique_stream_ids)
 
 ## ------------------------------------------------------- ##
-          # Spatial Drivers
+# Spatial Drivers Processing----
 ## ------------------------------------------------------- ##
-# Define renamed and old names directly
+
+# Rename specific Stream_IDs
 name_conversion <- data.frame(
   Stream_ID = c("Walker Branch__East Fork", "Walker Branch__West Fork"),
   Updated_StreamName = c("Walker Branch__east fork", "Walker Branch__west fork")
 )
 
-# Read and preprocess spatial drivers
+# Load and preprocess spatial drivers
 si_drivers <- read.csv("all-data_si-extract_2_202412.csv", stringsAsFactors = FALSE) %>%
   select(-contains("soil")) %>%
-  # Create Stream_ID first using LTER and Stream_Name
   mutate(Stream_ID = paste0(LTER, "__", Stream_Name)) %>%
-  # Incorporate site renaming
   left_join(name_conversion, by = "Stream_ID") %>%
-  mutate(
-    Stream_ID = coalesce(Updated_StreamName, Stream_ID)  # Replace Stream_ID with Updated_StreamName if available
-  ) %>%
-  select(-Updated_StreamName)  # Remove temporary renaming column
+  mutate(Stream_ID = coalesce(Updated_StreamName, Stream_ID)) %>%
+  select(-Updated_StreamName)
 
-# Need to also do this for the Finnish sites in si drivers to names are all consistent: 
-for (i in 1:nrow(finn)) {
-  site_id<-finn[i,3]
-  row_num<-which(si_drivers$Stream_ID==site_id)
-  si_drivers[row_num, "Stream_ID"]<-finn[i,4]
+# Standardize Finnish site names
+for (i in seq_len(nrow(finn))) {
+  site_id <- finn[i, 3]
+  row_num <- which(si_drivers$Stream_ID == site_id)
+  si_drivers[row_num, "Stream_ID"] <- finn[i, 4]
 }
 
-si_drivers$Stream_ID <- ifelse(si_drivers$Stream_ID=="Finnish Environmental Institute__TORNIONJ KUKKOLA 14310  ",
-                               "Finnish Environmental Institute__TORNIONJ KUKKOLA 14310", si_drivers$Stream_ID)
-
-si_drivers$Stream_ID <- ifelse(si_drivers$Stream_ID=="Finnish Environmental Institute__SIMOJOKI AS. 13500      ",
-                               "Finnish Environmental Institute__SIMOJOKI AS. 13500", si_drivers$Stream_ID)
-
-# Remove rows where Stream_Name starts with "Site" and duplicates based on shapefile name
+# Cleanup specific Finnish Stream_IDs
 si_drivers <- si_drivers %>%
-  filter(!grepl("^Site", Stream_Name)) %>%  # Remove rows starting with "Site"
-  distinct(Shapefile_Name, .keep_all = TRUE)  # Remove duplicates by Shapefile_Name
+  mutate(
+    Stream_ID = case_when(
+      Stream_ID == "Finnish Environmental Institute__TORNIONJ KUKKOLA 14310  " ~ "Finnish Environmental Institute__TORNIONJ KUKKOLA 14310",
+      Stream_ID == "Finnish Environmental Institute__SIMOJOKI AS. 13500      " ~ "Finnish Environmental Institute__SIMOJOKI AS. 13500",
+      TRUE ~ Stream_ID
+    )
+  ) %>%
+  filter(!grepl("^Site", Stream_Name)) %>%
+  distinct(Shapefile_Name, .keep_all = TRUE)
 
-## Before, using full abbrevs removed some of the spatial driver columns (e.g., "dec" in "deciduous" was causing
-#  deciduous land cover to be filtered out)
-months_abb <- c("_jan_|_feb_|_mar_|_apr_|_may_|_jun_|_jul_|_aug_|_sep_|_oct_|_nov_|_dec_")
-
-# Remove monthly drivers from spatial drivers
-si_drivers <- si_drivers[,-c(which(colnames(si_drivers) %like% months_abb))]
-
-# Confirm NA replacement for permafrost columns
+# Replace NA values in permafrost columns with 0
 permafrost_cols <- grep("permafrost", colnames(si_drivers), value = TRUE)
-
-# Replace NA values with 0 for all permafrost columns
 si_drivers[, permafrost_cols] <- lapply(si_drivers[, permafrost_cols], function(x) {
-  x <- as.numeric(x)  # Convert to numeric to avoid issues
+  x <- as.numeric(x)
   x[is.na(x)] <- 0
   return(x)
 })
 
-# Confirm updates
-summary(si_drivers[, permafrost_cols])
-
-# Extract years from wrtds_df
-dsi_years <- unique(floor(wrtds_df$DecYear))  # Extract integer year
-
-# Create a pattern for DSi years
-year_pattern <- paste0("_", dsi_years, "_", collapse = "|")
-
-# Filter columns in si_drivers that match DSi years
-matching_columns <- grep(year_pattern, colnames(si_drivers), value = TRUE)
-
-# These are the categorical variables like "major_land", "major_soil", and "major_rock" and the numerical % of each
-major_cat_vars <- which(colnames(si_drivers) %like% c("soil|land|rock"))
-cat_vars <- si_drivers[,c(major_cat_vars)]
-
-# Combine spatial drivers and categorical variables
-spatial_vars <- cbind(si_drivers, cat_vars)
-
-# Define the pattern to search for elevation and basin slope columns
-relevant_columns <- c("elevation", "basin", "permafrost")
-
-# Use grep to locate elevation and basin slope columns
-elevation_basin_permafrost_cols <- grep(paste(relevant_columns, collapse = "|"), colnames(si_drivers))
-
-# Combine major categorical columns with elevation and basin slope
-cat_vars <- si_drivers[, c(major_cat_vars, elevation_basin_permafrost_cols)]
-
-# Add Stream_ID back to the resulting data
-cat_vars$Stream_ID <- si_drivers$Stream_ID
-
-# These are the quantitative drivers
-drivers_list_quant <- c("num_days", "prop_area", "precip", "evapotrans", "temp", "npp")
-
-site_mean <- list()
-
-for (i in 1:length(drivers_list_quant)) {
-  # Filter columns matching the driver and overlapping years
-  drive_cols <- grep(drivers_list_quant[i], matching_columns, value = TRUE)
-  
-  if (length(drive_cols) > 0) {
-    # Subset si_drivers with matching columns
-    one_driver <- si_drivers[, c("Stream_ID", drive_cols), drop = FALSE]  # Include Stream_ID for grouping
-    
-    # Ensure columns are numeric
-    numeric_driver <- one_driver[, -1, drop = FALSE]  # Exclude Stream_ID
-    numeric_driver[] <- lapply(numeric_driver, as.numeric)
-    
-    # Calculate rowMeans for numeric data (ignores NA by default)
-    site_mean[[i]] <- rowMeans(numeric_driver, na.rm = TRUE)
-  } else {
-    warning(paste("No matching columns found for:", drivers_list_quant[i]))
-    site_mean[[i]] <- rep(NA, nrow(si_drivers))
-  }
-}
-
-# Combine results into a dataframe
-mean_df <- as.data.frame(do.call(cbind, site_mean))
-colnames(mean_df) <- drivers_list_quant
-mean_df$Stream_ID <- si_drivers$Stream_ID
-
-## Need to combine the elevation_slope_permafrost variables with mean_df
-mean_df <- left_join(mean_df, cat_vars, by="Stream_ID")
-
-tot <- tot %>%
-  left_join(mean_df, by = "Stream_ID") %>%
-  distinct(Stream_ID, .keep_all = TRUE)
+# Remove monthly columns
+months <- c("_jan_|_feb_|_mar_|_apr_|_may_|_jun_|_jul_|_aug_|_sep_|_oct_|_nov_|_dec_")
+months_cols <- si_drivers %>%
+  select(matches(months))
+si_drivers <- si_drivers %>%
+  select(-one_of(colnames(months_cols)))
 
 ## ------------------------------------------------------- ##
-      # Calculate Greenup Day for `greenup_cycle0` Only
+# Parse and Process Annual Data----
 ## ------------------------------------------------------- ##
 
-# Define greenup cycles (excluding cycle1 as it's not needed)
-greenup_cycles <- c("cycle0")
+# Define annual variables and their units
+annual_vars <- c("num_days", "prop_area", "evapotrans", "precip", "temp", "cycle0", "cycle1", "npp")
+units_annual <- c("days", "prop_watershed", "kg_m2", "mm_day", "deg_C", "MMDD", "MMDD", "kgC_m2_year")
 
-# Standardize column names by removing "MMDD" if present
-colnames(si_drivers) <- sub("MMDD$", "", colnames(si_drivers))
-
-# Extract years from wrtds_df to identify where DSi data exists
-dsi_years <- unique(floor(wrtds_df$DecYear))  # Extract integer years
-
-# Create a pattern for greenup_cycle0 columns corresponding to DSi years
-greenup_pattern <- paste0("greenup_", greenup_cycles, "_(", paste(dsi_years, collapse = "|"), ")")
-cycle_cols <- grep(greenup_pattern, colnames(si_drivers), value = TRUE)
-
-# Filter the spatial drivers for relevant sites and years with DSi data
-filtered_drivers <- si_drivers[si_drivers$Stream_ID %in% unique(wrtds_df$Stream_ID), ]
-
-# Convert greenup date columns to day-of-year values for cycle0
-for (col in cycle_cols) {
-  filtered_drivers[[paste0(col, "_doy")]] <- ifelse(
-    !is.na(as.Date(filtered_drivers[[col]], format = "%Y-%m-%d")),
-    yday(as.Date(filtered_drivers[[col]], format = "%Y-%m-%d")),
-    NA_real_
-  )
+# Check matched columns
+matched_columns <- colnames(si_drivers)[grepl(paste(annual_vars, collapse = "|"), colnames(si_drivers))]
+if (!"Stream_Name" %in% colnames(si_drivers)) {
+  stop("Stream_Name column is missing from si_drivers!")
 }
 
-# Calculate the mean DOY for all sites with DSi data, ignoring NAs
-greenup_means <- rowMeans(filtered_drivers[, paste0(cycle_cols, "_doy"), drop = FALSE], na.rm = TRUE)
+# Separate numeric columns, explicitly keeping Stream_Name
+numeric_data <- si_drivers %>%
+  dplyr::select(Stream_Name, all_of(matched_columns)) %>%
+  dplyr::select(where(is.numeric))
 
-# Create a dataframe with the calculated Greenup Day mean
-greenup_df <- data.frame(
-  Stream_ID = filtered_drivers$Stream_ID,
-  greenup_mean = greenup_means
-)
+numeric_data <- numeric_data %>%
+  mutate(Stream_Name = si_drivers$Stream_Name)
 
-# Merge the Greenup Day mean into the `tot` dataframe
+# Pivot numeric columns
+numeric_long <- numeric_data %>%
+  pivot_longer(
+    cols = -Stream_Name,  # Exclude Stream_Name from pivoting
+    names_to = "variable",
+    values_to = "value"
+  ) %>%
+  mutate(
+    # Extract driver and year from variable names
+    driver = str_extract(variable, paste(annual_vars, collapse = "|")),
+    year = str_extract(variable, "\\d{4}") %>% as.numeric()
+  ) %>%
+  drop_na(driver, year)  # Remove rows with missing driver or year
+
+# Convert value column in numeric_long to character
+numeric_long <- numeric_long %>%
+  mutate(value = as.character(value))
+
+character_data <- si_drivers %>%
+  dplyr::select(Stream_Name, all_of(matched_columns)) %>%
+  dplyr::select(where(is.character))
+
+character_data <- character_data %>%
+  mutate(Stream_Name = si_drivers$Stream_Name)
+
+# Pivot character columns
+character_long <- character_data %>%
+  pivot_longer(
+    cols = -Stream_Name,  # Exclude Stream_Name from pivoting
+    names_to = "variable",
+    values_to = "value"
+  ) %>%
+  mutate(
+    # Extract driver and year from variable names
+    driver = str_extract(variable, paste(annual_vars, collapse = "|")),
+    year = str_extract(variable, "\\d{4}") %>% as.numeric()
+  ) %>%
+  drop_na(driver, year)  # Remove rows with missing driver or year
+
+# Combine numeric and character data
+year_cols <- bind_rows(numeric_long, character_long)
+
+# Verify the combined data
+print("Combined data:")
+print(head(year_cols))
+
+# Add units to the drivers
+units_df <- data.frame(driver = annual_vars, unit = units_annual)
+year_cols <- year_cols %>%
+  left_join(units_df, by = "driver")
+
+## ------------------------------------------------------- ##
+        # Merge Processed Data ----
+## ------------------------------------------------------- ##
+
+# Combine annual data with other variables
+character_vars <- c("elevation", "rock", "land", "slope", "permafrost")
+character_cols_full <- si_drivers %>%
+  select(matches(paste(character_vars, collapse = "|")), Stream_Name)
+
+# Pivot wider for numeric annual data
+drivers <- year_cols %>%
+  pivot_wider(names_from = driver, values_from = value) %>%
+  left_join(character_cols_full, by = "Stream_Name")
+
+# Convert greenup day to Julian day
+drivers <- drivers %>%
+  mutate(cycle0 = as.Date(cycle0, origin = "1970-01-01") %>% format("%j")) %>%
+  rename(Year = year)
+
+# Merge with `tot` and `wrtds_df`
 tot <- tot %>%
-  left_join(greenup_df, by = "Stream_ID") %>%
-  distinct(Stream_ID, .keep_all = TRUE)
+  left_join(drivers, by = c("Stream_Name", "Year")) %>%
+  left_join(wrtds_df, by = c("Stream_Name", "Year")) %>%
+  rename(Stream_ID = Stream_ID.y)
+
+num_unique_stream_ids <- tot %>%
+  pull(Stream_ID) %>%
+  n_distinct()
+
+print(num_unique_stream_ids)
+
 
 
 ## ------------------------------------------------------- ##
@@ -299,19 +293,36 @@ tot <- tot %>%
 ## ------------------------------------------------------- ##
 wrtds_NP <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
   rename(LTER = LTER.x) %>%
+  filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc) %>%
   filter(chemical %in% c("P", "NO3", "NOx"), GenConc > 0) %>%  # Removes NAs and zero values
-  mutate(
-    chemical = ifelse(chemical %in% c("NOx", "NO3"), "NOx", chemical),
+  dplyr::mutate(
     Stream_Name = case_when(
       Stream_Name == "East Fork" ~ "east fork",
       Stream_Name == "West Fork" ~ "west fork",
       TRUE ~ Stream_Name
     ),
-    Stream_ID = paste0(LTER, "__", Stream_Name)  # Create Stream_ID after Stream_Name adjustment
-  ) %>%
-  filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
-  filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc)  # Remove rows where FNConc is ±50% of GenConc
+    Stream_ID = paste0(LTER, "__", Stream_Name),
+    Year = floor(as.numeric(DecYear))) %>%
+  dplyr:: filter(Year >= 2001 & Year <= 2024)  # Filter rows with dates between 2001 and 2024
 
+## Need to tidy the Finnish site names:
+finn <- read.csv("FinnishSites.csv")
+
+finn$Stream_ID <- paste0("Finnish Environmental Institute__", finn$Site.ID)
+finn$Stream_ID2 <- paste0("Finnish Environmental Institute__", finn$Site)
+
+for (i in 1:nrow(finn)) {
+  site_id<-finn[i,3]
+  row_num<-which(wrtds_NP$Stream_ID==site_id)
+  wrtds_NP[row_num, "Stream_ID"]<-finn[i,4]
+}
+
+wrtds_NP$Stream_ID <- ifelse(wrtds_NP$Stream_ID=="Finnish Environmental Institute__TORNIONJ KUKKOLA 14310  ",
+                           "Finnish Environmental Institute__TORNIONJ KUKKOLA 14310", wrtds_NP$Stream_ID)
+
+wrtds_NP$Stream_ID <- ifelse(wrtds_NP$Stream_ID=="Finnish Environmental Institute__SIMOJOKI AS. 13500      ",
+                           "Finnish Environmental Institute__SIMOJOKI AS. 13500", wrtds_NP$Stream_ID)
+  
 gc()
 
 # Summarize to get the average GenConc by Stream_ID, and simplified chemical
@@ -330,12 +341,37 @@ tot <- tot %>%
   left_join(wrtds_NP_avg, by = "Stream_ID") %>%
   distinct(Stream_ID, .keep_all = TRUE)
 
+## Validate results: Check rows still containing NA values for P or NOx
+remaining_na_wrtdsNP <- tot %>%
+  filter(is.na(P) | is.na(NOx)) %>%
+  select(Stream_ID, P, NOx)  # Keep only necessary columns
+
+
 # ## ------------------------------------------------------- ##
               # Import RAW N_P Conc ---- 
 # ## ------------------------------------------------------- ##
 raw_NP <- read.csv("20241003_masterdata_chem.csv") %>%
   filter(variable %in% c("SRP", "PO4", "NO3", "NOx") & value > 0) %>% # 
   mutate(solute_simplified = ifelse(variable %in% c("NOx", "NO3"), "NOx", "P")) 
+
+## Need to tidy the Finnish site names:
+finn <- read.csv("FinnishSites.csv")
+
+finn$Stream_ID <- paste0("Finnish Environmental Institute__", finn$Site.ID)
+finn$Stream_ID2 <- paste0("Finnish Environmental Institute__", finn$Site)
+
+for (i in 1:nrow(finn)) {
+  site_id<-finn[i,3]
+  row_num<-which(raw_NP$Stream_ID==site_id)
+  raw_NP[row_num, "Stream_ID"]<-finn[i,4]
+}
+
+raw_NP$Stream_ID <- ifelse(raw_NP$Stream_ID=="Finnish Environmental Institute__TORNIONJ KUKKOLA 14310  ",
+                             "Finnish Environmental Institute__TORNIONJ KUKKOLA 14310", raw_NP$Stream_ID)
+
+raw_NP$Stream_ID <- ifelse(raw_NP$Stream_ID=="Finnish Environmental Institute__SIMOJOKI AS. 13500      ",
+                             "Finnish Environmental Institute__SIMOJOKI AS. 13500", raw_NP$Stream_ID)
+
 
 # Calculate stream-level averages for NOx and P concentrations
 raw_NP_avg <- raw_NP %>%
@@ -346,18 +382,28 @@ raw_NP_avg <- raw_NP %>%
   ) %>%
   pivot_wider(names_from = solute_simplified, values_from = avg_Conc, names_prefix = "avg_Conc_")
 
-# Merge `raw_NP_avg` with the `tot` dataframe
+# Merge raw_NP_avg with tot
 tot <- tot %>%
   left_join(raw_NP_avg, by = "Stream_Name", relationship = "many-to-many") %>%
   mutate(
-    # Replace NA values in P and NOx with the corresponding averages from raw_NP_avg
-    P = coalesce(P, avg_Conc_P)) %>%
+    # Replace NA values in P and NOx with corresponding averages from raw_NP_avg
+    P = coalesce(P, avg_Conc_P), 
+    NOx = coalesce(NOx, avg_Conc_NOx)
+  ) %>%
   # Remove temporary columns created during the join
   select(-avg_Conc_P, -avg_Conc_NOx) %>%
   distinct(Stream_ID, .keep_all = TRUE)
 
-# Clean up memory
-gc()
+# Validate results: Check rows still containing NA values for P or NOx
+remaining_na_rawNP <- tot %>%
+  filter(is.na(P) | is.na(NOx)) %>%
+  select(Stream_ID, P, NOx)  # Keep only necessary columns
+
+num_unique_stream_ids <- tot %>%
+  pull(Stream_ID) %>%
+  n_distinct()
+
+print(num_unique_stream_ids)
 
 ## ------------------------------------------------------- ##
             #  Gap Filling Missing Data ----
@@ -415,6 +461,12 @@ setkey(tot_with_slope_filled, Stream_ID)
 # Update in-place: replace NA values in basin_slope_mean_degree only
 tot[tot_with_slope_filled, basin_slope_mean_degree := i.basin_slope_mean_degree, on = .(Stream_ID)]
 
+# Filter tot for rows with NA basin slope values
+na_slopes_post <- tot %>%
+  filter(is.na(basin_slope_mean_degree)) %>%
+  select(Stream_ID)
+
+# Now Gap Fill Elevation ----
 # Load the US elevation data without headers
 US_elev <- read.csv("DSi_Basin_Elevation_missing_sites.csv", header = FALSE)
 
@@ -455,8 +507,10 @@ tot <- tot %>%
   select(-elevation_mean_m_filled) %>%
   distinct(Stream_ID, .keep_all = TRUE)
 
-# Need to re-merge with wrtds_df to incorporate sites that DO have elevation and basin slope already from
-# WRTDS outputs
+# Filter tot for rows with NA basin slope values
+tot_with_na_slope_post <- tot %>%
+  filter(is.na(basin_slope_mean_degree)) %>%
+  select(Stream_ID)
 
 
 # ------------------------------------------------------- #
