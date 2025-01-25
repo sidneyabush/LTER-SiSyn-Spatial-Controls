@@ -567,7 +567,7 @@ gc()
           #  Gap Filling Missing Data ----
 ## ------------------------------------------------------- ##
 ## TO DO: Ensure all slopes/ elevations are properly gap filling the data
-# Import streams with na slopes
+
 # Load and process Krycklan slopes
 Krycklan_slopes <- transform(read.csv("Krycklan_basin_slopes.csv"), 
                              basin_slope_mean_degree = atan(gradient_pct / 100) * (180 / pi))
