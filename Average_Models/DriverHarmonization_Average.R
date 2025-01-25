@@ -73,15 +73,21 @@ print(num_unique_stream_ids)
 gc()
 
 ## ------------------------------------------------------- ##
-            # Add in KG Classifications ----
+# Add in KG Classifications ----
 ## ------------------------------------------------------- ##
 # Read in climate data produced in KoeppenGeigerClassification.R
-KG <- read.csv("Koeppen_Geiger_2.csv")
+KG <- read.csv("Koeppen_Geiger_2.csv")%>%
+  mutate(
+    Stream_Name = case_when(
+      Stream_Name == "East Fork" ~ "east fork",
+      Stream_Name == "West Fork" ~ "west fork",
+      TRUE ~ Stream_Name))
+
 KG$Stream_ID<-paste0(KG$LTER, "__", KG$Stream_Name)
 
 tot <- tot %>%
   left_join(KG, by = "Stream_ID") %>%
-  distinct(Stream_ID, .keep_all = TRUE)
+  distinct(Stream_ID, Year, .keep_all = TRUE)
 
 num_unique_stream_ids <- tot %>%
   pull(Stream_ID) %>%
@@ -94,13 +100,12 @@ print(num_unique_stream_ids)
 ## ------------------------------------------------------- ##
 # Load and clean daylength data
 daylen <- read.csv("Monthly_Daylength_2.csv") %>%
-  dplyr::select(-1)
-
-num_unique_stream_ids <- daylen %>%
-  pull(Stream_Name) %>%
-  n_distinct()
-
-print(num_unique_stream_ids)
+  dplyr::select(-1) %>%
+  mutate(
+    Stream_Name = case_when(
+      Stream_Name == "East Fork" ~ "east fork",
+      Stream_Name == "West Fork" ~ "west fork",
+      TRUE ~ Stream_Name))
 
 # Define renamed and old names directly in a streamlined manner
 name_conversion <- data.frame(
@@ -122,13 +127,18 @@ daylen_range <- daylen %>%
 # Ensure the result is left-joined to "tot"
 tot <- tot %>% 
   left_join(daylen_range, by = "Stream_Name") %>%
-  distinct(Stream_ID, .keep_all = TRUE)
+  distinct(Stream_ID, Year, .keep_all = TRUE)
 
 num_unique_stream_ids <- tot %>%
   pull(Stream_ID) %>%
   n_distinct()
 
 print(num_unique_stream_ids)
+
+# Capture `Stream_IDs` in the original `tot` dataframe
+stream_ids_pre_spatial <- tot %>%
+  distinct(Stream_ID) %>%
+  pull(Stream_ID)
 
 ## ------------------------------------------------------- ##
 # Spatial Drivers Processing----
@@ -145,7 +155,14 @@ si_drivers <- read.csv("all-data_si-extract_2_202412.csv", stringsAsFactors = FA
   select(-contains("soil")) %>%
   mutate(Stream_ID = paste0(LTER, "__", Stream_Name)) %>%
   left_join(name_conversion, by = "Stream_ID") %>%
-  mutate(Stream_ID = coalesce(Updated_StreamName, Stream_ID)) %>%
+  mutate(
+    Stream_Name = case_when(
+      Stream_Name == "East Fork" ~ "east fork",
+      Stream_Name == "West Fork" ~ "west fork",
+      TRUE ~ Stream_Name
+    ), # Update Stream_Name for consistency
+    Stream_ID = coalesce(Updated_StreamName, Stream_ID) # Update Stream_ID
+  ) %>%
   select(-Updated_StreamName)
 
 # Standardize Finnish site names
@@ -246,17 +263,31 @@ character_long <- character_data %>%
 # Combine numeric and character data
 year_cols <- bind_rows(numeric_long, character_long)
 
-# Verify the combined data
-print("Combined data:")
-print(head(year_cols))
-
 # Add units to the drivers
 units_df <- data.frame(driver = annual_vars, unit = units_annual)
 year_cols <- year_cols %>%
   left_join(units_df, by = "driver")
 
 ## ------------------------------------------------------- ##
-        # Merge Processed Data ----
+# Ensure One Row per Stream_ID-Year Combination ----
+## ------------------------------------------------------- ##
+# Reshape `year_cols` to wide format
+wide_drivers <- year_cols %>%
+  select(Stream_Name, year, driver, value) %>% # Ensure only necessary columns
+  pivot_wider(
+    names_from = driver,           # Each driver becomes a column
+    values_from = value            # Fill columns with values from `value`
+  ) %>%
+  rename(Year = year)              # Rename `year` to `Year` for consistency
+
+# Join wide-format drivers with `tot`
+tot <- tot %>%
+  left_join(wide_drivers, by = c("Stream_Name", "Year")) %>%
+  distinct(Stream_Name, Year, .keep_all = TRUE)
+
+
+## ------------------------------------------------------- ##
+# Merge Processed Data ----
 ## ------------------------------------------------------- ##
 
 # Combine annual data with other variables
@@ -286,15 +317,23 @@ num_unique_stream_ids <- tot %>%
 
 print(num_unique_stream_ids)
 
+# Capture `Stream_IDs` in the original `tot` dataframe
+stream_ids_post_spatial_pre_NP <- tot %>%
+  distinct(Stream_ID) %>%
+  pull(Stream_ID)
 
+original_stream_ids <- tot %>%
+  distinct(Stream_ID) %>%
+  pull(Stream_ID)
 
-## ------------------------------------------------------- ##
-            # Import WRTDS N_P Conc ---- 
-## ------------------------------------------------------- ##
+# ## ------------------------------------------------------- ##
+#           # Import WRTDS N_P Data ---- 
+# ## ------------------------------------------------------- ##
+# Filter for relevant chemicals (N and P) and simplify NO3/NOx to NOx
 wrtds_NP <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
   rename(LTER = LTER.x) %>%
-  filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc) %>%
-  filter(chemical %in% c("P", "NO3", "NOx"), GenConc > 0) %>%  # Removes NAs and zero values
+  dplyr::select(-Conc, -Flux, -PeriodLong, -PeriodStart, -LTER.y, -contains("date"), 
+                -contains("month"), -min_year, -max_year, -duration) %>%
   dplyr::mutate(
     Stream_Name = case_when(
       Stream_Name == "East Fork" ~ "east fork",
@@ -302,112 +341,232 @@ wrtds_NP <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
       TRUE ~ Stream_Name
     ),
     Stream_ID = paste0(LTER, "__", Stream_Name),
-    Year = floor(as.numeric(DecYear))) %>%
-  dplyr:: filter(Year >= 2001 & Year <= 2024)  # Filter rows with dates between 2001 and 2024
-
-## Need to tidy the Finnish site names:
-finn <- read.csv("FinnishSites.csv")
-
-finn$Stream_ID <- paste0("Finnish Environmental Institute__", finn$Site.ID)
-finn$Stream_ID2 <- paste0("Finnish Environmental Institute__", finn$Site)
-
-for (i in 1:nrow(finn)) {
-  site_id<-finn[i,3]
-  row_num<-which(wrtds_NP$Stream_ID==site_id)
-  wrtds_NP[row_num, "Stream_ID"]<-finn[i,4]
-}
-
-wrtds_NP$Stream_ID <- ifelse(wrtds_NP$Stream_ID=="Finnish Environmental Institute__TORNIONJ KUKKOLA 14310  ",
-                           "Finnish Environmental Institute__TORNIONJ KUKKOLA 14310", wrtds_NP$Stream_ID)
-
-wrtds_NP$Stream_ID <- ifelse(wrtds_NP$Stream_ID=="Finnish Environmental Institute__SIMOJOKI AS. 13500      ",
-                           "Finnish Environmental Institute__SIMOJOKI AS. 13500", wrtds_NP$Stream_ID)
-  
-gc()
-
-# Summarize to get the average GenConc by Stream_ID, and simplified chemical
-wrtds_NP_avg <- wrtds_NP %>%
-  group_by(Stream_ID, chemical) %>%
-  summarise(
-    avg_Conc = mean(GenConc, na.rm = TRUE),  # Calculate average, ignoring NA values
-    .groups = 'drop'
-  ) %>%
-  pivot_wider(names_from = chemical, values_from = avg_Conc)
-
-gc()
-
-# Merge with the "tot" dataframe to add average NOx and P data in a single row per Stream_ID
-tot <- tot %>%
-  left_join(wrtds_NP_avg, by = "Stream_ID") %>%
-  distinct(Stream_ID, .keep_all = TRUE)
-
-## Validate results: Check rows still containing NA values for P or NOx
-remaining_na_wrtdsNP <- tot %>%
-  filter(is.na(P) | is.na(NOx)) %>%
-  select(Stream_ID, P, NOx)  # Keep only necessary columns
-
-
-# ## ------------------------------------------------------- ##
-              # Import RAW N_P Conc ---- 
-# ## ------------------------------------------------------- ##
-raw_NP <- read.csv("20241003_masterdata_chem.csv") %>%
-  filter(variable %in% c("SRP", "PO4", "NO3", "NOx") & value > 0) %>% # 
-  mutate(solute_simplified = ifelse(variable %in% c("NOx", "NO3"), "NOx", "P")) 
-
-## Need to tidy the Finnish site names:
-finn <- read.csv("FinnishSites.csv")
-
-finn$Stream_ID <- paste0("Finnish Environmental Institute__", finn$Site.ID)
-finn$Stream_ID2 <- paste0("Finnish Environmental Institute__", finn$Site)
-
-for (i in 1:nrow(finn)) {
-  site_id<-finn[i,3]
-  row_num<-which(raw_NP$Stream_ID==site_id)
-  raw_NP[row_num, "Stream_ID"]<-finn[i,4]
-}
-
-raw_NP$Stream_ID <- ifelse(raw_NP$Stream_ID=="Finnish Environmental Institute__TORNIONJ KUKKOLA 14310  ",
-                             "Finnish Environmental Institute__TORNIONJ KUKKOLA 14310", raw_NP$Stream_ID)
-
-raw_NP$Stream_ID <- ifelse(raw_NP$Stream_ID=="Finnish Environmental Institute__SIMOJOKI AS. 13500      ",
-                             "Finnish Environmental Institute__SIMOJOKI AS. 13500", raw_NP$Stream_ID)
-
-
-# Calculate stream-level averages for NOx and P concentrations
-raw_NP_avg <- raw_NP %>%
-  group_by(Stream_Name, solute_simplified) %>%
-  summarise(
-    avg_Conc = mean(value, na.rm = TRUE),  # Calculate average, ignoring NA values
     .groups = "drop"
   ) %>%
-  pivot_wider(names_from = solute_simplified, values_from = avg_Conc, names_prefix = "avg_Conc_")
-
-# Merge raw_NP_avg with tot
-tot <- tot %>%
-  left_join(raw_NP_avg, by = "Stream_Name", relationship = "many-to-many") %>%
-  mutate(
-    # Replace NA values in P and NOx with corresponding averages from raw_NP_avg
-    P = coalesce(P, avg_Conc_P), 
-    NOx = coalesce(NOx, avg_Conc_NOx)
+  dplyr::mutate(
+    Year = floor(as.numeric(DecYear)) # Convert DecYear to Year
   ) %>%
-  # Remove temporary columns created during the join
-  select(-avg_Conc_P, -avg_Conc_NOx) %>%
-  distinct(Stream_ID, .keep_all = TRUE)
+  filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
+  filter(GenConc <= 60) %>%  # Remove rows where GenConc > 60
+  filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc)  %>%  # Remove rows where FNConc is ±50% of GenConc
+  dplyr::select(-DecYear, -.groups, -LTER, -contains("FN"), -GenFlux) # Trying to tidy up this workflow by removing GenConc and GenFlux, this can be added back in in the future if GenConc/ GenFlux are desired for Yearly models.
 
-# Validate results: Check rows still containing NA values for P or NOx
-remaining_na_rawNP <- tot %>%
-  filter(is.na(P) | is.na(NOx)) %>%
-  select(Stream_ID, P, NOx)  # Keep only necessary columns
+
+wrtds_NP <- wrtds_NP %>%
+  filter(chemical %in% c("P", "NO3", "NOx") & GenConc > 0) %>%  # Keep only positive GenConc
+  mutate(
+    chemical = ifelse(chemical %in% c("NOx", "NO3"), "NOx", chemical)  # Simplify to NOx
+  )
+
+# Handle duplicates by taking the median
+wrtds_NP <- wrtds_NP %>%
+  group_by(Stream_ID, Year, chemical) %>%  # Group by unique combinations
+  summarise(
+    GenConc = median(GenConc, na.rm = TRUE),  # Take the median if duplicates exist
+    .groups = "drop"  # Ungroup after summarizing
+  )
+
+# Reshape data to wide format
+wrtds_NP_wide <- wrtds_NP %>%
+  pivot_wider(
+    id_cols = c(Stream_ID, Year),  # Group by Stream_ID and Year
+    names_from = chemical,         # Create separate columns for NOx and P
+    values_from = GenConc,         # Populate these columns with GenConc values
+    values_fill = list(GenConc = NA)  # Fill missing combinations with NA
+  )
+
+
+gc()
+
+setDT(wrtds_NP_wide)
+
+# Merge with the "tot" dataframe to add annual NOx and P data
+tot <- tot %>%
+  inner_join(wrtds_NP_wide, by = c("Stream_ID", "Year")) %>%
+  dplyr::select(-contains(".y")) 
 
 num_unique_stream_ids <- tot %>%
-  pull(Stream_ID) %>%
+  pull(Stream_Name) %>%
+  n_distinct()
+
+print(num_unique_stream_ids) 
+
+WRTDS_NP_stream_ids <- tot %>%
+  distinct(Stream_ID) %>%
+  pull(Stream_ID)
+
+# ## ------------------------------------------------------- ##
+#           # Import RAW N_P Data ---- 
+# ## ------------------------------------------------------- ##
+# Read in the dataset
+raw_NP <- read.csv("20241003_masterdata_chem.csv") %>%
+  mutate(
+    Year = as.integer(format(as.Date(date, format = "%Y-%m-%d"), "%Y"))  # Extract Year from date
+  ) %>%
+  filter(Year >= 2001 & Year <= 2024)  # Filter for years between 2001 and 2024
+
+# Step 1: Filter, create Stream_ID, simplify solutes, and calculate median
+raw_NP_median <- raw_NP %>%
+  mutate(
+    Year = as.integer(year(as.Date(date, format = "%Y-%m-%d"))),  # Extract Year from date
+    Stream_ID = paste(LTER, Stream_Name, sep = "__"),              # Create Stream_ID by combining LTER and Stream_Name
+    solute_simplified = case_when(  # Simplify solutes into NOx and P categories
+      variable %in% c("NOx", "NO3") ~ "NOx",
+      variable %in% c("SRP", "PO4") ~ "P",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(solute_simplified)) %>%  # Keep only relevant solutes (NOx, P)
+  group_by(Stream_ID, Year, solute_simplified) %>%  # Group by Stream_ID, year, and solute
+  summarise(
+    median_value = median(value, na.rm = TRUE),  # Calculate median value
+    .groups = "drop"  # Ungroup after summarizing
+  )
+
+# Step 2: Reshape the data to wide format
+raw_NP_wide <- raw_NP_median %>%
+  pivot_wider(
+    names_from = solute_simplified,  # Create columns for NOx and P
+    values_from = median_value,      # Populate these columns with the median values
+    values_fill = list(median_value = NA)  # Fill missing combinations with NA
+  )
+
+# ## ------------------------------------------------------- ##
+#           # Match Data by Year ---- 
+# ## ------------------------------------------------------- ##
+# Merge raw N, P data into `tot`, matching years and replacing missing values
+solutes <- c("P", "NOx")
+
+for (solute in solutes) {
+  raw_solute <- raw_NP_wide %>%
+    select(Stream_ID, Year, !!sym(solute)) %>%
+    rename(raw_solute = !!sym(solute))
+  
+  tot <- tot %>%
+    mutate(Year = as.numeric(Year)) %>%  # Ensure Year is numeric for consistent merging
+    left_join(raw_solute, by = c("Stream_ID", "Year")) %>%
+    mutate(!!sym(solute) := ifelse(is.na(!!sym(solute)), raw_solute, !!sym(solute))) %>%
+    select(-raw_solute)  # Remove the temporary column
+}
+
+num_unique_stream_ids <- tot %>%
+  pull(Stream_Name) %>%
   n_distinct()
 
 print(num_unique_stream_ids)
 
+raw_NP_stream_ids <- tot %>%
+  distinct(Stream_ID) %>%
+  pull(Stream_ID)
+
+# See which sites we lost due to lack of N and P data: 
+no_WRTDS_NP_sites <- setdiff(original_stream_ids, WRTDS_NP_stream_ids)
+print(no_WRTDS_NP_sites)
+
+no_NP_sites <- setdiff(original_stream_ids, raw_NP_stream_ids)
+print(no_NP_sites)
+
 ## ------------------------------------------------------- ##
-            #  Gap Filling Missing Data ----
+            #  Silicate Weathering ----
 ## ------------------------------------------------------- ##
+# Read and prepare data
+mapped_lithologies <- fread("mapped_lithologies.csv")
+
+# Convert `tot` and `mapped_lithologies` to data.tables
+setDT(tot)
+setDT(mapped_lithologies)
+
+# Ensure compatibility in the major_rock column for merging
+tot[, major_rock := as.character(major_rock)]
+mapped_lithologies[, major_rock := as.character(major_rock)]
+
+# Perform the merge and filter out NA values in mapped_lithology
+weathering <- merge(tot[, .(Stream_ID, Year, major_rock, Q, temp.x, drainSqKm)], 
+                    mapped_lithologies[, .(major_rock, mapped_lithology)], 
+                    by = "major_rock", all.x = TRUE)
+weathering <- weathering[!is.na(mapped_lithology)]  # Remove rows with NA in mapped_lithology
+
+# Constants for weathering calculations
+seconds_per_year <- 31536000  
+kg_per_m3 <- 1000  
+km2_to_m2 <- 10^6  
+R <- 8.314  
+
+# Define lithology parameters as a data.table
+lithology_params <- data.table(
+  mapped_lithology = c("su", "vb", "pb", "py", "va", "vi", "ss", "pi", "sm", "mt", "pa"),
+  b = c(0.003364, 0.007015, 0.007015, 0.0061, 0.002455, 0.007015, 0.005341, 0.007015, 0.012481, 0.007626, 0.005095),
+  sp = c(1, 1, 1, 1, 1, 1, 0.64, 0.58, 0.24, 0.25, 0.58),
+  sa = c(60, 50, 50, 46, 60, 50, 60, 60, 60, 60, 60)
+)
+
+# Convert temperature to Kelvin for calculations
+weathering[, temp.x := as.numeric(temp.x)]
+weathering[, temp_K := temp.x + 273.15]
+
+# Calculate runoff based on the given formula
+weathering[, runoff := (Q * seconds_per_year * kg_per_m3) / (drainSqKm * km2_to_m2)]
+
+# Define a function for vectorized calculation of weathering
+calculate_weathering_vectorized <- function(lithologies, runoff, temp_k) {
+  lithologies_split <- strsplit(lithologies, ",\\s*")
+  weathering_results <- sapply(seq_along(lithologies_split), function(i) {
+    liths <- lithologies_split[[i]]
+    weathering_values <- sapply(liths, function(lith) {
+      params <- lithology_params[mapped_lithology == lith]
+      if (nrow(params) == 0) stop(paste("Lithology not found in the table for", lith))
+      params$b * (params$sp * exp(((1000 * params$sa) / R) * ((1 / 284.2) - (1 / temp_k[i])))) * runoff[i]
+    })
+    mean(weathering_values, na.rm = TRUE)
+  })
+  return(weathering_results)
+}
+
+# Calculate silicate weathering for each row in the weathering data
+weathering[, silicate_weathering := calculate_weathering_vectorized(mapped_lithology, runoff, temp_K), by = .(Stream_ID, Year)]
+
+setDT(weathering)
+
+# Ensure 'Stream_ID' and 'Year' are compatible types
+tot[, Stream_ID := as.character(Stream_ID)]
+tot[, Year := as.integer(Year)]
+weathering[, Stream_ID := as.character(Stream_ID)]
+weathering[, Year := as.integer(Year)]
+
+# Calculate silicate weathering for each row in the weathering data
+weathering[, silicate_weathering := calculate_weathering_vectorized(mapped_lithology, runoff, temp_K)]
+
+# Ensure uniqueness in the datasets
+weathering <- unique(weathering, by = c("Stream_ID", "Year"))
+tot <- unique(tot, by = c("Stream_ID", "Year"))
+
+# Perform the merge correctly
+tryCatch({
+  tot <- merge(
+    tot,
+    weathering[, .(Stream_ID, Year, silicate_weathering)],
+    by = c("Stream_ID", "Year"),
+    all.x = TRUE,
+    allow.cartesian = FALSE
+  )
+}, error = function(e) {
+  message("Error encountered during merge: ", e$message)
+})
+
+num_unique_stream_ids <- tot %>%
+  pull(Stream_Name) %>%
+  n_distinct()
+
+print(num_unique_stream_ids)
+
+
+# Clean up memory
+gc()
+
+## ------------------------------------------------------- ##
+          #  Gap Filling Missing Data ----
+## ------------------------------------------------------- ##
+## TO DO: Ensure all slopes/ elevations are properly gap filling the data
 # Import streams with na slopes
 # Load and process Krycklan slopes
 Krycklan_slopes <- transform(read.csv("Krycklan_basin_slopes.csv"), 
@@ -435,12 +594,12 @@ Krycklan_slopes <- left_join(Krycklan_slopes, stream_key, by = "Stream_Name") %>
 US_slopes <- left_join(US_slopes, stream_key, by = "Stream_Name") %>%
   filter(!is.na(basin_slope_mean_degree))  # Remove rows with NA values after merging with key
 
-# Filter tot for rows with NA basin slope values
+# Filter rows with NA slopes from 'tot'
 tot_with_na_slope <- tot %>%
   filter(is.na(basin_slope_mean_degree)) %>%
   select(Stream_ID)
 
-# Merge tot_with_na_slope with US_slopes and Krycklan_slopes to fill missing values
+# Merge 'tot_with_na_slope' with US and Krycklan slope data
 tot_with_slope_filled <- tot_with_na_slope %>%
   left_join(US_slopes %>% select(Stream_ID, basin_slope_mean_degree), by = "Stream_ID") %>%
   left_join(Krycklan_slopes %>% select(Stream_ID, basin_slope_mean_degree), by = "Stream_ID", suffix = c("_US", "_Krycklan")) %>%
@@ -449,24 +608,29 @@ tot_with_slope_filled <- tot_with_na_slope %>%
   ) %>%
   select(Stream_ID, basin_slope_mean_degree)
 
+# Convert to data.table for efficient key-based operations
 tot_with_slope_filled <- as.data.table(tot_with_slope_filled)
-
-# Convert tot to data.table
 tot <- as.data.table(tot)
 
-# Set keys on Stream_ID for both tables
+# Set keys for efficient join
 setkey(tot, Stream_ID)
 setkey(tot_with_slope_filled, Stream_ID)
 
-# Update in-place: replace NA values in basin_slope_mean_degree only
-tot[tot_with_slope_filled, basin_slope_mean_degree := i.basin_slope_mean_degree, on = .(Stream_ID)]
+# Update 'tot' with gap-filled slopes, retaining original values where present
+tot[tot_with_slope_filled, basin_slope_mean_degree := 
+      ifelse(is.na(basin_slope_mean_degree), i.basin_slope_mean_degree, basin_slope_mean_degree),
+    on = .(Stream_ID)]
 
-# Filter tot for rows with NA basin slope values
-na_slopes_post <- tot %>%
-  filter(is.na(basin_slope_mean_degree)) %>%
-  select(Stream_ID)
+# Check for NA values: 
+# Identify unique Stream_IDs with NA values for basin_slope or elevation
+na_sites <- read.csv("AllDrivers_Harmonized_Yearly_Keira.csv") %>%
+  filter(is.na(basin_slope)) %>% # Filter rows where basin_slope is NA
+  distinct(Stream_ID) # Get unique Stream_IDs
 
-# Now Gap Fill Elevation ----
+# Print the unique Stream_IDs with NA values
+print(na_sites)
+
+# Now do gap filling for elevation for the same sites:
 # Load the US elevation data without headers
 US_elev <- read.csv("DSi_Basin_Elevation_missing_sites.csv", header = FALSE)
 
@@ -504,158 +668,30 @@ tot <- tot %>%
   mutate(
     elevation_mean_m = coalesce(elevation_mean_m_filled, elevation_mean_m)
   ) %>%
-  select(-elevation_mean_m_filled) %>%
-  distinct(Stream_ID, .keep_all = TRUE)
+  select(-elevation_mean_m_filled)  # Remove Stream_Name_filled from final output
 
-# Filter tot for rows with NA basin slope values
-tot_with_na_slope_post <- tot %>%
-  filter(is.na(basin_slope_mean_degree)) %>%
-  select(Stream_ID)
-
-
-# ------------------------------------------------------- #
-# Tidy-up Full Dataset ----
-# ------------------------------------------------------- #
+# Combine with wrtds_df
 tot <- tot %>%
-  rename_with(~ str_replace(., "\\.x$", ""), ends_with(".x"))%>%  # Remove `.x` from column names
-  filter(FNYield <= 100) %>%  
-  select(-ends_with(".y"), -Use_WRTDS, -X, Stream_Name, -Latitude, -num_days,
-         -Longitude, -LTER, -contains("coord"), -major_land, 
-         -contains("median_degree"), -contains("min_degree"),
-         -contains("max_degree"), -contains("median_m"), -contains("min_m"), -contains("max_m"))  # Remove columns with `.y` in their names
-  
-# ------------------------------------------------------- #
-      # Silicate Weathering: Stream-Level Averages
-# ------------------------------------------------------- #
-# Read and prepare data
-mapped_lithologies <- fread("mapped_lithologies.csv")
+  left_join(wrtds_df, by = c("Stream_Name", "Year")) 
 
-# Ensure `tot` is a data.table
-if (!is.data.table(tot)) {
-  setDT(tot)  # Convert to data.table
-}
-
-# Ensure compatibility in the `major_rock` column for merging
-tot[, major_rock := as.character(major_rock)]
-
-
-# Ensure compatibility in the `major_rock` column for merging
-tot[, major_rock := as.character(major_rock)]
-mapped_lithologies[, major_rock := as.character(major_rock)]
-
-# Merge and filter out rows with NA in `mapped_lithology`
-weathering <- merge(
-  tot[, .(Stream_ID, major_rock, mean_q, temp, drainSqKm)], 
-  mapped_lithologies[, .(major_rock, mapped_lithology)], 
-  by = "major_rock", all.x = TRUE
-)
-weathering <- weathering[!is.na(mapped_lithology)]  # Remove rows with NA in mapped_lithology
-
-# Constants for weathering calculations
-seconds_per_year <- 31536000  
-kg_per_m3 <- 1000  
-km2_to_m2 <- 10^6  
-R <- 8.314  
-
-# Define lithology parameters as a data.table
-lithology_params <- data.table(
-  mapped_lithology = c("su", "vb", "pb", "py", "va", "vi", "ss", "pi", "sm", "mt", "pa"),
-  b = c(0.003364, 0.007015, 0.007015, 0.0061, 0.002455, 0.007015, 0.005341, 0.007015, 0.012481, 0.007626, 0.005095),
-  sp = c(1, 1, 1, 1, 1, 1, 0.64, 0.58, 0.24, 0.25, 0.58),
-  sa = c(60, 50, 50, 46, 60, 50, 60, 60, 60, 60, 60)
-)
-
-# Convert temperature to Kelvin for calculations
-weathering[, temp_K := temp + 273.15]
-
-# Calculate runoff based on the formula
-weathering[, runoff := (mean_q * seconds_per_year * kg_per_m3) / (drainSqKm * km2_to_m2)]
-
-# Define a function for vectorized calculation of weathering
-calculate_weathering_vectorized <- function(lithologies, runoff, temp_k) {
-  lithologies_split <- strsplit(lithologies, ",\\s*")
-  weathering_results <- sapply(seq_along(lithologies_split), function(i) {
-    liths <- lithologies_split[[i]]
-    weathering_values <- sapply(liths, function(lith) {
-      params <- lithology_params[mapped_lithology == lith]
-      if (nrow(params) == 0) stop(paste("Lithology not found in the table for", lith))
-      params$b * (params$sp * exp(((1000 * params$sa) / R) * ((1 / 284.2) - (1 / temp_k[i])))) * runoff[i]
-    })
-    mean(weathering_values, na.rm = TRUE)
-  })
-  return(weathering_results)
-}
-
-# Calculate silicate weathering for each row in the weathering data
-weathering[, silicate_weathering := calculate_weathering_vectorized(mapped_lithology, runoff, temp_K)]
-
-# Calculate average silicate weathering for each Stream_ID
-weathering_avg <- weathering %>%
-  group_by(Stream_ID) %>%
-  summarise(
-    silicate_weathering = mean(silicate_weathering, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-# Merge averaged weathering data back into the `tot` dataframe
-tot <- tot %>%
-  left_join(weathering_avg, by = "Stream_ID") %>%
-  select(-major_rock, -Stream_Name, -min_daylength, -ClimateZ, -Name, -mean_q) %>%
-  rename(snow_cover = prop_area, 
-         greenup_day = greenup_mean,
-       drainage_area = drainSqKm,
-       elevation = elevation_mean_m,
-       basin_slope = basin_slope_mean_degree) %>%
-  distinct(Stream_ID, .keep_all = TRUE) 
-
-# Export Stream_IDs with NA values in "permafrost" or "snow_cover"
+# Identify Stream_IDs with NA in basin_slope_mean_degree
 na_stream_ids <- tot %>%
-  filter(is.na(permafrost_mean_m) | is.na(snow_cover)) %>%
-  select(Stream_ID, permafrost_mean_m, snow_cover)  # Include only relevant columns for clarity
+  filter(is.na(basin_slope_mean_degree)) %>%
+  select(Stream_ID.x)
 
-write_csv(na_stream_ids, "na_permafrost_snow_cover_stream_ids.csv")
+# View the Stream_IDs with NA
+print(na_stream_ids)
 
-# Replace NA values in the specified column range with 0
-drivers_df <- tot %>%
-  # Replace NA values in the "permafrost" column with 0
-  mutate(permafrost_mean_m = replace(permafrost_mean_m, is.na(permafrost_mean_m), 0), 
-         snow_cover = replace(snow_cover, is.na(snow_cover), 0))
+# Count the number of unique Stream_IDs
+unique_stream_id_count <- tot %>%
+  distinct(Stream_ID.x) %>%
+  nrow()
 
-## ------------------------------------------------------- ##
-# Calculate Stats ----
-## ------------------------------------------------------- ##
-# Calculate si_stats without CV columns
-# This is different from the Yearly workflow since we're taking an average per site
-si_stats <- tot %>%
-  group_by(Stream_ID) %>%
-  summarise(
-    across(
-      c(FNConc, GenConc, FNFlux, GenFlux),
-      list(median = median),
-      .names = "{.fn}_{.col}"
-    ),
-    .groups = "drop"  # Ungroup after summarise for a clean output
-  )
+# Print the count
+cat("Number of unique Stream_IDs:", unique_stream_id_count, "\n")
 
+# View the dataframe column names -- what a mess!
+print(colnames(tot))
 
-# Calculate q_stats with CV for Q
-q_stats <- tot %>%
-  group_by(Stream_ID) %>%
-  summarise(
-    mean_q = mean(Q),
-    sd_q = sd(Q),  # Calculate standard deviation for Q
-    CV_Q = sd(Q) / mean(Q),  # Calculate coefficient of variation for Q
-    q_95 = quantile(Q, 0.95),
-    q_5 = quantile(Q, 0.05),
-    .groups = "drop"
-  )
-
-# Combine si_stats and q_stats
-tot <- si_stats %>%
-  left_join(q_stats, by = c("Stream_ID")) %>%
-  select(-sd_q) %>%
-  distinct(Stream_ID, .keep_all = TRUE)
-
-# Export the resulting dataframe to a .csv file
-write.csv(drivers_df, "AllDrivers_Harmonized_Average.csv", row.names = FALSE)
-
+# View the cleaned dataframe
+print(colnames(tot))

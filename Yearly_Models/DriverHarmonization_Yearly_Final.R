@@ -130,7 +130,7 @@ num_unique_stream_ids <- tot %>%
 
 print(num_unique_stream_ids)
 
-## We lose one stream here that we don't lose in the average dataset ---- revisit this:
+## We lose one stream here that we don't lose in the average dataset ---
 
 ## ------------------------------------------------------- ##
               # Spatial Drivers----
@@ -229,12 +229,6 @@ print(num_unique_stream_ids)
 # Parse out character data
 character_cols <- si_drivers[,(colnames(si_drivers) %like% character_vars)]
 character_cols$Stream_Name <- si_drivers$Stream_Name
-
-num_unique_stream_ids <- tot %>%
-  pull(Stream_Name) %>%
-  n_distinct()
-
-print(num_unique_stream_ids)
 
 
 ## ------------------------------------------------------- ##
