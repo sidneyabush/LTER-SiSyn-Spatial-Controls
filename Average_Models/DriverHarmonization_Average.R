@@ -127,7 +127,7 @@ num_unique_stream_ids <- tot %>%
 print(num_unique_stream_ids)
 
 ## ------------------------------------------------------- ##
-# Spatial Drivers
+          # Spatial Drivers
 ## ------------------------------------------------------- ##
 # Define renamed and old names directly
 name_conversion <- data.frame(

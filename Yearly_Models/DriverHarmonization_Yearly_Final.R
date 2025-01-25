@@ -131,7 +131,7 @@ num_unique_stream_ids <- tot %>%
 print(num_unique_stream_ids)
 
 ## ------------------------------------------------------- ##
-              # Spatial Drivers
+              # Spatial Drivers----
 ## ------------------------------------------------------- ##
 # Define renamed and old names directly
 name_conversion <- data.frame(
@@ -175,6 +175,19 @@ si_drivers <- si_drivers %>%
 months <- c("_jan_|_feb_|_mar_|_apr_|_may_|_jun_|_jul_|_aug_|_sep_|_oct_|_nov_|_dec_")
 months_cols <- si_drivers[,(colnames(si_drivers) %like% months)]
 
+# Confirm NA replacement for permafrost columns
+permafrost_cols <- grep("permafrost", colnames(si_drivers), value = TRUE)
+
+# Replace NA values with 0 for all permafrost columns
+si_drivers[, permafrost_cols] <- lapply(si_drivers[, permafrost_cols], function(x) {
+  x <- as.numeric(x)  # Convert to numeric to avoid issues
+  x[is.na(x)] <- 0
+  return(x)
+})
+
+# Confirm updates
+summary(si_drivers[, permafrost_cols])
+
 # Parse out and clean annual data
 year_cols <- si_drivers[,!(colnames(si_drivers) %in% colnames(months_cols))]
 year_cols$Stream_Name <- si_drivers$Stream_Name
@@ -190,7 +203,7 @@ vars_annual <- c("num_days","prop_area","evapotrans","precip","temp","cycle0","c
 units_annual <- c("days", "prop_watershed","kg_m2","mm_day","deg_C","MMDD","MMDD","kgC_m2_year")
 units_df_annual <- data.frame(vars_annual,units_annual)
 
-colnames(units_df_annual)[1]<-"driver"
+colnames(units_df_annual)[1] <- "driver"
 
 year_cols_melt$driver <- NA
 
