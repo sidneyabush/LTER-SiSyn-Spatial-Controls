@@ -356,15 +356,23 @@ wrtds_NP <- wrtds_NP %>%
   filter(chemical %in% c("P", "NO3", "NOx") & GenConc > 0) %>%  # Keep only positive GenConc
   mutate(
     chemical = ifelse(chemical %in% c("NOx", "NO3"), "NOx", chemical)  # Simplify to NOx
+  ) %>%
+  group_by(Stream_ID, Year, chemical) 
+
+# Check non-NA data availability for DSi, NOx, and P
+chemical_summary <- wrtds_NP %>%
+  filter(chemical %in% c("NOx", "P")) %>% # Ensure these chemicals are included
+  group_by(chemical) %>%
+  summarise(
+    Sites_With_Data = n_distinct(Stream_ID[!is.na(GenConc)]),
+    Total_Sites = n_distinct(Stream_ID),
+    .groups = "drop"
   )
 
-# Handle duplicates by taking the median
-wrtds_NP <- wrtds_NP %>%
-  group_by(Stream_ID, Year, chemical) %>%  # Group by unique combinations
-  summarise(
-    GenConc = median(GenConc, na.rm = TRUE),  # Take the median if duplicates exist
-    .groups = "drop"  # Ungroup after summarizing
-  )
+# Print the summary
+print("Summary of sites with non-NA data for NOx, and P:")
+print(chemical_summary)
+
 
 # Reshape data to wide format
 wrtds_NP_wide <- wrtds_NP %>%
@@ -423,6 +431,22 @@ raw_NP_median <- raw_NP %>%
     .groups = "drop"  # Ungroup after summarizing
   )
 
+
+# Check non-NA data availability for DSi, NOx, and P
+chemical_summary <- raw_NP_median %>%
+  filter(solute_simplified %in% c("NOx", "P")) %>% # Ensure these chemicals are included
+  group_by(solute_simplified) %>%
+  summarise(
+    Sites_With_Data = n_distinct(Stream_ID[!is.na(median_value)]),
+    Total_Sites = n_distinct(Stream_ID),
+    .groups = "drop"
+  )
+
+# Print the summary
+print("Summary of sites with non-NA data for NOx, and P:")
+print(chemical_summary)
+
+
 # Step 2: Reshape the data to wide format
 raw_NP_wide <- raw_NP_median %>%
   pivot_wider(
@@ -430,6 +454,13 @@ raw_NP_wide <- raw_NP_median %>%
     values_from = median_value,      # Populate these columns with the median values
     values_fill = list(median_value = NA)  # Fill missing combinations with NA
   )
+
+# Capture Stream_IDs before adding raw data
+stream_ids_pre_raw_data <- tot %>%
+  filter(is.na(NOx) | is.na(P)) %>%  # Identify sites with missing NOx or P
+  distinct(Stream_ID) %>%
+  pull(Stream_ID)
+
 
 # ## ------------------------------------------------------- ##
 #           # Match Data by Year ---- 
@@ -448,6 +479,22 @@ for (solute in solutes) {
     mutate(!!sym(solute) := ifelse(is.na(!!sym(solute)), raw_solute, !!sym(solute))) %>%
     select(-raw_solute)  # Remove the temporary column
 }
+
+# Capture Stream_IDs after adding raw data
+stream_ids_post_raw_data <- tot %>%
+  filter(!is.na(NOx) | !is.na(P)) %>%  # Identify sites where missing values were filled
+  distinct(Stream_ID) %>%
+  pull(Stream_ID)
+
+# Identify gap-filled Stream_IDs
+gap_filled_sites <- setdiff(stream_ids_post_raw_data, stream_ids_pre_raw_data)
+
+# Print the list of gap-filled sites
+print("Gap-filled Stream_IDs:")
+print(gap_filled_sites)
+
+# Optionally, save to a file for further analysis
+write.csv(data.frame(Stream_ID = gap_filled_sites), "raw_NP_gap_filled_sites.csv", row.names = FALSE)
 
 num_unique_stream_ids <- tot %>%
   pull(Stream_Name) %>%
