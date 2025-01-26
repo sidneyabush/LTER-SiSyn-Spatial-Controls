@@ -500,7 +500,7 @@ num_unique_stream_ids <- tot %>%
   pull(Stream_Name) %>%
   n_distinct()
 
-print(num_unique_stream_ids)
+print(num_unique_stream_ids) # We should still have 384 Sites (27 sites don't have any NP data)
 
 raw_NP_stream_ids <- tot %>%
   distinct(Stream_ID) %>%
@@ -604,7 +604,7 @@ num_unique_stream_ids <- tot %>%
   pull(Stream_Name) %>%
   n_distinct()
 
-print(num_unique_stream_ids)
+print(num_unique_stream_ids) # We should still have 384 Sites
 
 
 # Clean up memory
