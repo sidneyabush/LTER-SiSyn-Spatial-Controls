@@ -150,7 +150,10 @@ si_drivers <- read.csv("all-data_si-extract_2_202412.csv", stringsAsFactors = FA
     ), # Update Stream_Name for consistency
     Stream_ID = coalesce(Updated_StreamName, Stream_ID) # Update Stream_ID
   ) %>%
-  select(-Updated_StreamName)
+  # Remove columns with .y
+  dplyr::select(-contains(".y"), -Updated_StreamName) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.x$"))
 
 # Standardize Finnish site names
 for (i in seq_len(nrow(finn))) {
@@ -252,8 +255,12 @@ year_cols <- bind_rows(numeric_long, character_long)
 
 # Add units to the drivers
 units_df <- data.frame(driver = annual_vars, unit = units_annual)
+
 year_cols <- year_cols %>%
-  left_join(units_df, by = "driver")
+  left_join(units_df, by = "driver") %>% # Remove columns with .y
+  dplyr::select(-contains(".y")) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.x$"))
 
 ## ------------------------------------------------------- ##
 # Ensure One Row per Stream_ID-Year Combination ----
@@ -268,10 +275,13 @@ wide_drivers <- year_cols %>%
   rename(Year = year)              # Rename `year` to `Year` for consistency
 
 # Join wide-format drivers with `tot`
-tot <- tot %>%
+tot_spatial <- tot_KG %>%
   left_join(wide_drivers, by = c("Stream_Name", "Year")) %>%
-  distinct(Stream_Name, Year, .keep_all = TRUE)
-
+  distinct(Stream_Name, Year, .keep_all = TRUE) %>%
+  # Remove columns with .y
+  dplyr::select(-contains(".y"), -cycle1) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.x$"))
 
 ## ------------------------------------------------------- ##
 # Merge Processed Data ----
@@ -293,23 +303,19 @@ drivers <- drivers %>%
   rename(Year = year)
 
 # Merge with `tot` and `wrtds_df`
-tot <- tot %>%
+tot_drivers <- tot_spatial %>%
   left_join(drivers, by = c("Stream_Name", "Year")) %>%
-  left_join(wrtds_df, by = c("Stream_Name", "Year")) %>%
-  rename(Stream_ID = Stream_ID.y)
-
-num_unique_stream_ids <- tot %>%
-  pull(Stream_ID) %>%
-  n_distinct()
-
-print(num_unique_stream_ids)
+  # Remove columns with .y
+  dplyr::select(-contains(".y")) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.x$"))
 
 # Capture `Stream_IDs` in the original `tot` dataframe
-stream_ids_post_spatial_pre_NP <- tot %>%
+stream_ids_post_spatial_pre_NP <- tot_drivers %>%
   distinct(Stream_ID) %>%
   pull(Stream_ID)
 
-original_stream_ids <- tot %>%
+original_stream_ids <- tot_drivers %>%
   distinct(Stream_ID) %>%
   pull(Stream_ID)
 
