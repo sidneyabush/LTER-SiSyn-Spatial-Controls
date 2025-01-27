@@ -24,15 +24,10 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
     Stream_ID = paste0(LTER, "__", Stream_Name),
     Year = floor(as.numeric(DecYear))) %>%
   dplyr:: filter(Year >= 2001 & Year <= 2024) %>%  # Filter rows with dates between 2001 and 2024
-  filter(chemical == "DSi") 
+  filter(chemical == "DSi") %>%
+  dplyr::select(-chemical)
 
 gc()
-
-num_unique_stream_ids <- wrtds_df %>%
-  pull(Stream_ID) %>%
-  n_distinct()
-
-print(num_unique_stream_ids)
 
 ## Need to tidy the Finnish site names:
 finn <- read.csv("FinnishSites.csv")
@@ -60,17 +55,13 @@ yields <- wrtds_df %>%
          GenYield = GenFlux / drainSqKm) %>%
   dplyr::select(-FNFlux, -GenFlux)
 
-tot <- wrtds_df %>%
+tot_yields <- wrtds_df %>%
   left_join(yields, by = c("Stream_ID", "Year")) %>%
-  distinct(Stream_ID, Year, .keep_all = TRUE)
-
-num_unique_stream_ids <- tot %>%
-  pull(Stream_ID) %>%
-  n_distinct()
-
-print(num_unique_stream_ids)
-
-gc()
+  distinct(Stream_ID, Year, .keep_all = TRUE) %>%
+  # Remove columns with .y
+  select(-contains(".y")) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.x$"))
 
 ## ------------------------------------------------------- ##
 # Add in KG Classifications ----
@@ -85,15 +76,13 @@ KG <- read.csv("Koeppen_Geiger_2.csv")%>%
 
 KG$Stream_ID<-paste0(KG$LTER, "__", KG$Stream_Name)
 
-tot <- tot %>%
+tot_KG <- tot_yields %>%
   left_join(KG, by = "Stream_ID") %>%
-  distinct(Stream_ID, Year, .keep_all = TRUE)
-
-num_unique_stream_ids <- tot %>%
-  pull(Stream_ID) %>%
-  n_distinct()
-
-print(num_unique_stream_ids)
+  distinct(Stream_ID, Year, .keep_all = TRUE) %>%
+  # Remove columns with .y
+  select(-contains(".y"), -X, -Use_WRTDS, -contains("coord"), -Latitude, -Longitude) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.x$"))
 
 ## ------------------------------------------------------- ##
               # Import Daylength ----
@@ -122,21 +111,19 @@ daylen_range <- daylen %>%
   ) %>%
   left_join(name_conversion, by = "Stream_Name") %>%
   mutate(Stream_Name = coalesce(Updated_StreamName, Stream_Name)) %>%
-  dplyr::select(-Updated_StreamName)
+  dplyr::select(-Updated_StreamName, -contains(".x"), -contains(".y"))
 
 # Ensure the result is left-joined to "tot"
-tot <- tot %>% 
+tot_daylen <- tot_yields %>% 
   left_join(daylen_range, by = "Stream_Name") %>%
-  distinct(Stream_ID, Year, .keep_all = TRUE)
-
-num_unique_stream_ids <- tot %>%
-  pull(Stream_ID) %>%
-  n_distinct()
-
-print(num_unique_stream_ids)
+  distinct(Stream_ID, Year, .keep_all = TRUE) %>%
+  # Remove columns with .y
+  select(-contains(".y"), -Min_Daylength) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.x$"))
 
 # Capture `Stream_IDs` in the original `tot` dataframe
-stream_ids_pre_spatial <- tot %>%
+stream_ids_pre_spatial <- tot_daylen %>%
   distinct(Stream_ID) %>%
   pull(Stream_ID)
 
