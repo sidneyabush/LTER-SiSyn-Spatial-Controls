@@ -742,3 +742,143 @@ print(colnames(tot))
 
 # View the cleaned dataframe
 print(colnames(tot))
+
+## ------------------------------------------------------- ##
+#  Gap Filling Missing Data ----
+## ------------------------------------------------------- ##
+# Import streams with na slopes
+# Load and process Krycklan slopes
+Krycklan_slopes <- transform(read.csv("Krycklan_basin_slopes.csv"), 
+                             basin_slope_mean_degree = atan(gradient_pct / 100) * (180 / pi))
+
+# Load and process US slopes
+US_slopes <- read.csv("DSi_Basin_Slope_missing_sites.csv", header = FALSE)
+colnames(US_slopes) <- US_slopes[1, ]
+US_slopes <- US_slopes[-1, ]
+US_slopes <- US_slopes %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "Stream_Name",
+    values_to = "basin_slope_mean_degree"
+  ) %>%
+  mutate(basin_slope_mean_degree = as.numeric(basin_slope_mean_degree))
+
+# Upload the Stream_Name to Stream_ID key file
+stream_key <- read.csv("basin_stream_id_conversions.csv", header = TRUE)
+
+# Merge stream key with Krycklan_slopes and US_slopes to add Stream_ID
+Krycklan_slopes <- left_join(Krycklan_slopes, stream_key, by = "Stream_Name") %>%
+  filter(!is.na(basin_slope_mean_degree))  # Remove rows with NA values after merging with key
+
+US_slopes <- left_join(US_slopes, stream_key, by = "Stream_Name") %>%
+  filter(!is.na(basin_slope_mean_degree))  # Remove rows with NA values after merging with key
+
+# Filter rows with NA slopes from 'tot'
+tot_with_na_slope <- tot %>%
+  filter(is.na(basin_slope_mean_degree)) %>%
+  rename(Stream_ID = Stream_ID.x) %>%
+  select(Stream_ID)
+
+# Merge 'tot_with_na_slope' with US and Krycklan slope data
+tot_with_slope_filled <- tot_with_na_slope %>%
+  left_join(US_slopes %>% select(Stream_ID, basin_slope_mean_degree), by = "Stream_ID") %>%
+  left_join(Krycklan_slopes %>% select(Stream_ID, basin_slope_mean_degree), by = "Stream_ID", suffix = c("_US", "_Krycklan")) %>%
+  mutate(
+    basin_slope_mean_degree = coalesce(basin_slope_mean_degree_US, basin_slope_mean_degree_Krycklan)
+  ) %>%
+  select(Stream_ID, basin_slope_mean_degree)
+
+# Convert to data.table for efficient key-based operations
+tot_with_slope_filled <- as.data.table(tot_with_slope_filled)
+
+tot <- tot %>%
+  rename(Stream_ID = Stream_ID.x)
+
+tot <- as.data.table(tot)
+
+# Set keys for efficient join
+setkey(tot, Stream_ID)
+setkey(tot_with_slope_filled, Stream_ID)
+
+# Update 'tot' with gap-filled slopes, retaining original values where present
+tot[tot_with_slope_filled, basin_slope_mean_degree := 
+      ifelse(is.na(basin_slope_mean_degree), i.basin_slope_mean_degree, basin_slope_mean_degree),
+    on = .(Stream_ID)]
+
+# Check for NA values: 
+# Identify unique Stream_IDs with NA values for basin_slope or elevation
+na_sites <- read.csv("AllDrivers_Harmonized_Yearly_Keira.csv") %>%
+  filter(is.na(basin_slope)) %>% # Filter rows where basin_slope is NA
+  distinct(Stream_ID) # Get unique Stream_IDs
+
+# Print the unique Stream_IDs with NA values
+print(na_sites)
+
+# Now do gap filling for elevation for the same sites:
+# Load the US elevation data without headers
+US_elev <- read.csv("DSi_Basin_Elevation_missing_sites.csv", header = FALSE)
+
+# Set the first row as column names and remove it from the data
+colnames(US_elev) <- US_elev[1, ]
+US_elev <- US_elev[-1, ]
+
+# Convert the dataframe from wide to long format
+US_elev <- US_elev %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "Stream_Name",
+    values_to = "elevation_mean_m"
+  )
+
+# Convert elevation_mean_m to numeric
+US_elev$elevation_mean_m <- as.numeric(US_elev$elevation_mean_m)
+
+# Merge with the stream key and remove rows with NA in elevation_mean_m after the merge
+US_elev <- left_join(US_elev, stream_key, by = "Stream_Name") %>%
+  filter(!is.na(elevation_mean_m))
+
+# Filter tot for rows with NA elevation values
+tot_with_na_elev <- tot %>%
+  filter(is.na(elevation_mean_m)) %>%
+  select(Stream_ID)
+
+# Merge tot_with_na_elev with US_elev to fill missing elevation values
+tot_with_elev_filled <- tot_with_na_elev %>%
+  left_join(US_elev %>% select(Stream_ID, elevation_mean_m), by = "Stream_ID")
+
+# Update tot with the filled elevation values
+tot <- tot %>%
+  left_join(tot_with_elev_filled, by = "Stream_ID", suffix = c("", "_filled"), relationship = "many-to-many") %>%
+  mutate(
+    elevation_mean_m = coalesce(elevation_mean_m_filled, elevation_mean_m)
+  ) %>%
+  select(-elevation_mean_m_filled)  # Remove Stream_Name_filled from final output
+
+# # Combine with wrtds_df
+# tot <- tot %>%
+#   left_join(wrtds_df, by = c("Stream_Name", "Year")) 
+
+# Tidy data for export: 
+tot_si <- tot %>%
+  dplyr::select(Stream_ID.x, Year, drainSqKm.x, NOx, P, precip.x, Q.x,
+                temp.x, Max_Daylength, prop_area.x, npp.x, evapotrans.x,
+                silicate_weathering, cycle0.x, permafrost_mean_m, elevation_mean_m, 
+                basin_slope_mean_degree, FNConc.x, FNYield, GenConc.x, GenYield, 
+                contains("rocks"), contains("land_"))%>%
+  dplyr::rename(Stream_ID = Stream_ID.x,
+                Q = Q.x,
+                FNConc = FNConc.x,
+                GenConc = GenConc.x,
+                precip = precip.x,
+                temp = temp.x, 
+                npp = npp.x,
+                evapotrans = evapotrans.x,
+                snow_cover = prop_area.x, 
+                greenup_day = cycle0.x,
+                drainage_area = drainSqKm.x,
+                elevation = elevation_mean_m,
+                permafrost = permafrost_mean_m,
+                basin_slope = basin_slope_mean_degree) %>%
+  dplyr::mutate(permafrost = ifelse(is.na(permafrost), 0, permafrost)) 
+
+
