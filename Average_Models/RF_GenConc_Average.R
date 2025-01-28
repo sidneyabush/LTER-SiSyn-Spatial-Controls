@@ -10,54 +10,26 @@ rm(list = ls())
 set.seed(123)
 
 # Load Functions ----
-# Function to see variable importance by regime
-import_plot <- function(rf_model) {
-  importance_df <- as.data.frame(rf_model$importance)
-  importance_df$driver <- rownames(importance_df)
-  importance_melt <- melt(importance_df, id.vars = c("MeanDecreaseAccuracy", "MeanDecreaseGini", "driver"))
-  ggplot(importance_melt, aes(driver, value)) +
-    geom_point() +
-    facet_wrap(~variable) +
-    theme_bw() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1))
-}
-
-# Function to test ntree - change the internal function to reflect the RF model that you are using
-test_numtree_average <- function(ntree_list) {
-  MSE <- list()
-  for (i in 1:length(ntree_list)) {
-    # Set seed for each model training step within the loop
-    set.seed(123)
-    rf_model <- randomForest(median_GenConc ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = ntree_list[[i]])
-    MSE[[i]] <- rf_model$mse
-  }
-  return(MSE)
-}
-
-# Function to test different numbers of trees (ntree) for optimized RF
-test_numtree_optimized <- function(ntree_list) {
-  MSE <- list()
-  for (i in 1:length(ntree_list)) {
-    # Set seed for each model training step
-    set.seed(123)
-    rf_model <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = ntree_list[[i]])
-    MSE[[i]] <- rf_model$mse
-  }
-  return(MSE)
-}
-
-# Define a function to save RF variable importance plot as a PDF
-save_rf_importance_plot <- function(rf_model, output_dir) {
-  pdf(sprintf("%s/RF_variable_importance.pdf", output_dir), width = 8, height = 6)
-  randomForest::varImpPlot(rf_model, main = "RF Variable Importance - Average Gen Concentration", col = "darkblue")
+# Function to save correlation matrix as PDF
+save_correlation_plot <- function(driver_cor, output_dir) {
+  pdf(sprintf("%s/correlation_plot.pdf", output_dir), width = 10, height = 10)
+  corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = FALSE)
+  title("average FN Si Concentration")
   dev.off()
 }
 
-# Define a function to save the linear model (LM) plot as a PDF
+# Save RF Variable Importance Plot
+save_rf_importance_plot <- function(rf_model, output_dir) {
+  pdf(sprintf("%s/RF_variable_importance.pdf", output_dir), width = 8, height = 6)
+  randomForest::varImpPlot(rf_model, main = "RF Variable Importance - average FN Concentration", col = "darkblue")
+  dev.off()
+}
+
+# Save Linear Model (LM) Plot
 save_lm_plot <- function(rf_model, observed, output_dir) {
   pdf(sprintf("%s/RF_lm_plot.pdf", output_dir), width = 8, height = 8)
   plot(rf_model$predicted, observed, pch = 16, cex = 1.5,
-       xlab = "Predicted", ylab = "Observed", main = "Observed vs Predicted - Average Gen Concentration",
+       xlab = "Predicted", ylab = "Observed", main = "Observed vs Predicted - average FN Concentration",
        cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5)
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2)
   legend("topleft", bty = "n", cex = 1.5, legend = paste("R² =", format(mean(rf_model$rsq), digits = 3)))
@@ -65,15 +37,51 @@ save_lm_plot <- function(rf_model, observed, output_dir) {
   dev.off()
 }
 
+# Parallelized function to test ntree
+test_numtree_parallel <- function(ntree_list, formula, data) {
+  num_cores <- parallel::detectCores() - 1
+  cl <- parallel::makeCluster(num_cores)
+  doParallel::registerDoParallel(cl)
+  
+  # Collect results
+  MSE <- foreach(ntree = ntree_list, .combine = 'c', .packages = 'randomForest') %dopar% {
+    set.seed(123)
+    rf_model <- randomForest(formula, data = data, importance = TRUE, proximity = TRUE, ntree = ntree)
+    mean(rf_model$mse)  # Return the mean of the MSE vector
+  }
+  
+  stopCluster(cl)
+  return(MSE)
+}
+
+# Adjusted function for testing different numbers of trees (ntree) using parallel processing
+test_numtree_parallel_optimized <- function(ntree_list, formula, data) {
+  # Detect the number of available cores
+  num_cores <- parallel::detectCores() - 1
+  # Initialize parallel cluster
+  cl <- parallel::makeCluster(num_cores)
+  doParallel::registerDoParallel(cl)
+  
+  # Run models in parallel using foreach
+  MSE <- foreach(ntree = ntree_list, .combine = 'c', .packages = 'randomForest') %dopar% {
+    set.seed(123)
+    rf_model <- randomForest(formula, data = data, importance = TRUE, proximity = TRUE, ntree = ntree)
+    mean(rf_model$mse)  # Return the mean MSE for each ntree
+  }
+  
+  # Stop parallel cluster
+  stopCluster(cl)
+  return(MSE)
+}
+
 # Set the output directory path for saving PDFs
 output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/GenConc"
 
 # Read in and tidy data ----
-# Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
 
 # Load and preprocess the data
-drivers_df <- read.csv("AllDrivers_Harmonized_Average_test.csv") %>%
+drivers_df <- read.csv("AllDrivers_Harmonized_average_test.csv") %>%
   select(-contains("Yield"), -contains("Gen"), -contains("major"), -X) %>%
   dplyr::mutate_at(vars(18:33), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
   # mutate(greenup_day = as.numeric(greenup_day)) %>%  # Convert greenup_day to numeric
@@ -86,21 +94,21 @@ unique_stream_ids <- drivers_df %>%
   distinct()
 
 # Here we can optionally remove data above and below a determined standard deviation about the mean
-# Calculate mean and standard deviation of median_GenConc
-mean_median_GenConc <- mean(drivers_df$median_GenConc, na.rm = TRUE)  # Calculate the mean
-std_median_GenConc <- sd(drivers_df$median_GenConc, na.rm = TRUE)  # Calculate the standard deviation
-threshold_median_GenConc <- mean_median_GenConc + 7 * std_median_GenConc  # Calculate 5 standard deviations above the mean
+# Calculate mean and standard deviation of FNConc
+mean_FNConc <- mean(drivers_df$FNConc, na.rm = TRUE)  # Calculate the mean
+std_FNConc <- sd(drivers_df$FNConc, na.rm = TRUE)  # Calculate the standard deviation
+threshold_FNConc <- mean_FNConc + 7 * std_FNConc  # Calculate 5 standard deviations above the mean
 
 # Output the results
-cat("Mean of median_GenConc:", mean_median_GenConc, "\n")
-cat("Standard Deviations of median_GenConc:", threshold_median_GenConc, "\n")
+cat("Mean of FNConc:", mean_FNConc, "\n")
+cat("Standard Deviations of FNConc:", threshold_FNConc, "\n")
 
-# Remove rows with median_GenConc greater than the threshold
+# Remove rows with FNConc greater than the threshold
 drivers_df <- drivers_df %>%
-  filter(median_GenConc <= threshold_median_GenConc)
+  filter(FNConc <= threshold_FNConc)
 
 # Output the number of rows remaining in the dataframe
-cat("Rows remaining after removing rows with median_GenConc greater than the threshold:", nrow(drivers_df), "\n")
+cat("Rows remaining after removing rows with FNConc greater than the threshold:", nrow(drivers_df), "\n")
 
 # Export unique Stream_IDs to a CSV file
 unique_stream_ids <- drivers_df %>%
@@ -119,50 +127,75 @@ cat("Number of unique Stream_IDs:", unique_stream_id_count, "\n")
 
 # Final step: Remove Stream_ID and Year
 drivers_df <- drivers_df %>%
-  select(-Stream_ID, -Year)
+  select(-Stream_ID)
 
-# Plot correlation between driver variables ----
-numeric_drivers <- 2:34  # Indices for numeric drivers
+# Plot and save correlation matrix ----
+numeric_drivers <- 2:32 # Change this range to reflect data frame length
 driver_cor <- cor(drivers_df[, numeric_drivers])
-corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = F)
+save_correlation_plot(driver_cor, output_dir)
 
-pdf(sprintf("%s/correlation_plot.pdf", output_dir), width = 10, height = 10)
-corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = FALSE)
-title("Median Gen Si Concentration")  # Add title in the PDF
-dev.off()
-
-# Global seed before testing different numbers of trees (ntree) ----
+# ---- Split Data into Train/Test ----
+# Add the new training and testing workflow here
 set.seed(123)
-MSE_list <- test_numtree_average(c(100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000))
-tre_list <- c(100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000)
-MSE_df <- as.data.frame(unlist(MSE_list))
-MSE_num <- list()
+split_index <- sample(2, nrow(drivers_df), replace = TRUE, prob = c(0.7, 0.3))
+train <- drivers_df[split_index == 1, ]
+test <- drivers_df[split_index == 2, ]
 
-for (i in 1:length(tre_list)) {
-  MSE_num[[i]] <- rep(tre_list[i], tre_list[i])
-}
-
-MSE_df$tree_num <- unlist(MSE_num)
-MSE_mean <- MSE_df %>%
-  group_by(tree_num) %>%
-  summarise(mean_MSE = mean(`unlist(MSE_list)`))
-
-# Visualize and select the number of trees that gives the minimum MSE error
-ggplot(MSE_mean, aes(tree_num, mean_MSE)) + geom_point() + geom_line() + theme_classic() +
-  scale_x_continuous(breaks = seq(100, 2000, 100)) + theme(text = element_text(size = 20))
-
-# Global seed before tuning mtry based on optimized ntree ----
+# ---- Train Initial RF Model ----
+# Test different ntree values for rf_model1
+ntree_values <- seq(100, 2000, by = 100)  # Define ntree values
 set.seed(123)
-tuneRF(drivers_df[, numeric_drivers], drivers_df[, 1], ntreeTry = 2000, stepFactor = 1, improve = 0.5, plot = FALSE)
+MSE_list_rf1 <- test_numtree_parallel(ntree_values, FNConc ~ ., drivers_df)
+
+# Visualize MSE results for rf_model1 ----
+MSE_df_rf1 <- data.frame(
+  ntree = ntree_values,
+  mean_MSE = sapply(MSE_list_rf1, mean)
+)
+
+ggplot(MSE_df_rf1, aes(ntree, mean_MSE)) + 
+  geom_point() + 
+  geom_line() + 
+  theme_classic() + 
+  scale_x_continuous(breaks = seq(100, 2000, 100)) + 
+  theme(text = element_text(size = 20))
+
+
+# Manually select ntree for rf_model1 ----
+manual_ntree_rf1 <- 700  # Replace with chosen value
+
+# Tune mtry for rf_model1 ----
+tuneRF(train[, 2:ncol(train)], train[, 1], ntreeTry = manual_ntree_rf1, stepFactor = 1, improve = 0.5, plot = TRUE)
+
+# Manually select mtry for rf_model1 ----
+manual_mtry_rf1 <- 10  # Replace with chosen value
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
-rf_model1 <- randomForest(median_GenConc ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 11)
+rf_model1 <- randomForest(FNConc ~ ., data = train, importance = TRUE, proximity = TRUE, ntree = manual_ntree_rf1, mtry = manual_mtry_rf1)
 
 # Visualize output for rf_model1
 print(rf_model1)
 randomForest::varImpPlot(rf_model1)
 
+# Generate plots comparing predicted vs observed ----
+lm_plot <- plot(rf_model1$predicted, train$FNConc, pch = 16, cex = 1.5,
+                xlab = "Predicted", ylab = "Observed", main = "Trained RF Model 1 average FN Concentration",
+                cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
+  abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
+  theme(text = element_text(size = 40), face = "bold")
+legend("topleft", bty = "n", cex = 1.5, legend = paste("R2 =", format(mean(rf_model1$rsq), digits = 3)))
+legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(rf_model1$mse), digits = 3)))
+
+# Evaluate RF Model on Train/Test Datasets
+train_pred <- predict(rf_model1, train)
+test_pred <- predict(rf_model1, test)
+
+cat("Train R²:", cor(train_pred, train$FNConc)^2, "\n")
+cat("Test R²:", cor(test_pred, test$FNConc)^2, "\n")
+
+
+# Start Tuning with RFE and 2nd RFModel ----
 # Global seed for RFE ----
 size <- ncol(drivers_df) - 1  # This is the number of predictor variables
 cv_repeats <- 5
@@ -255,4 +288,54 @@ legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(
 save_rf_importance_plot(rf_model2, output_dir)
 save_lm_plot(rf_model2, drivers_df$median_GenConc, output_dir)
 
-## End ----
+# Save RF variable importance plot and LM plot for rf_model2
+save_rf_importance_plot(rf_model2, output_dir)
+save_lm_plot(rf_model2, train$FNConc, output_dir)
+
+# Save model and required objects for SHAP analysis
+save(rf_model2, file = "FNConc_Average_rf_model2.RData")
+kept_drivers <- train[, colnames(train) %in% predictors(result_rfe)]
+save(kept_drivers, file = "FNConc_Average_kept_drivers.RData")
+save(train, file = "FNConc_Average_train.RData")
+
+# ---- Use Predict Function on Test Data ----
+# Predict on test data using rf_model2
+test_predictions <- predict(rf_model2, test)
+
+# Evaluate predictions: Calculate R² and Mean Squared Error
+test_r2 <- cor(test_predictions, test$FNConc)^2
+test_mse <- mean((test_predictions - test$FNConc)^2)
+
+cat("Test R² for rf_model2:", test_r2, "\n")
+cat("Test MSE for rf_model2:", test_mse, "\n")
+
+# ---- Visualize Observed vs Predicted ----
+# Save observed vs predicted plot for test data
+pdf(sprintf("%s/RF_Observed_vs_Predicted_Test_rf_model2.pdf", output_dir), width = 8, height = 8)
+plot(
+  test_predictions, test$FNConc, 
+  pch = 16, cex = 1.5,
+  xlab = "Predicted", ylab = "Observed", 
+  main = "Observed vs Predicted - Test Data (rf_model2)",
+  cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5
+)
+abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2)
+legend(
+  "topleft", bty = "n", cex = 1.5,
+  legend = paste("R² =", format(test_r2, digits = 3))
+)
+legend(
+  "bottomright", bty = "n", cex = 1.5,
+  legend = paste("MSE =", format(test_mse, digits = 3))
+)
+dev.off()
+
+# ---- Save Test Predictions ----
+test_results <- test %>%
+  mutate(Predicted_FNConc = test_predictions)  # Add predictions to test data
+
+write.csv(test_results, "Test_Predictions_rf_model2.csv", row.names = FALSE)
+
+cat("Test predictions saved to Test_Predictions_rf_model2.csv\n")
+
+
