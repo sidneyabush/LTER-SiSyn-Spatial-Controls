@@ -82,10 +82,10 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 # Load and preprocess the data
 drivers_df <- read.csv("AllDrivers_Harmonized_average_test.csv") %>%
-  select(-contains("Yield"), -contains("Gen"), -contains("major"), -X) %>%
+  select(-contains("Yield"), -contains("FN"), -contains("major"), -X) %>%
   dplyr::mutate_at(vars(18:33), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
   # mutate(greenup_day = as.numeric(greenup_day)) %>%  # Convert greenup_day to numeric
-  select(FNConc, everything()) %>%
+  select(GenConc, everything()) %>%
   drop_na()
 
 # Export unique Stream_IDs to a CSV file
@@ -94,21 +94,21 @@ unique_stream_ids <- drivers_df %>%
   distinct()
 
 # Here we can optionally remove data above and below a determined standard deviation about the mean
-# Calculate mean and standard deviation of FNConc
-mean_FNConc <- mean(drivers_df$FNConc, na.rm = TRUE)  # Calculate the mean
-std_FNConc <- sd(drivers_df$FNConc, na.rm = TRUE)  # Calculate the standard deviation
-threshold_FNConc <- mean_FNConc + 7 * std_FNConc  # Calculate 5 standard deviations above the mean
+# Calculate mean and standard deviation of GenConc
+mean_GenConc <- mean(drivers_df$GenConc, na.rm = TRUE)  # Calculate the mean
+std_GenConc <- sd(drivers_df$GenConc, na.rm = TRUE)  # Calculate the standard deviation
+threshold_GenConc <- mean_GenConc + 7 * std_GenConc  # Calculate 5 standard deviations above the mean
 
 # Output the results
-cat("Mean of FNConc:", mean_FNConc, "\n")
-cat("Standard Deviations of FNConc:", threshold_FNConc, "\n")
+cat("Mean of GenConc:", mean_GenConc, "\n")
+cat("Standard Deviations of GenConc:", threshold_GenConc, "\n")
 
-# Remove rows with FNConc greater than the threshold
+# Remove rows with GenConc greater than the threshold
 drivers_df <- drivers_df %>%
-  filter(FNConc <= threshold_FNConc)
+  filter(GenConc <= threshold_GenConc)
 
 # Output the number of rows remaining in the dataframe
-cat("Rows remaining after removing rows with FNConc greater than the threshold:", nrow(drivers_df), "\n")
+cat("Rows remaining after removing rows with GenConc greater than the threshold:", nrow(drivers_df), "\n")
 
 # Export unique Stream_IDs to a CSV file
 unique_stream_ids <- drivers_df %>%
@@ -145,7 +145,7 @@ test <- drivers_df[split_index == 2, ]
 # Test different ntree values for rf_model1
 ntree_values <- seq(100, 2000, by = 100)  # Define ntree values
 set.seed(123)
-MSE_list_rf1 <- test_numtree_parallel(ntree_values, FNConc ~ ., drivers_df)
+MSE_list_rf1 <- test_numtree_parallel(ntree_values, GenConc ~ ., drivers_df)
 
 # Visualize MSE results for rf_model1 ----
 MSE_df_rf1 <- data.frame(
@@ -172,14 +172,14 @@ manual_mtry_rf1 <- 10  # Replace with chosen value
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
-rf_model1 <- randomForest(FNConc ~ ., data = train, importance = TRUE, proximity = TRUE, ntree = manual_ntree_rf1, mtry = manual_mtry_rf1)
+rf_model1 <- randomForest(GenConc ~ ., data = train, importance = TRUE, proximity = TRUE, ntree = manual_ntree_rf1, mtry = manual_mtry_rf1)
 
 # Visualize output for rf_model1
 print(rf_model1)
 randomForest::varImpPlot(rf_model1)
 
 # Generate plots comparing predicted vs observed ----
-lm_plot <- plot(rf_model1$predicted, train$FNConc, pch = 16, cex = 1.5,
+lm_plot <- plot(rf_model1$predicted, train$GenConc, pch = 16, cex = 1.5,
                 xlab = "Predicted", ylab = "Observed", main = "Trained RF Model 1 average FN Concentration",
                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
@@ -191,8 +191,8 @@ legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(
 train_pred <- predict(rf_model1, train)
 test_pred <- predict(rf_model1, test)
 
-cat("Train R²:", cor(train_pred, train$FNConc)^2, "\n")
-cat("Test R²:", cor(test_pred, test$FNConc)^2, "\n")
+cat("Train R²:", cor(train_pred, train$GenConc)^2, "\n")
+cat("Test R²:", cor(test_pred, test$GenConc)^2, "\n")
 
 
 # Start Tuning with RFE and 2nd RFModel ----
@@ -213,8 +213,8 @@ control <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = cv_r
                       number = cv_number, verbose = TRUE, allowParallel = FALSE)
 
 # Divide data into predictor variables (x) and response variable (y)
-x <- drivers_df[, !(colnames(drivers_df) == "median_GenConc")]
-y <- drivers_df$median_GenConc
+x <- drivers_df[, !(colnames(drivers_df) == "GenConc")]
+y <- drivers_df$GenConc
 
 # Run RFE to select the best features ----
 set.seed(123)
@@ -227,7 +227,7 @@ print(result_rfe)
 new_rf_input <- paste(predictors(result_rfe), collapse = "+")
 
 # Format those features into a formula for the optimized random forest model
-rf_formula <- formula(paste("median_GenConc ~", new_rf_input))
+rf_formula <- formula(paste("GenConc ~", new_rf_input))
 
 # Global seed before re-tuning RF after RFE optimization ----
 set.seed(123)
@@ -258,7 +258,7 @@ tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 1000, stepFactor = 1, improve =
 set.seed(123)
 rf_model2 <- randomForest(
   x = drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)], # Predictors
-  y = drivers_df$median_GenConc,                                      # Response variable
+  y = drivers_df$GenConc,                                      # Response variable
   importance = TRUE,
   proximity = TRUE,
   ntree = 1000,
@@ -276,7 +276,7 @@ save(kept_drivers, file = "GenConc_Ave_kept_drivers.RData")  # Save predictors
 save(drivers_df, file = "GenConc_Ave_drivers_df.RData")      # Save full drivers_df
 
 # Generate plots comparing predicted vs observed ----
-lm_plot <- plot(rf_model2$predicted, drivers_df$median_GenConc, pch = 16, cex = 1.5,
+lm_plot <- plot(rf_model2$predicted, drivers_df$GenConc, pch = 16, cex = 1.5,
                 xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers - Gen Concentration",
                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
@@ -286,25 +286,25 @@ legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(
 
 # Save RF variable importance plot and LM plot for rf_model2
 save_rf_importance_plot(rf_model2, output_dir)
-save_lm_plot(rf_model2, drivers_df$median_GenConc, output_dir)
+save_lm_plot(rf_model2, drivers_df$GenConc, output_dir)
 
 # Save RF variable importance plot and LM plot for rf_model2
 save_rf_importance_plot(rf_model2, output_dir)
-save_lm_plot(rf_model2, train$FNConc, output_dir)
+save_lm_plot(rf_model2, train$GenConc, output_dir)
 
 # Save model and required objects for SHAP analysis
-save(rf_model2, file = "FNConc_Average_rf_model2.RData")
+save(rf_model2, file = "GenConc_Average_rf_model2.RData")
 kept_drivers <- train[, colnames(train) %in% predictors(result_rfe)]
-save(kept_drivers, file = "FNConc_Average_kept_drivers.RData")
-save(train, file = "FNConc_Average_train.RData")
+save(kept_drivers, file = "GenConc_Average_kept_drivers.RData")
+save(train, file = "GenConc_Average_train.RData")
 
 # ---- Use Predict Function on Test Data ----
 # Predict on test data using rf_model2
 test_predictions <- predict(rf_model2, test)
 
 # Evaluate predictions: Calculate R² and Mean Squared Error
-test_r2 <- cor(test_predictions, test$FNConc)^2
-test_mse <- mean((test_predictions - test$FNConc)^2)
+test_r2 <- cor(test_predictions, test$GenConc)^2
+test_mse <- mean((test_predictions - test$GenConc)^2)
 
 cat("Test R² for rf_model2:", test_r2, "\n")
 cat("Test MSE for rf_model2:", test_mse, "\n")
@@ -313,7 +313,7 @@ cat("Test MSE for rf_model2:", test_mse, "\n")
 # Save observed vs predicted plot for test data
 pdf(sprintf("%s/RF_Observed_vs_Predicted_Test_rf_model2.pdf", output_dir), width = 8, height = 8)
 plot(
-  test_predictions, test$FNConc, 
+  test_predictions, test$GenConc, 
   pch = 16, cex = 1.5,
   xlab = "Predicted", ylab = "Observed", 
   main = "Observed vs Predicted - Test Data (rf_model2)",
@@ -332,7 +332,7 @@ dev.off()
 
 # ---- Save Test Predictions ----
 test_results <- test %>%
-  mutate(Predicted_FNConc = test_predictions)  # Add predictions to test data
+  mutate(Predicted_GenConc = test_predictions)  # Add predictions to test data
 
 write.csv(test_results, "Test_Predictions_rf_model2.csv", row.names = FALSE)
 
