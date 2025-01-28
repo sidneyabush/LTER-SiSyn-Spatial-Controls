@@ -14,14 +14,14 @@ set.seed(123)
 save_correlation_plot <- function(driver_cor, output_dir) {
   pdf(sprintf("%s/correlation_plot.pdf", output_dir), width = 10, height = 10)
   corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = FALSE)
-  title("average FN Si Concentration")
+  title("average Gen Si Concentration")
   dev.off()
 }
 
 # Save RF Variable Importance Plot
 save_rf_importance_plot <- function(rf_model, output_dir) {
   pdf(sprintf("%s/RF_variable_importance.pdf", output_dir), width = 8, height = 6)
-  randomForest::varImpPlot(rf_model, main = "RF Variable Importance - average FN Concentration", col = "darkblue")
+  randomForest::varImpPlot(rf_model, main = "RF Variable Importance - average Gen Concentration", col = "darkblue")
   dev.off()
 }
 
@@ -29,7 +29,7 @@ save_rf_importance_plot <- function(rf_model, output_dir) {
 save_lm_plot <- function(rf_model, observed, output_dir) {
   pdf(sprintf("%s/RF_lm_plot.pdf", output_dir), width = 8, height = 8)
   plot(rf_model$predicted, observed, pch = 16, cex = 1.5,
-       xlab = "Predicted", ylab = "Observed", main = "Observed vs Predicted - average FN Concentration",
+       xlab = "Predicted", ylab = "Observed", main = "Observed vs Predicted - average Gen Concentration",
        cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5)
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2)
   legend("topleft", bty = "n", cex = 1.5, legend = paste("R² =", format(mean(rf_model$rsq), digits = 3)))
@@ -83,8 +83,7 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 # Load and preprocess the data
 drivers_df <- read.csv("AllDrivers_Harmonized_average_test.csv") %>%
   select(-contains("Yield"), -contains("FN"), -contains("major"), -X) %>%
-  dplyr::mutate_at(vars(18:33), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
-  # mutate(greenup_day = as.numeric(greenup_day)) %>%  # Convert greenup_day to numeric
+  dplyr::mutate_at(vars(18:33), ~replace(., is.na(.), 0)) %>%  
   select(GenConc, everything()) %>%
   drop_na()
 
@@ -180,7 +179,7 @@ randomForest::varImpPlot(rf_model1)
 
 # Generate plots comparing predicted vs observed ----
 lm_plot <- plot(rf_model1$predicted, train$GenConc, pch = 16, cex = 1.5,
-                xlab = "Predicted", ylab = "Observed", main = "Trained RF Model 1 average FN Concentration",
+                xlab = "Predicted", ylab = "Observed", main = "Trained RF Model 1 average Gen Concentration",
                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
   theme(text = element_text(size = 40), face = "bold")
@@ -197,7 +196,7 @@ cat("Test R²:", cor(test_pred, test$GenConc)^2, "\n")
 
 # Start Tuning with RFE and 2nd RFModel ----
 # Global seed for RFE ----
-size <- ncol(drivers_df) - 1  # This is the number of predictor variables
+size <- ncol(train) - 1  # This is the number of predictor variables
 cv_repeats <- 5
 cv_number <- 5
 total_repeats <- (cv_repeats * cv_number) + 1
@@ -208,13 +207,16 @@ for (i in 1:(cv_repeats * cv_number)) {
 }
 seeds[[total_repeats]] <- 123
 
-#control <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = cv_repeats, number = cv_number, seeds = seeds, verbose = TRUE)
 control <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = cv_repeats, 
                       number = cv_number, verbose = TRUE, allowParallel = FALSE)
 
 # Divide data into predictor variables (x) and response variable (y)
-x <- drivers_df[, !(colnames(drivers_df) == "GenConc")]
-y <- drivers_df$GenConc
+x <- train[, !(colnames(train) == "GenConc")]
+y <- train$GenConc
+
+sink(NULL)  # Reset output sink
+closeAllConnections()  # Close all connections
+dev.off()  # Close any open graphic devices
 
 # Run RFE to select the best features ----
 set.seed(123)
@@ -229,64 +231,46 @@ new_rf_input <- paste(predictors(result_rfe), collapse = "+")
 # Format those features into a formula for the optimized random forest model
 rf_formula <- formula(paste("GenConc ~", new_rf_input))
 
-# Global seed before re-tuning RF after RFE optimization ----
+# Test different ntree values 
+ntree_values <- seq(100, 2000, by = 100)  
 set.seed(123)
-MSE_list <- test_numtree_optimized(c(100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000))
+MSE_list_parallel <- test_numtree_parallel_optimized(ntree_values, rf_formula, train)
 
-# Visualize and select number of trees that gives the minimum MSE error
-MSE_df <- as.data.frame(unlist(MSE_list))
-MSE_num <- list()
+# Create a data frame for visualization
+MSE_df_parallel <- data.frame(
+  ntree = ntree_values,
+  mean_MSE = MSE_list_parallel
+)
 
-for (i in 1:length(tre_list)) {
-  MSE_num[[i]] <- rep(tre_list[i], tre_list[i])
-}
-
-MSE_df$tree_num <- unlist(MSE_num)
-MSE_mean <- MSE_df %>%
-  group_by(tree_num) %>%
-  summarise(mean_MSE = mean(`unlist(MSE_list)`))
-
-ggplot(MSE_mean, aes(tree_num, mean_MSE)) + geom_point() + geom_line() +
-  theme_classic() + scale_x_continuous(breaks = seq(100, 2000, 100)) + theme(text = element_text(size = 20))
+# Visualize the MSE results
+ggplot(MSE_df_parallel, aes(x = ntree, y = mean_MSE)) + 
+  geom_point() + 
+  geom_line() + 
+  theme_classic() + 
+  scale_x_continuous(breaks = seq(100, 2000, 100)) + 
+  theme(text = element_text(size = 20))
 
 # Global seed before re-tuning mtry
 set.seed(123)
-kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
-tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 1000, stepFactor = 1, improve = 0.5, plot = FALSE)
+kept_drivers <- train[, colnames(train) %in% predictors(result_rfe)]
+tuneRF(kept_drivers, train[, 1], ntreeTry = 1000, stepFactor = 1, improve = 0.5, plot = FALSE)
 
-# Run optimized random forest model without formula interface
+# Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
-rf_model2 <- randomForest(
-  x = drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)], # Predictors
-  y = drivers_df$GenConc,                                      # Response variable
-  importance = TRUE,
-  proximity = TRUE,
-  ntree = 1000,
-  mtry = 6
-)
+rf_model2 <- randomForest(rf_formula, data = train, importance = TRUE, proximity = TRUE, ntree = 1000, mtry = 5)
 
 # Visualize output for rf_model2
 print(rf_model2)
 randomForest::varImpPlot(rf_model2)
 
-# Save model and required objects for SHAP analysis
-save(rf_model2, file = "GenConc_Ave_rf_model2.RData")  # Save model without formula interface
-kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
-save(kept_drivers, file = "GenConc_Ave_kept_drivers.RData")  # Save predictors
-save(drivers_df, file = "GenConc_Ave_drivers_df.RData")      # Save full drivers_df
-
 # Generate plots comparing predicted vs observed ----
-lm_plot <- plot(rf_model2$predicted, drivers_df$GenConc, pch = 16, cex = 1.5,
-                xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers - Gen Concentration",
+lm_plot <- plot(rf_model2$predicted, train$GenConc, pch = 16, cex = 1.5,
+                xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers - Average Gen Concentration",
                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
   theme(text = element_text(size = 40), face = "bold")
 legend("topleft", bty = "n", cex = 1.5, legend = paste("R2 =", format(mean(rf_model2$rsq), digits = 3)))
 legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(rf_model2$mse), digits = 3)))
-
-# Save RF variable importance plot and LM plot for rf_model2
-save_rf_importance_plot(rf_model2, output_dir)
-save_lm_plot(rf_model2, drivers_df$GenConc, output_dir)
 
 # Save RF variable importance plot and LM plot for rf_model2
 save_rf_importance_plot(rf_model2, output_dir)
