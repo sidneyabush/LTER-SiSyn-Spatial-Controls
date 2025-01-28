@@ -724,9 +724,6 @@ tot_annual <- tot_gap_filled %>%
                 basin_slope = basin_slope_mean_degree) %>%
   dplyr::mutate(permafrost = ifelse(is.na(permafrost), 0, permafrost)) 
 
-tot_annual <- tot_annual %>%
-  mutate(across(where(is.numeric), ~ ifelse(is.infinite(.), NA, .)))
-
 
 # Export annual data
 write.csv(as.data.frame(tot_annual), "AllDrivers_Harmonized_Yearly.csv")

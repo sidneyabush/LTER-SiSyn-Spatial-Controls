@@ -84,7 +84,7 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 drivers_df <- read.csv("AllDrivers_Harmonized_Yearly.csv") %>%
   select(-contains("Yield"), -contains("Gen"), -contains("major"), -X) %>%
   dplyr::mutate_at(vars(19:34), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
-  mutate(greenup_day = as.numeric(greenup_day)) %>%  # Convert greenup_day to numeric
+  # mutate(greenup_day = as.numeric(greenup_day)) %>%  # Convert greenup_day to numeric
   select(FNConc, everything()) %>%
   drop_na()
 
