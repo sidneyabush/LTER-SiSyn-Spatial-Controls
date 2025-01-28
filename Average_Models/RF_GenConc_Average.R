@@ -72,13 +72,18 @@ output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/
 # Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
 
-drivers_df <- read.csv("AllDrivers_Harmonized_Average.csv") %>%
-  select(-contains("Yield"), -contains("FN")) %>%
-  dplyr::mutate_at(vars(13:28), ~replace(., is.na(.), 0)) %>%
-  mutate(across(where(is.integer), as.numeric)) %>%
-  distinct(Stream_ID, .keep_all = TRUE) %>%
-  # select(-Stream_ID) %>%
+# Load and preprocess the data
+drivers_df <- read.csv("AllDrivers_Harmonized_Average_test.csv") %>%
+  select(-contains("Yield"), -contains("Gen"), -contains("major"), -X) %>%
+  dplyr::mutate_at(vars(18:33), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
+  # mutate(greenup_day = as.numeric(greenup_day)) %>%  # Convert greenup_day to numeric
+  select(FNConc, everything()) %>%
   drop_na()
+
+# Export unique Stream_IDs to a CSV file
+unique_stream_ids <- drivers_df %>%
+  select(Stream_ID) %>%
+  distinct()
 
 # Here we can optionally remove data above and below a determined standard deviation about the mean
 # Calculate mean and standard deviation of median_GenConc

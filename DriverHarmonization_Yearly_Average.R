@@ -399,37 +399,35 @@ WRTDS_NP_stream_ids <- tot_wrtds_NP %>%
   pull(Stream_ID)
 
 # ## ------------------------------------------------------- ##
-#           # Import RAW N_P Data ---- 
+#           # Import RAW N_P Data ----
 # ## ------------------------------------------------------- ##
-# Read in the dataset
+# Read in and process the dataset
 raw_NP <- read.csv("20241003_masterdata_chem.csv") %>%
   mutate(
     Year = as.integer(format(as.Date(date, format = "%Y-%m-%d"), "%Y"))  # Extract Year from date
   ) %>%
-  filter(Year >= 2001 & Year <= 2024)  # Filter for years between 2001 and 2024
+  filter(Year >= 2001 & Year <= 2024)  # Filter years
 
-# Step 1: Filter, create Stream_ID, simplify solutes, and calculate median
+# Simplify solutes and calculate median
 raw_NP_median <- raw_NP %>%
   mutate(
-    Year = as.integer(year(as.Date(date, format = "%Y-%m-%d"))),  # Extract Year from date
-    Stream_ID = paste(LTER, Stream_Name, sep = "__"),              # Create Stream_ID by combining LTER and Stream_Name
-    solute_simplified = case_when(  # Simplify solutes into NOx and P categories
+    Stream_ID = paste(LTER, Stream_Name, sep = "__"),  # Create Stream_ID
+    solute_simplified = case_when(
       variable %in% c("NOx", "NO3") ~ "NOx",
       variable %in% c("SRP", "PO4") ~ "P",
       TRUE ~ NA_character_
     )
   ) %>%
-  filter(!is.na(solute_simplified)) %>%  # Keep only relevant solutes (NOx, P)
-  group_by(Stream_ID, Year, solute_simplified) %>%  # Group by Stream_ID, year, and solute
+  filter(!is.na(solute_simplified)) %>%
+  group_by(Stream_ID, Year, solute_simplified) %>%
   summarise(
-    median_value = median(value, na.rm = TRUE),  # Calculate median value
-    .groups = "drop"  # Ungroup after summarizing
+    median_value = median(value, na.rm = TRUE),
+    .groups = "drop"
   )
 
-
-# Check non-NA data availability for DSi, NOx, and P
+# Summarize sites with data availability
 chemical_summary <- raw_NP_median %>%
-  filter(solute_simplified %in% c("NOx", "P")) %>% # Ensure these chemicals are included
+  filter(solute_simplified %in% c("NOx", "P")) %>%
   group_by(solute_simplified) %>%
   summarise(
     Sites_With_Data = n_distinct(Stream_ID[!is.na(median_value)]),
@@ -437,28 +435,19 @@ chemical_summary <- raw_NP_median %>%
     .groups = "drop"
   )
 
-# Print the summary
 print("Summary of sites with non-NA data for NOx, and P:")
 print(chemical_summary)
 
-
-# Step 2: Reshape the data to wide format
+# Reshape to wide format
 raw_NP_wide <- raw_NP_median %>%
   pivot_wider(
-    names_from = solute_simplified,  # Create columns for NOx and P
-    values_from = median_value,      # Populate these columns with the median values
-    values_fill = list(median_value = NA)  # Fill missing combinations with NA
+    names_from = solute_simplified,
+    values_from = median_value,
+    values_fill = list(median_value = NA)
   )
 
-# Capture Stream_IDs before adding raw data
-stream_ids_pre_raw_data <- tot_wrtds_NP %>%
-  filter(is.na(NOx) | is.na(P)) %>%  # Identify sites with missing NOx or P
-  distinct(Stream_ID) %>%
-  pull(Stream_ID)
-
-
 # ## ------------------------------------------------------- ##
-#           # Match Data by Year ---- 
+#           # Match Data by Year ----
 # ## ------------------------------------------------------- ##
 # Merge raw N, P data into `tot`, matching years and replacing missing values
 solutes <- c("P", "NOx")
@@ -475,37 +464,41 @@ for (solute in solutes) {
     select(-raw_solute)  # Remove the temporary column
 }
 
-# Capture Stream_IDs after adding raw data
-stream_ids_post_raw_data <- tot_raw_NP %>%
-  filter(!is.na(NOx) | !is.na(P)) %>%  # Identify sites where missing values were filled
+
+
+# Identify gap-filled Stream_IDs
+stream_ids_pre_raw_data <- tot_wrtds_NP %>%
+  filter(is.na(NOx) | is.na(P)) %>%
   distinct(Stream_ID) %>%
   pull(Stream_ID)
 
-# Identify gap-filled Stream_IDs
+stream_ids_post_raw_data <- tot_raw_NP %>%
+  filter(!is.na(NOx) | !is.na(P)) %>%
+  distinct(Stream_ID) %>%
+  pull(Stream_ID)
+
 gap_filled_sites <- setdiff(stream_ids_post_raw_data, stream_ids_pre_raw_data)
 
-# Print the list of gap-filled sites
 print("Gap-filled Stream_IDs:")
 print(gap_filled_sites)
 
-# Optionally, save to a file for further analysis
+# Save the gap-filled sites to a file
 write.csv(data.frame(Stream_ID = gap_filled_sites), "raw_NP_gap_filled_sites.csv", row.names = FALSE)
 
+# Additional checks for site counts
 num_unique_stream_ids <- tot_raw_NP %>%
   pull(Stream_Name) %>%
   n_distinct()
 
-print(num_unique_stream_ids) # We should still have 384 Sites (27 sites don't have any NP data)
+print(paste("Number of unique Stream_IDs:", num_unique_stream_ids))
 
-raw_NP_stream_ids <- tot_raw_NP %>%
+# Identify sites with missing data
+raw_NP_stream_ids <- tot_wrtds_NP %>%
   distinct(Stream_ID) %>%
   pull(Stream_ID)
 
-# See which sites we lost due to lack of N and P data: 
-no_WRTDS_NP_sites <- setdiff(original_stream_ids, WRTDS_NP_stream_ids)
-print(no_WRTDS_NP_sites)
-
 no_NP_sites <- setdiff(original_stream_ids, raw_NP_stream_ids)
+print("Sites with no N or P data:")
 print(no_NP_sites)
 
 ## ------------------------------------------------------- ##
@@ -710,6 +703,12 @@ tot_gap_filled <- tot_weathering %>%
   ) %>%
   select(-elevation_mean_m_filled)  # Remove Stream_Name_filled from final output
 
+num_unique_stream_ids <- tot_gap_filled %>%
+  pull(Stream_Name) %>%
+  n_distinct()
+
+print(num_unique_stream_ids) # We should still have 384 Sites (27 sites don't have any NP data)
+
 # Tidy data for export: 
 tot_annual <- tot_gap_filled %>%
   dplyr::select(Stream_ID, Year, drainSqKm, NOx, P, precip, Q,
@@ -722,11 +721,17 @@ tot_annual <- tot_gap_filled %>%
                 permafrost = permafrost_mean_m,
                 greenup_day = cycle0,
                 basin_slope = basin_slope_mean_degree) %>%
-  dplyr::mutate(permafrost = ifelse(is.na(permafrost), 0, permafrost)) 
+  dplyr::mutate(permafrost = ifelse(is.na(permafrost), 0, permafrost)) %>%
+  dplyr::mutate_at(vars(22:37), ~replace(., is.na(.), 0))
 
+num_unique_stream_ids <- tot_annual %>%
+  pull(Stream_ID) %>%
+  n_distinct()
+
+print(num_unique_stream_ids) # We should still have 384 Sites (27 sites don't have any NP data)
 
 # Export annual data
-write.csv(as.data.frame(tot_annual), "AllDrivers_Harmonized_Yearly.csv")
+write.csv(as.data.frame(tot_annual), "AllDrivers_Harmonized_Yearly_final.csv")
 
 # Create the tot_average dataframe
 tot_average <- tot_annual %>%
@@ -761,8 +766,14 @@ tot_average <- tot_annual %>%
   mutate(across(everything(), ~ ifelse(is.nan(.), NA, .)))
 
 
+num_unique_stream_ids <- tot_average %>%
+  pull(Stream_ID) %>%
+  n_distinct()
+
+print(num_unique_stream_ids) # We should still have 384 Sites (27 sites don't have any NP data)
+
 # Export annual data
-write.csv(as.data.frame(tot_annual), "AllDrivers_Harmonized_Average.csv")
+write.csv(as.data.frame(tot_average), "AllDrivers_Harmonized_Average.csv")
 
 
 

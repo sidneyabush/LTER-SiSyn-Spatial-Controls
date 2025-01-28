@@ -523,9 +523,8 @@ tryCatch({
 gc()
 
 ## ------------------------------------------------------- ##
-        #  Gap Filling Missing Data ----
+#  Gap Filling Missing Data ----
 ## ------------------------------------------------------- ##
-# Import streams with na slopes
 # Load and process Krycklan slopes
 Krycklan_slopes <- transform(read.csv("Krycklan_basin_slopes.csv"), 
                              basin_slope_mean_degree = atan(gradient_pct / 100) * (180 / pi))
@@ -566,6 +565,16 @@ tot_with_slope_filled <- tot_with_na_slope %>%
   ) %>%
   select(Stream_ID, basin_slope_mean_degree)
 
+# Manually update specific values
+tot_with_slope_filled <- tot_with_slope_filled %>%
+  mutate(
+    basin_slope_mean_degree = case_when(
+      Stream_ID == "Walker Branch__east fork" ~ 2.2124321596241265,
+      Stream_ID == "Walker Branch__west fork" ~ 1.8972192246291828,       
+      TRUE ~ basin_slope_mean_degree               # Retain existing values
+    )
+  )
+
 # Convert to data.table for efficient key-based operations
 tot_with_slope_filled <- as.data.table(tot_with_slope_filled)
 tot <- as.data.table(tot)
@@ -574,19 +583,9 @@ tot <- as.data.table(tot)
 setkey(tot, Stream_ID)
 setkey(tot_with_slope_filled, Stream_ID)
 
-# Update 'tot' with gap-filled slopes, retaining original values where present
 tot[tot_with_slope_filled, basin_slope_mean_degree := 
-      ifelse(is.na(basin_slope_mean_degree), i.basin_slope_mean_degree, basin_slope_mean_degree),
-    on = .(Stream_ID)]
-
-# Check for NA values: 
-# Identify unique Stream_IDs with NA values for basin_slope or elevation
-na_sites <- read.csv("AllDrivers_Harmonized_Yearly_Keira.csv") %>%
-  filter(is.na(basin_slope)) %>% # Filter rows where basin_slope is NA
-  distinct(Stream_ID) # Get unique Stream_IDs
-
-# Print the unique Stream_IDs with NA values
-print(na_sites)
+                 ifelse(is.na(basin_slope_mean_degree), i.basin_slope_mean_degree, basin_slope_mean_degree),
+               on = .(Stream_ID)]
 
 # Now do gap filling for elevation for the same sites:
 # Load the US elevation data without headers
@@ -628,31 +627,6 @@ tot <- tot %>%
   ) %>%
   select(-elevation_mean_m_filled)  # Remove Stream_Name_filled from final output
 
-# Combine with wrtds_df
-tot <- tot %>%
-  left_join(wrtds_df, by = c("Stream_Name", "Year")) 
-
-# Identify Stream_IDs with NA in basin_slope_mean_degree
-na_stream_ids <- tot %>%
-  filter(is.na(basin_slope_mean_degree)) %>%
-  select(Stream_ID.x)
-
-# View the Stream_IDs with NA
-print(na_stream_ids)
-
-# Count the number of unique Stream_IDs
-unique_stream_id_count <- tot %>%
-  distinct(Stream_ID.x) %>%
-  nrow()
-
-# Print the count
-cat("Number of unique Stream_IDs:", unique_stream_id_count, "\n")
-
-# View the dataframe column names -- what a mess!
-print(colnames(tot))
-
-# View the cleaned dataframe
-print(colnames(tot))
 
 # Tidy data for export: 
 tot_si <- tot %>%
@@ -660,7 +634,7 @@ tot_si <- tot %>%
                 temp, Max_Daylength, prop_area, npp, evapotrans,
                 silicate_weathering, cycle0, permafrost_mean_m, elevation_mean_m, 
                 basin_slope_mean_degree, FNConc.x, FNYield, GenConc.x, GenYield, 
-                contains("rocks"), contains("land_"))%>%
+                contains("rocks"), contains("land_")) %>%
   dplyr::rename(Stream_ID = Stream_ID.x,
                 Q = Q.x,
                 FNConc = FNConc.x,
@@ -673,36 +647,54 @@ tot_si <- tot %>%
                 basin_slope = basin_slope_mean_degree) %>%
   dplyr::mutate(permafrost = ifelse(is.na(permafrost), 0, permafrost)) 
 
+# Convert numeric columns to numeric
+tot_annual <- tot_si %>%
+  mutate(across(c(drainage_area, NOx, P, precip, Q, temp, Max_Daylength, 
+                  snow_cover, npp, evapotrans, silicate_weathering, 
+                  greenup_day, permafrost, elevation, basin_slope, 
+                  FNConc, FNYield, GenConc, GenYield), 
+                as.numeric))
 
-duplicates <- tot_si %>%
-  group_by(Stream_ID, Year) %>%
-  filter(n() > 1)
+# Create the tot_average dataframe
+tot_average <- tot_annual %>%
+  group_by(Stream_ID) %>%
+  summarise(
+    # Numerical variables: calculate the mean across all years
+    drainage_area = mean(drainage_area, na.rm = TRUE),
+    NOx = mean(NOx, na.rm = TRUE),
+    P = mean(P, na.rm = TRUE),
+    precip = mean(precip, na.rm = TRUE),
+    Q = mean(Q, na.rm = TRUE),
+    temp = mean(temp, na.rm = TRUE),
+    Max_Daylength = mean(Max_Daylength, na.rm = TRUE),
+    snow_cover = mean(snow_cover, na.rm = TRUE),
+    npp = mean(npp, na.rm = TRUE),
+    evapotrans = mean(evapotrans, na.rm = TRUE),
+    silicate_weathering = mean(silicate_weathering, na.rm = TRUE),
+    greenup_day = mean(greenup_day, na.rm = TRUE),
+    permafrost = mean(permafrost, na.rm = TRUE),
+    elevation = mean(elevation, na.rm = TRUE),
+    basin_slope = mean(basin_slope, na.rm = TRUE),
+    FNConc = mean(FNConc, na.rm = TRUE),
+    FNYield = mean(FNYield, na.rm = TRUE),
+    GenConc = mean(GenConc, na.rm = TRUE),
+    GenYield = mean(GenYield, na.rm = TRUE),
+    # Categorical variables: grab the first value
+    across(contains("rocks"), ~ first(.)),
+    across(contains("land_"), ~ first(.))
+  ) %>%
+  ungroup() %>%
+  # Replace NaN with NA in all columns
+  mutate(across(everything(), ~ ifelse(is.nan(.), NA, .)))
 
+# Count the number of unique Stream_IDs
+num_unique_stream_ids <- tot_average %>%
+  pull(Stream_ID) %>%
+  n_distinct()
 
-if (nrow(duplicates) > 0) {
-  print("Duplicates detected:")
-  print(duplicates)
-} else {
-  print("No duplicates detected.")
-}
+print(num_unique_stream_ids) # We should still have 384 Sites (27 sites don't have any NP data)
 
-tot_si <- tot_si %>%
-  distinct(Stream_ID, Year, .keep_all = TRUE)
-
-## ------------------------------------------------------- ##
-          #  Export Annual Driver data ----
-## ------------------------------------------------------- ##
-# Check number of unique sites: should agree with avg
-num_unique_sites <- tot_si %>% 
-  summarise(num_sites = n_distinct(Stream_ID))
-
-print(num_unique_sites)
-
-write.csv(as.data.frame(tot_si), "AllDrivers_Harmonized_Yearly.csv")
-
-gc()
-
-
-
+# Export annual data
+write.csv(as.data.frame(tot_average), "AllDrivers_Harmonized_Average_test.csv")
 
 

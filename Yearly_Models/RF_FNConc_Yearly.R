@@ -81,12 +81,17 @@ output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
 
 # Load and preprocess the data
-drivers_df <- read.csv("AllDrivers_Harmonized_Yearly.csv") %>%
+drivers_df <- read.csv("AllDrivers_Harmonized_Yearly_test.csv") %>%
   select(-contains("Yield"), -contains("Gen"), -contains("major"), -X) %>%
   dplyr::mutate_at(vars(19:34), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
   # mutate(greenup_day = as.numeric(greenup_day)) %>%  # Convert greenup_day to numeric
   select(FNConc, everything()) %>%
   drop_na()
+
+# Export unique Stream_IDs to a CSV file
+unique_stream_ids <- drivers_df %>%
+  select(Stream_ID) %>%
+  distinct()
 
 # Here we can optionally remove data above and below a determined standard deviation about the mean
 # Calculate mean and standard deviation of FNConc
