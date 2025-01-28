@@ -720,6 +720,7 @@ tot_annual <- tot_gap_filled %>%
   dplyr::rename(
                 elevation = elevation_mean_m,
                 permafrost = permafrost_mean_m,
+                greenup_day = cycle0,
                 basin_slope = basin_slope_mean_degree) %>%
   dplyr::mutate(permafrost = ifelse(is.na(permafrost), 0, permafrost)) 
 
@@ -746,7 +747,7 @@ tot_average <- tot_annual %>%
     npp = mean(npp, na.rm = TRUE),
     evapotrans = mean(evapotrans, na.rm = TRUE),
     silicate_weathering = mean(silicate_weathering, na.rm = TRUE),
-    cycle0 = mean(cycle0, na.rm = TRUE),
+    greenup_day = mean(greenup_day, na.rm = TRUE),
     permafrost = mean(permafrost, na.rm = TRUE),
     elevation = mean(elevation, na.rm = TRUE),
     basin_slope = mean(basin_slope, na.rm = TRUE),
