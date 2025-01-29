@@ -82,12 +82,11 @@ output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
 
 # Load and preprocess the data
-drivers_df <- read.csv("AllDrivers_Harmonized_Yearly_filtered_10_years.csv") %>%
+drivers_df <- read.csv("AllDrivers_Harmonized_Yearly_filtered_1_years.csv") %>%
   select(-contains("Yield"), -contains("Gen"), -contains("major"), -X) %>%
   dplyr::mutate_at(vars(19:34), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
-  # mutate(greenup_day = as.numeric(greenup_day)) %>%  # Convert greenup_day to numeric
   select(FNConc, everything()) %>%
-  drop_na()
+  filter(complete.cases(.))  # Remove rows with any NAs
 
 gc()
 
@@ -148,11 +147,10 @@ test <- drivers_df[split_index == 2, ]
 
 # ---- Train Initial RF Model ----
 # Test different ntree values for rf_model1
-ntree_values <- seq(100, 1000, by = 200)  # Reduce to avoid memory overload
+ntree_values <- seq(100, 2000, by = 100)  # Reduce to avoid memory overload
 
 set.seed(123)
 MSE_list_rf1 <- test_numtree_parallel(ntree_values, FNConc ~ ., drivers_df)
-
 
 # Visualize MSE results for rf_model1 ----
 MSE_df_rf1 <- data.frame(

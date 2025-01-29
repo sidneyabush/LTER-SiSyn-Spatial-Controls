@@ -43,18 +43,18 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
 #   ) %>%
 #   filter(chemical == "DSi")
 
-# Count number of years per site and filter for sites with at least 10 years of data
+# Count number of years per site and filter for sites with at least 1 years of data
 site_year_counts <- wrtds_df %>%
   dplyr::group_by(Stream_ID) %>%
   summarise(year_count = n_distinct(Year)) %>%
-  filter(year_count >= 10)
+  filter(year_count >= 1)
 
 # Filter the main dataset to only include sites with sufficient data
 wrtds_df <- wrtds_df %>%
   filter(Stream_ID %in% site_year_counts$Stream_ID)
 
 # Output the number of sites that meet the criteria
-cat("Number of sites with at least 10 years of data:", nrow(site_year_counts), "\n")
+cat("Number of sites with at least 1 years of data:", nrow(site_year_counts), "\n")
 
 
 ## Need to tidy the Finnish site names:
@@ -307,11 +307,7 @@ num_unique_stream_ids <- all_spatial %>%
 print(num_unique_stream_ids)
 
 tot <- tot %>% 
-  left_join(all_spatial, by = c("Stream_Name", "Year")) %>%
-  # Remove columns with .x
-  select(-contains(".x")) %>%
-  # Rename columns with .x by removing the suffix
-  rename_with(~ str_remove(., "\\.x$")) 
+  left_join(all_spatial, by = c("Stream_Name", "Year")) 
 
 num_unique_stream_ids <- tot %>%
   pull(Stream_Name) %>%
@@ -322,11 +318,10 @@ print(num_unique_stream_ids)
 # Combine with wrtds_df
 tot <- tot %>%
   left_join(wrtds_df, by = c("Stream_Name", "Year")) %>%
-  rename(Stream_ID = Stream_ID.y) %>%
   # Remove columns with .x
   select(-contains(".x")) %>%
   # Rename columns with .x by removing the suffix
-  rename_with(~ str_remove(., "\\.x$"))
+  rename_with(~ str_remove(., "\\.y$"))
 
 num_unique_stream_ids <- tot %>%
   pull(Stream_Name) %>%
@@ -340,7 +335,7 @@ print(num_unique_stream_ids)
 # Filter for relevant chemicals (N and P) and simplify NO3/NOx to NOx
 wrtds_NP <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
   rename(LTER = LTER.x) %>%
-  dplyr::select(-Conc, -Flux, -PeriodLong, -PeriodStart, -LTER.y, -contains("date"), 
+  dplyr::select(-Conc, -Flux, -PeriodLong, -PeriodStart, -LTER.y, -contains("date"),
                 -contains("month"), -min_year, -max_year, -duration) %>%
   dplyr::mutate(
     Stream_Name = case_when(
@@ -443,11 +438,18 @@ combined_NP <- combined_NP %>%
 
 # Merge the combined dataset with `tot`
 tot <- tot %>%
-  left_join(combined_NP, by = c("Stream_ID", "Year")) %>%
-  # Remove columns with .y
-  select(-contains(".y")) %>%
-  # Rename columns with .x by removing the suffix
-  rename_with(~ str_remove(., "\\.x$"))
+  left_join(combined_NP, by = c("Stream_ID", "Year")) 
+
+tot <- tot %>%
+  left_join(wrtds_NP_wide, by = c("Stream_ID", "Year")) %>%
+  
+  # Resolve duplicate values by replacing .x NAs with .y values
+  mutate(
+    NOx = coalesce(NOx.x, NOx.y),
+    P = coalesce(P.x, P.y)
+  ) %>%
+  # Drop redundant columns
+  select(-contains(".x"), -contains(".y"))
 
 # Verify the number of unique Stream_IDs
 num_unique_stream_ids <- tot %>%
@@ -455,7 +457,6 @@ num_unique_stream_ids <- tot %>%
   n_distinct()
 
 print(num_unique_stream_ids)
-
 
 ## ------------------------------------------------------- ##
               #  Silicate Weathering ----
@@ -546,6 +547,13 @@ tryCatch({
 
 # Clean up memory
 gc()
+
+# Verify the number of unique Stream_IDs
+num_unique_stream_ids <- tot %>%
+  pull(Stream_ID) %>%
+  n_distinct()
+
+print(num_unique_stream_ids)
 
 ## ------------------------------------------------------- ##
 #  Gap Filling Missing Data ----
@@ -682,6 +690,7 @@ tot_si <- tot %>%
 
 # Convert numeric columns to numeric
 tot_annual <- tot_si %>%
+  distinct(Stream_ID, Year, .keep_all = TRUE)  %>% 
   mutate(across(c(drainage_area, NOx, P, precip, Q, temp, Max_Daylength, 
                   snow_cover, npp, evapotrans, silicate_weathering, 
                   greenup_day, permafrost, elevation, basin_slope, 
@@ -696,7 +705,7 @@ num_unique_stream_ids <- tot_annual %>%
 print(num_unique_stream_ids)
 
 # Export annual data
-write.csv(as.data.frame(tot_annual), "AllDrivers_Harmonized_Yearly_filtered_10_years.csv")
+write.csv(as.data.frame(tot_annual), "AllDrivers_Harmonized_Yearly_filtered_1_years.csv")
 
 
 # Create the tot_average dataframe
@@ -739,6 +748,6 @@ num_unique_stream_ids <- tot_average %>%
 print(num_unique_stream_ids) 
 
 # Export annual data
-write.csv(as.data.frame(tot_average), "AllDrivers_Harmonized_Average_filtered_10_years.csv")
+write.csv(as.data.frame(tot_average), "AllDrivers_Harmonized_Average_filtered_1_years.csv")
 
 
