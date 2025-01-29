@@ -39,16 +39,15 @@ save_lm_plot <- function(rf_model, observed, output_dir) {
 
 # Parallelized function to test ntree
 test_numtree_parallel <- function(ntree_list, formula, data) {
-  num_cores <- parallel::detectCores() - 1
-  # # Reduce the number of cores used
-  # num_cores <- min(4, parallel::detectCores() - 2)  
+  num_cores <- min(4, parallel::detectCores() - 2)  # Use a maximum of 4 cores
   cl <- parallel::makeCluster(num_cores)
   doParallel::registerDoParallel(cl)
+  
   
   # Collect results
   MSE <- foreach(ntree = ntree_list, .combine = 'c', .packages = 'randomForest') %dopar% {
     set.seed(123)
-    rf_model <- randomForest(formula, data = data, importance = TRUE, proximity = TRUE, ntree = ntree)
+    rf_model <- randomForest(formula, data = data, importance = TRUE, ntree = ntree)
     mean(rf_model$mse)  # Return the mean of the MSE vector
   }
   
@@ -149,7 +148,8 @@ test <- drivers_df[split_index == 2, ]
 
 # ---- Train Initial RF Model ----
 # Test different ntree values for rf_model1
-ntree_values <- seq(100, 2000, by = 100)  # Define ntree values
+ntree_values <- seq(100, 1000, by = 200)  # Reduce to avoid memory overload
+
 set.seed(123)
 MSE_list_rf1 <- test_numtree_parallel(ntree_values, FNConc ~ ., drivers_df)
 

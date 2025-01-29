@@ -87,7 +87,7 @@ tot <- wrtds_df %>%
   left_join(yields, by = c("Stream_ID", "Year")) %>%
   distinct(Stream_ID, Year, .keep_all = TRUE) %>%
   # Remove columns with .y
-  select(-contains(".x")) %>%
+  select(-contains(".y")) %>%
   # Rename columns with .x by removing the suffix
   rename_with(~ str_remove(., "\\.x$"))
 
@@ -112,7 +112,7 @@ tot <- tot %>%
   # Remove columns with .x
   select(-contains(".x")) %>%
   # Rename columns with .x by removing the suffix
-  rename_with(~ str_remove(., "\\.x$"))
+  rename_with(~ str_remove(., "\\.y$"))
 
 num_unique_stream_ids <- tot %>%
   pull(Stream_ID) %>%
@@ -126,12 +126,6 @@ print(num_unique_stream_ids)
 # Load and clean daylength data
 daylen <- read.csv("Monthly_Daylength_2.csv") %>%
   dplyr::select(-1)
-
-num_unique_stream_ids <- daylen %>%
-  pull(Stream_Name) %>%
-  n_distinct()
-
-print(num_unique_stream_ids)
 
 # Define renamed and old names directly in a streamlined manner
 name_conversion <- data.frame(
@@ -148,20 +142,16 @@ daylen_range <- daylen %>%
   ) %>%
   left_join(name_conversion, by = "Stream_Name") %>%
   mutate(Stream_Name = coalesce(Updated_StreamName, Stream_Name)) %>%
-  dplyr::select(-Updated_StreamName) %>%
+  dplyr::select(-Updated_StreamName, -Min_Daylength) %>%
   # Remove columns with .x
-  select(-contains(".x")) %>%
+  # select(-contains(".x")) %>%
   # Rename columns with .x by removing the suffix
-  rename_with(~ str_remove(., "\\.x$"))
+  rename_with(~ str_remove(., "\\.y$"))
 
 # Ensure the result is left-joined to "tot"
 tot <- tot %>% 
   left_join(daylen_range, by = "Stream_Name") %>%
-  distinct(Stream_ID, Year, .keep_all = TRUE) %>%
-  # Remove columns with .x
-  select(-contains(".x")) %>%
-  # Rename columns with .x by removing the suffix
-  rename_with(~ str_remove(., "\\.x$"))
+  distinct(Stream_ID, Year, .keep_all = TRUE) 
 
 num_unique_stream_ids <- tot %>%
   pull(Stream_ID) %>%
