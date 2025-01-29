@@ -1,28 +1,21 @@
-### TO DO: 
-# Add these lines to left joins to tidy up workflow: 
-# %>%
-#   # Remove columns with .y
-#   select(-contains(".y")) %>%
-#   # Rename columns with .x by removing the suffix
-#   rename_with(~ str_remove(., "\\.x$"))
-
-
 # Load needed libraries
 librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr, stringr, readr)
 
 # Clear environment
 rm(list = ls())
 
-## ------------------------------------------------------- ##
-              # Read in and Tidy Data ----
-## ------------------------------------------------------- ##
+# ## ------------------------------------------------------- ##
+#              # Read in and Tidy Data ----
+# ## ------------------------------------------------------- ##
+
 ## Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
+# Read and clean WRTDS data this is filtered data
 wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
   rename(LTER = LTER.x) %>%
   filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc) %>%
-  dplyr::select(-Conc, -Flux, -PeriodLong, -PeriodStart, -LTER.y, -contains("date"), 
+  dplyr::select(-Conc, -Flux, -PeriodLong, -PeriodStart, -LTER.y, -contains("date"),
                 -contains("month"), -min_year, -max_year, -duration) %>%
   dplyr::mutate(
     Stream_Name = case_when(
@@ -31,17 +24,38 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
       TRUE ~ Stream_Name
     ),
     Stream_ID = paste0(LTER, "__", Stream_Name),
-    Year = floor(as.numeric(DecYear))) %>%
-  dplyr:: filter(Year >= 2001 & Year <= 2024) %>%  # Filter rows with dates between 2001 and 2024
-  filter(chemical == "DSi") 
+    Year = floor(as.numeric(DecYear))
+  ) %>%
+  filter(chemical == "DSi")
 
-gc()
+# # Read and clean WRTDS data - this is not filtered data
+# wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual.csv") %>%
+#   filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc) %>%
+#   dplyr::select(-Conc, -Flux, -PeriodLong, -PeriodStart) %>%
+#   dplyr::mutate(
+#     Stream_Name = case_when(
+#       Stream_Name == "East Fork" ~ "east fork",
+#       Stream_Name == "West Fork" ~ "west fork",
+#       TRUE ~ Stream_Name
+#     ),
+#     Stream_ID = paste0(LTER, "__", Stream_Name),
+#     Year = floor(as.numeric(DecYear))
+#   ) %>%
+#   filter(chemical == "DSi")
 
-num_unique_stream_ids <- wrtds_df %>%
-  pull(Stream_ID) %>%
-  n_distinct()
+# Count number of years per site and filter for sites with at least 10 years of data
+site_year_counts <- wrtds_df %>%
+  dplyr::group_by(Stream_ID) %>%
+  summarise(year_count = n_distinct(Year)) %>%
+  filter(year_count >= 10)
 
-print(num_unique_stream_ids)
+# Filter the main dataset to only include sites with sufficient data
+wrtds_df <- wrtds_df %>%
+  filter(Stream_ID %in% site_year_counts$Stream_ID)
+
+# Output the number of sites that meet the criteria
+cat("Number of sites with at least 10 years of data:", nrow(site_year_counts), "\n")
+
 
 ## Need to tidy the Finnish site names:
 finn <- read.csv("FinnishSites.csv")
@@ -71,7 +85,11 @@ yields <- wrtds_df %>%
 
 tot <- wrtds_df %>%
   left_join(yields, by = c("Stream_ID", "Year")) %>%
-  distinct(Stream_ID, Year, .keep_all = TRUE)
+  distinct(Stream_ID, Year, .keep_all = TRUE) %>%
+  # Remove columns with .y
+  select(-contains(".x")) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.x$"))
 
 num_unique_stream_ids <- tot %>%
   pull(Stream_ID) %>%
@@ -90,7 +108,11 @@ KG$Stream_ID<-paste0(KG$LTER, "__", KG$Stream_Name)
 
 tot <- tot %>%
   left_join(KG, by = "Stream_ID") %>%
-  distinct(Stream_ID, Year, .keep_all = TRUE)
+  distinct(Stream_ID, Year, .keep_all = TRUE) %>%
+  # Remove columns with .x
+  select(-contains(".x")) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.x$"))
 
 num_unique_stream_ids <- tot %>%
   pull(Stream_ID) %>%
@@ -126,20 +148,26 @@ daylen_range <- daylen %>%
   ) %>%
   left_join(name_conversion, by = "Stream_Name") %>%
   mutate(Stream_Name = coalesce(Updated_StreamName, Stream_Name)) %>%
-  dplyr::select(-Updated_StreamName)
+  dplyr::select(-Updated_StreamName) %>%
+  # Remove columns with .x
+  select(-contains(".x")) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.x$"))
 
 # Ensure the result is left-joined to "tot"
 tot <- tot %>% 
   left_join(daylen_range, by = "Stream_Name") %>%
-  distinct(Stream_ID, Year, .keep_all = TRUE)
+  distinct(Stream_ID, Year, .keep_all = TRUE) %>%
+  # Remove columns with .x
+  select(-contains(".x")) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.x$"))
 
 num_unique_stream_ids <- tot %>%
   pull(Stream_ID) %>%
   n_distinct()
 
 print(num_unique_stream_ids)
-
-## We lose one stream here that we don't lose in the average dataset ---
 
 ## ------------------------------------------------------- ##
               # Spatial Drivers----
@@ -160,7 +188,11 @@ si_drivers <- read.csv("all-data_si-extract_2_202412.csv", stringsAsFactors = FA
   mutate(
     Stream_ID = coalesce(Updated_StreamName, Stream_ID)  # Replace Stream_ID with Updated_StreamName if available
   ) %>%
-  select(-Updated_StreamName)  # Remove temporary renaming column
+  select(-Updated_StreamName) %>%
+  # Remove columns with .x
+  select(-contains(".x")) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.x$"))
 
 # Need to also do this for the Finnish sites in si drivers to names are all consistent: 
 for (i in 1:nrow(finn)) {
@@ -272,7 +304,11 @@ drivers_cast$cycle0 <- format(as.Date(drivers_cast$cycle0), "%j")
 # Combine with character columns: 
 all_spatial <- drivers_cast %>% 
   left_join(character_cols, by = "Stream_Name") %>%
-  distinct(Stream_Name, Year, .keep_all = TRUE)
+  distinct(Stream_Name, Year, .keep_all = TRUE) %>%
+  # Remove columns with .x
+  select(-contains(".x")) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.x$"))
 
 num_unique_stream_ids <- all_spatial %>%
   pull(Stream_Name) %>%
@@ -281,7 +317,11 @@ num_unique_stream_ids <- all_spatial %>%
 print(num_unique_stream_ids)
 
 tot <- tot %>% 
-  left_join(all_spatial, by = c("Stream_Name", "Year")) 
+  left_join(all_spatial, by = c("Stream_Name", "Year")) %>%
+  # Remove columns with .x
+  select(-contains(".x")) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.x$")) 
 
 num_unique_stream_ids <- tot %>%
   pull(Stream_Name) %>%
@@ -292,7 +332,11 @@ print(num_unique_stream_ids)
 # Combine with wrtds_df
 tot <- tot %>%
   left_join(wrtds_df, by = c("Stream_Name", "Year")) %>%
-  rename(Stream_ID = Stream_ID.y)
+  rename(Stream_ID = Stream_ID.y) %>%
+  # Remove columns with .x
+  select(-contains(".x")) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.x$"))
 
 num_unique_stream_ids <- tot %>%
   pull(Stream_Name) %>%
@@ -323,8 +367,7 @@ wrtds_NP <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
   filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
   filter(GenConc <= 60) %>%  # Remove rows where GenConc > 60
   filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc)  %>%  # Remove rows where FNConc is ±50% of GenConc
-  dplyr::select(-DecYear, -.groups, -LTER, -contains("FN"), -GenFlux) # Trying to tidy up this workflow by removing GenConc and GenFlux, this can be added back in in the future if GenConc/ GenFlux are desired for Yearly models.
-
+  dplyr::select(-DecYear, -.groups, -LTER, -contains("FN"), -GenFlux)
 
 wrtds_NP <- wrtds_NP %>%
   filter(chemical %in% c("P", "NO3", "NOx") & GenConc > 0) %>%  # Keep only positive GenConc
@@ -334,7 +377,7 @@ wrtds_NP <- wrtds_NP %>%
 
 # Handle duplicates by taking the median
 wrtds_NP <- wrtds_NP %>%
-  group_by(Stream_ID, Year, chemical) %>%  # Group by unique combinations
+  dplyr::group_by(Stream_ID, Year, chemical) %>%  # Group by unique combinations
   summarise(
     GenConc = median(GenConc, na.rm = TRUE),  # Take the median if duplicates exist
     .groups = "drop"  # Ungroup after summarizing
@@ -348,30 +391,6 @@ wrtds_NP_wide <- wrtds_NP %>%
     values_from = GenConc,         # Populate these columns with GenConc values
     values_fill = list(GenConc = NA)  # Fill missing combinations with NA
   )
-
-# Verify structure after reshaping
-# str(wrtds_NP_wide)
-
-gc()
-
-setDT(wrtds_NP_wide)
-
-# Merge with the "tot" dataframe to add annual NOx and P data
-tot <- tot %>%
-  inner_join(wrtds_NP_wide, by = c("Stream_ID", "Year")) %>%
-  dplyr::select(-contains(".y")) 
-  # %>%
-  # # Rename P.x and NOx.x to P and NOx
-  # rename(P = P.x, NOx = NOx.x)
-
-num_unique_stream_ids <- tot %>%
-  pull(Stream_Name) %>%
-  n_distinct()
-
-print(num_unique_stream_ids)
-
-#str(tot)
-
 
 # ## ------------------------------------------------------- ##
 #           # Import RAW N_P Data ---- 
@@ -391,7 +410,7 @@ raw_NP_median <- raw_NP %>%
     )
   ) %>%
   filter(!is.na(solute_simplified)) %>%  # Keep only relevant solutes (NOx, P)
-  group_by(Stream_ID, Year, solute_simplified) %>%  # Group by Stream_ID, year, and solute
+  dplyr::group_by(Stream_ID, Year, solute_simplified) %>%  # Group by Stream_ID, year, and solute
   summarise(
     median_value = median(value, na.rm = TRUE),  # Calculate median value
     .groups = "drop"  # Ungroup after summarizing
@@ -405,41 +424,48 @@ raw_NP_wide <- raw_NP_median %>%
     values_fill = list(median_value = NA)  # Fill missing combinations with NA
   )
 
-# str(raw_NP_wide)
+# ## ------------------------------------------------------- ##
+#           # Combine WRTDS and RAW Data ---- 
+# ## ------------------------------------------------------- ##
+# Perform a full outer join to combine `wrtds_NP_wide` and `raw_NP_wide`
+combined_NP <- full_join(wrtds_NP_wide, raw_NP_wide, by = c("Stream_ID", "Year"))
+
+# Rename columns to keep source identifiers for clarity
+combined_NP <- combined_NP %>%
+  rename(
+    P_wrtds = P.x,      # P from WRTDS
+    NOx_wrtds = NOx.x,  # NOx from WRTDS
+    P_raw = P.y,        # P from raw data
+    NOx_raw = NOx.y     # NOx from raw data
+  )
+
+# Fill gaps in WRTDS data with raw data where necessary
+combined_NP <- combined_NP %>%
+  mutate(
+    P = ifelse(is.na(P_wrtds), P_raw, P_wrtds),         # Prioritize P_wrtds
+    NOx = ifelse(is.na(NOx_wrtds), NOx_raw, NOx_wrtds)  # Prioritize NOx_wrtds
+  ) %>%
+  select(-P_wrtds, -NOx_wrtds, -P_raw, -NOx_raw)  # Clean up intermediate columns
 
 # ## ------------------------------------------------------- ##
-#           # Match Data by Year ---- 
+#           # Merge Combined Data with `tot` ----
 # ## ------------------------------------------------------- ##
-# Merge raw N, P data into `tot`, matching years and replacing missing values
-solutes <- c("P", "NOx")
 
-for (solute in solutes) {
-  raw_solute <- raw_NP_wide %>%
-    select(Stream_ID, Year, !!sym(solute)) %>%
-    rename(raw_solute = !!sym(solute))
-  
-  tot <- tot %>%
-    mutate(Year = as.numeric(Year)) %>%  # Ensure Year is numeric for consistent merging
-    left_join(raw_solute, by = c("Stream_ID", "Year")) %>%
-    mutate(!!sym(solute) := ifelse(is.na(!!sym(solute)), raw_solute, !!sym(solute))) %>%
-    select(-raw_solute)  # Remove the temporary column
-}
+# Merge the combined dataset with `tot`
+tot <- tot %>%
+  left_join(combined_NP, by = c("Stream_ID", "Year")) %>%
+  # Remove columns with .y
+  select(-contains(".y")) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.x$"))
 
-# str(tot)
-
-# # Check for duplicates in the `tot` dataframe
-# duplicates_tot <- tot %>%
-#   group_by(Stream_ID, Year) %>% 
-#   filter(n() > 1)  # Keep only duplicated Stream_ID-Year combinations
-# 
-# # Print the duplicates for review
-# print(duplicates_tot)
-
+# Verify the number of unique Stream_IDs
 num_unique_stream_ids <- tot %>%
-  pull(Stream_Name) %>%
+  pull(Stream_ID) %>%
   n_distinct()
 
 print(num_unique_stream_ids)
+
 
 ## ------------------------------------------------------- ##
               #  Silicate Weathering ----
@@ -572,7 +598,11 @@ tot_with_slope_filled <- tot_with_na_slope %>%
   mutate(
     basin_slope_mean_degree = coalesce(basin_slope_mean_degree_US, basin_slope_mean_degree_Krycklan)
   ) %>%
-  select(Stream_ID, basin_slope_mean_degree)
+  select(Stream_ID, basin_slope_mean_degree) %>%
+  # Remove columns with .y
+  select(-contains(".y")) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.x$"))
 
 # Manually update specific values
 tot_with_slope_filled <- tot_with_slope_filled %>%
@@ -626,7 +656,11 @@ tot_with_na_elev <- tot %>%
 
 # Merge tot_with_na_elev with US_elev to fill missing elevation values
 tot_with_elev_filled <- tot_with_na_elev %>%
-  left_join(US_elev %>% select(Stream_ID, elevation_mean_m), by = "Stream_ID")
+  left_join(US_elev %>% select(Stream_ID, elevation_mean_m), by = "Stream_ID") %>%
+  # Remove columns with .y
+  select(-contains(".y")) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.x$"))
 
 # Update tot with the filled elevation values
 tot <- tot %>%
@@ -634,23 +668,23 @@ tot <- tot %>%
   mutate(
     elevation_mean_m = coalesce(elevation_mean_m_filled, elevation_mean_m)
   ) %>%
-  select(-elevation_mean_m_filled)  # Remove Stream_Name_filled from final output
+  select(-elevation_mean_m_filled) %>%
+  # Remove columns with .y
+  select(-contains(".y")) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.x$"))
 
 
 # Tidy data for export: 
 tot_si <- tot %>%
-  dplyr::select(Stream_ID.x, Year, drainSqKm.x, NOx, P, precip, Q.x,
+  dplyr::select(Stream_ID, Year, drainSqKm, NOx, P, precip, Q,
                 temp, Max_Daylength, prop_area, npp, evapotrans,
                 silicate_weathering, cycle0, permafrost_mean_m, elevation_mean_m, 
-                basin_slope_mean_degree, FNConc.x, FNYield, GenConc.x, GenYield, 
+                basin_slope_mean_degree, FNConc, FNYield, GenConc, GenYield, 
                 contains("rocks"), contains("land_")) %>%
-  dplyr::rename(Stream_ID = Stream_ID.x,
-                Q = Q.x,
-                FNConc = FNConc.x,
-                GenConc = GenConc.x,
-                snow_cover = prop_area, 
+  dplyr::rename(snow_cover = prop_area, 
                 greenup_day = cycle0,
-                drainage_area = drainSqKm.x,
+                drainage_area = drainSqKm,
                 elevation = elevation_mean_m,
                 permafrost = permafrost_mean_m,
                 basin_slope = basin_slope_mean_degree) %>%
@@ -664,9 +698,20 @@ tot_annual <- tot_si %>%
                   FNConc, FNYield, GenConc, GenYield), 
                 as.numeric))
 
+# Count the number of unique Stream_IDs
+num_unique_stream_ids <- tot_annual %>%
+  pull(Stream_ID) %>%
+  n_distinct()
+
+print(num_unique_stream_ids)
+
+# Export annual data
+write.csv(as.data.frame(tot_annual), "AllDrivers_Harmonized_Yearly_filtered_10_years.csv")
+
+
 # Create the tot_average dataframe
 tot_average <- tot_annual %>%
-  group_by(Stream_ID) %>%
+  dplyr::group_by(Stream_ID) %>%
   summarise(
     # Numerical variables: calculate the mean across all years
     drainage_area = mean(drainage_area, na.rm = TRUE),
@@ -701,9 +746,9 @@ num_unique_stream_ids <- tot_average %>%
   pull(Stream_ID) %>%
   n_distinct()
 
-print(num_unique_stream_ids) # We should still have 384 Sites (27 sites don't have any NP data)
+print(num_unique_stream_ids) 
 
 # Export annual data
-write.csv(as.data.frame(tot_average), "AllDrivers_Harmonized_Average_test.csv")
+write.csv(as.data.frame(tot_average), "AllDrivers_Harmonized_Average_filtered_10_years.csv")
 
 

@@ -8,9 +8,9 @@ rm(list = ls())
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 # Load required data and model from the RF script
-load("GenConc_Ave_rf_model2.RData")
-load("GenConc_Ave_kept_drivers.RData")
-load("GenConc_Ave_drivers_df.RData")
+load("GenConc_Average_rf_model2.RData")
+load("GenConc_Average_kept_drivers.RData")
+load("GenConc_Average_train.RData")
 
 # Set global seed and output directory
 set.seed(123)
@@ -63,10 +63,10 @@ output_file <- sprintf("%s/GenConc_Ave_Overall_SHAP_Variable_Importance.pdf", ou
 create_all_shapley_plots(shap_values, output_file)
 
 # Function to create SHAP-based partial dependence plots
-create_shap_partial_dependence_plots <- function(shap_values, kept_drivers, drivers_df, output_dir, color_var = "median_GenConc") {
-  # Check if the specified coloring variable exists in drivers_df
-  if (!(color_var %in% colnames(drivers_df))) {
-    stop(paste("The specified color_var:", color_var, "is not in the drivers_df dataframe."))
+create_shap_partial_dependence_plots <- function(shap_values, kept_drivers, train, output_dir, color_var = "GenConc") {
+  # Check if the specified coloring variable exists in train
+  if (!(color_var %in% colnames(train))) {
+    stop(paste("The specified color_var:", color_var, "is not in the train dataframe."))
   }
   
   # Open a PDF to save all SHAP partial dependence plots
@@ -78,7 +78,7 @@ create_shap_partial_dependence_plots <- function(shap_values, kept_drivers, driv
     shap_long <- tibble::tibble(
       feature_value = kept_drivers[[feature]],  # Feature values from kept_drivers
       shap_value = shap_values[, feature],     # SHAP values from shap_values (matrix indexing)
-      color_value = drivers_df[[color_var]]    # Coloring variable
+      color_value = train[[color_var]]    # Coloring variable
     )
     
     # Add the log scale for select drivers
@@ -111,9 +111,9 @@ create_shap_partial_dependence_plots <- function(shap_values, kept_drivers, driv
 create_shap_partial_dependence_plots(
   shap_values = shap_values,
   kept_drivers = kept_drivers,
-  drivers_df = drivers_df,
+  train = train,
   output_dir = output_dir,
-  color_var = "median_GenConc"
+  color_var = "GenConc"
 )
 
 create_subset_importance_plots <- function(shap_values, conditions, kept_drivers, output_dir) {
@@ -205,7 +205,7 @@ create_subset_importance_plots(
 threshold <- 0.33
 
 # Calculate how many sites have a majority land use for each type
-result <- drivers_df %>%
+result <- train %>%
   select(starts_with("land_")) %>% # Select columns starting with "land_"
   mutate(majority_land_use = apply(., 1, function(row) {
     colnames(.)[which.max(row)] # Get the column name with the maximum value

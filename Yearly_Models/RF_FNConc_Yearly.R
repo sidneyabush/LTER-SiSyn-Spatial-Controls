@@ -40,6 +40,8 @@ save_lm_plot <- function(rf_model, observed, output_dir) {
 # Parallelized function to test ntree
 test_numtree_parallel <- function(ntree_list, formula, data) {
   num_cores <- parallel::detectCores() - 1
+  # # Reduce the number of cores used
+  # num_cores <- min(4, parallel::detectCores() - 2)  
   cl <- parallel::makeCluster(num_cores)
   doParallel::registerDoParallel(cl)
   
@@ -81,12 +83,14 @@ output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
 
 # Load and preprocess the data
-drivers_df <- read.csv("AllDrivers_Harmonized_Yearly_test.csv") %>%
+drivers_df <- read.csv("AllDrivers_Harmonized_Yearly_filtered_10_years.csv") %>%
   select(-contains("Yield"), -contains("Gen"), -contains("major"), -X) %>%
   dplyr::mutate_at(vars(19:34), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
   # mutate(greenup_day = as.numeric(greenup_day)) %>%  # Convert greenup_day to numeric
   select(FNConc, everything()) %>%
   drop_na()
+
+gc()
 
 # Export unique Stream_IDs to a CSV file
 unique_stream_ids <- drivers_df %>%
@@ -116,6 +120,8 @@ unique_stream_ids <- drivers_df %>%
   distinct()
 
 write.csv(unique_stream_ids, "unique_stream_ids_yearly.csv", row.names = FALSE)
+
+gc()
 
 # Count the number of unique Stream_IDs before removing it
 unique_stream_id_count <- drivers_df %>%
@@ -147,11 +153,14 @@ ntree_values <- seq(100, 2000, by = 100)  # Define ntree values
 set.seed(123)
 MSE_list_rf1 <- test_numtree_parallel(ntree_values, FNConc ~ ., drivers_df)
 
+
 # Visualize MSE results for rf_model1 ----
 MSE_df_rf1 <- data.frame(
   ntree = ntree_values,
   mean_MSE = sapply(MSE_list_rf1, mean)
 )
+
+gc()
 
 ggplot(MSE_df_rf1, aes(ntree, mean_MSE)) + 
   geom_point() + 
@@ -160,15 +169,22 @@ ggplot(MSE_df_rf1, aes(ntree, mean_MSE)) +
   scale_x_continuous(breaks = seq(100, 2000, 100)) + 
   theme(text = element_text(size = 20))
 
+gc()
 
 # Manually select ntree for rf_model1 ----
 manual_ntree_rf1 <- 700  # Replace with chosen value
 
+gc()
+
 # Tune mtry for rf_model1 ----
 tuneRF(train[, 2:ncol(train)], train[, 1], ntreeTry = manual_ntree_rf1, stepFactor = 1, improve = 0.5, plot = TRUE)
 
+gc()
+
 # Manually select mtry for rf_model1 ----
 manual_mtry_rf1 <- 10  # Replace with chosen value
+
+gc()
 
 # Run initial RF using tuned parameters ----
 set.seed(123)

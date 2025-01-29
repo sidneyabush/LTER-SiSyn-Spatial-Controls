@@ -10,7 +10,9 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 # Load required data and model from the RF script
 load("FNConc_Yearly_rf_model2.RData")
 load("FNConc_Yearly_kept_drivers.RData")
-load("FNConc_Yearly_drivers_df.RData")
+load("FNConc_Yearly_train.RData")
+
+drivers_df <- train
 
 # Set global seed and output directory
 set.seed(123)
