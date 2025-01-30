@@ -81,7 +81,7 @@ output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
 
 # Load and preprocess the data
-drivers_df <- read.csv("AllDrivers_Harmonized_average_test.csv") %>%
+drivers_df <- read.csv("AllDrivers_Harmonized_Average_filtered_10_years.csv") %>%
   select(-contains("Yield"), -contains("FN"), -contains("major"), -X) %>%
   dplyr::mutate_at(vars(18:33), ~replace(., is.na(.), 0)) %>%  
   select(GenConc, everything()) %>%

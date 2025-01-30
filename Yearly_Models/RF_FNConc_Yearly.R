@@ -82,7 +82,7 @@ output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
 
 # Load and preprocess the data
-drivers_df <- read.csv("AllDrivers_Harmonized_Yearly_filtered_1_years.csv") %>%
+drivers_df <- read.csv("AllDrivers_Harmonized_Yearly_filtered_5_years.csv") %>%
   select(-contains("Yield"), -contains("Gen"), -contains("major"), -X) %>%
   dplyr::mutate_at(vars(19:34), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
   select(FNConc, everything()) %>%

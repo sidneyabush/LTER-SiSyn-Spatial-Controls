@@ -116,6 +116,7 @@ create_shap_partial_dependence_plots(
   color_var = "GenConc"
 )
 
+# Replace your existing `create_subset_importance_plots()` function with this one
 create_subset_importance_plots <- function(shap_values, conditions, kept_drivers, output_dir) {
   for (condition in conditions) {
     condition_column <- condition$column
@@ -128,8 +129,8 @@ create_subset_importance_plots <- function(shap_values, conditions, kept_drivers
       next
     }
     
-    # Filter kept_drivers based on the condition
-    subset_kept_drivers <- kept_drivers %>%
+    # Filter kept_drivers based on the condition (keeping all columns for now)
+    filtered_drivers <- kept_drivers %>%
       filter(case_when(
         operator == ">" ~ .data[[condition_column]] > condition_value,
         operator == "<" ~ .data[[condition_column]] < condition_value,
@@ -137,20 +138,17 @@ create_subset_importance_plots <- function(shap_values, conditions, kept_drivers
         TRUE ~ FALSE
       ))
     
-    # Exclude the condition_column from the drivers
-    subset_kept_drivers <- subset_kept_drivers %>%
-      select(-all_of(condition_column))
+    # Ensure row indices are aligned
+    row_indices <- rownames(filtered_drivers)
+    subset_shap_values <- shap_values[row_indices, , drop = FALSE]  # Subset rows first
     
-    # Subset SHAP values to match filtered drivers
-    subset_shap_values <- shap_values[rownames(subset_kept_drivers), ]
-    
-    # Convert subset_shap_values to a data frame and exclude the condition_column
-    subset_shap_values <- as.data.frame(subset_shap_values) %>%
-      select(-all_of(condition_column))
+    # Now safely remove the filtering column from both filtered drivers & SHAP values
+    filtered_drivers <- filtered_drivers %>% select(-all_of(condition_column))
+    subset_shap_values <- subset_shap_values %>% select(-all_of(condition_column), everything())
     
     # Summarize feature importance
     subset_importance <- subset_shap_values %>%
-      summarise(across(everything(), ~ mean(abs(.)))) %>%
+      summarise(across(everything(), ~ mean(abs(.), na.rm = TRUE))) %>%
       pivot_longer(cols = everything(), names_to = "feature", values_to = "importance") %>%
       arrange(desc(importance))
     
@@ -168,10 +166,38 @@ create_subset_importance_plots <- function(shap_values, conditions, kept_drivers
     # Save the plot
     output_file <- file.path(output_dir, paste0("SHAP_Variable_Importance_", condition_column, "_", operator, "_", condition_value, "_Excluding_Subset_Driver.pdf"))
     ggsave(output_file, plot = subset_importance_plot, width = 8, height = 6)
+    
     message(paste("Subset variable importance plot saved:", output_file))
   }
 }
 
+# Define multiple flexible conditions for subsetting
+conditions <- list(
+  list(column = "rocks_volcanic", value = 50, operator = ">"),
+  list(column = "land_shrubland_grassland", value = 50, operator = ">"),
+  list(column = "land_shrubland_grassland", value = 50, operator = "<"),
+  list(column = "snow_cover", value = 0.4, operator = "<"),
+  list(column = "snow_cover", value = 0.4, operator = ">")
+)
+
+# Retain only conditions relevant to kept_drivers
+valid_conditions <- lapply(conditions, function(cond) {
+  if (cond$column %in% colnames(kept_drivers)) {
+    return(cond)
+  } else {
+    message(paste("Skipping condition for non-kept feature:", cond$column))
+    return(NULL)
+  }
+})
+valid_conditions <- Filter(Negate(is.null), valid_conditions)  # Remove NULLs
+
+# Generate importance plots for valid subsets
+create_subset_importance_plots(
+  shap_values = shap_values,
+  conditions = valid_conditions,
+  kept_drivers = kept_drivers,
+  output_dir = output_dir
+)
 
 # Define multiple flexible conditions for subsetting
 conditions <- list(
