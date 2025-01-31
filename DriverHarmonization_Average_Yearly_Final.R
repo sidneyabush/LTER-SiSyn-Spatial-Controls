@@ -16,7 +16,7 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
   rename(LTER = LTER.x) %>%
   filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc) %>%
   dplyr::select(-Conc, -Flux, -PeriodLong, -PeriodStart, -LTER.y, -contains("date"),
-                -contains("month"), -min_year, -max_year, -duration) %>%
+                 -contains("month"), -min_year, -max_year, -duration) %>%
   dplyr::mutate(
     Stream_Name = case_when(
       Stream_Name == "East Fork" ~ "east fork",
@@ -28,20 +28,11 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
   ) %>%
   filter(chemical == "DSi")
 
-# # Read and clean WRTDS data - this is not filtered data
-# wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual.csv") %>%
-#   filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc) %>%
-#   dplyr::select(-Conc, -Flux, -PeriodLong, -PeriodStart) %>%
-#   dplyr::mutate(
-#     Stream_Name = case_when(
-#       Stream_Name == "East Fork" ~ "east fork",
-#       Stream_Name == "West Fork" ~ "west fork",
-#       TRUE ~ Stream_Name
-#     ),
-#     Stream_ID = paste0(LTER, "__", Stream_Name),
-#     Year = floor(as.numeric(DecYear))
-#   ) %>%
-#   filter(chemical == "DSi")
+num_unique_stream_ids <- wrtds_df %>%
+  pull(Stream_ID) %>%
+  n_distinct()
+
+print(num_unique_stream_ids)
 
 # Count number of years per site and filter for sites with at least 1 years of data
 site_year_counts <- wrtds_df %>%
@@ -55,7 +46,6 @@ wrtds_df <- wrtds_df %>%
 
 # Output the number of sites that meet the criteria
 cat("Number of sites with at least 1 years of data:", nrow(site_year_counts), "\n")
-
 
 ## Need to tidy the Finnish site names:
 finn <- read.csv("FinnishSites.csv")
@@ -74,6 +64,19 @@ wrtds_df$Stream_ID <- ifelse(wrtds_df$Stream_ID=="Finnish Environmental Institut
 
 wrtds_df$Stream_ID <- ifelse(wrtds_df$Stream_ID=="Finnish Environmental Institute__SIMOJOKI AS. 13500      ",
                              "Finnish Environmental Institute__SIMOJOKI AS. 13500", wrtds_df$Stream_ID)
+
+# Identify unique Stream_IDs with NA values
+unique_stream_ids_with_na <- wrtds_df %>%
+  filter(if_any(everything(), is.na)) %>%
+  distinct(Stream_ID) %>%
+  pull(Stream_ID)
+
+# Count the number of unique Stream_IDs with NA
+num_unique_stream_ids_with_na <- length(unique_stream_ids_with_na)
+
+# Print results
+print(num_unique_stream_ids_with_na)
+print(unique_stream_ids_with_na)
 
 ## ------------------------------------------------------- ##
             # Calculate Yields ----
@@ -97,14 +100,35 @@ num_unique_stream_ids <- tot %>%
 
 print(num_unique_stream_ids)
 
+# Identify unique Stream_IDs with NA values
+unique_stream_ids_with_na <- tot %>%
+  filter(if_any(everything(), is.na)) %>%
+  distinct(Stream_ID) %>%
+  pull(Stream_ID)
+
+# Count the number of unique Stream_IDs with NA
+num_unique_stream_ids_with_na <- length(unique_stream_ids_with_na)
+
+# Print results
+print(num_unique_stream_ids_with_na)
+print(unique_stream_ids_with_na)
+
 gc()
 
 ## ------------------------------------------------------- ##
             # Add in KG Classifications ----
 ## ------------------------------------------------------- ##
 # Read in climate data produced in KoeppenGeigerClassification.R
-KG <- read.csv("Koeppen_Geiger_2.csv")
-KG$Stream_ID<-paste0(KG$LTER, "__", KG$Stream_Name)
+KG <- read.csv("Koeppen_Geiger_2.csv") %>%
+  dplyr::mutate(
+    Stream_Name = case_when(
+      Stream_Name == "East Fork" ~ "east fork",
+      Stream_Name == "West Fork" ~ "west fork",
+      TRUE ~ Stream_Name
+    ),
+    Stream_ID = paste0(LTER, "__", Stream_Name) # Closing parenthesis added here
+  )
+
 
 tot <- tot %>%
   left_join(KG, by = "Stream_ID") %>%
@@ -119,6 +143,19 @@ num_unique_stream_ids <- tot %>%
   n_distinct()
 
 print(num_unique_stream_ids)
+
+# Identify unique Stream_IDs with NA values
+unique_stream_ids_with_na <- tot %>%
+  filter(if_any(everything(), is.na)) %>%
+  distinct(Stream_ID) %>%
+  pull(Stream_ID)
+
+# Count the number of unique Stream_IDs with NA
+num_unique_stream_ids_with_na <- length(unique_stream_ids_with_na)
+
+# Print results
+print(num_unique_stream_ids_with_na)
+print(unique_stream_ids_with_na)
 
 ## ------------------------------------------------------- ##
               # Import Daylength ----
@@ -153,11 +190,18 @@ tot <- tot %>%
   left_join(daylen_range, by = "Stream_Name") %>%
   distinct(Stream_ID, Year, .keep_all = TRUE) 
 
-num_unique_stream_ids <- tot %>%
-  pull(Stream_ID) %>%
-  n_distinct()
+# Identify unique Stream_IDs with NA values
+unique_stream_ids_with_na <- tot %>%
+  filter(if_any(everything(), is.na)) %>%
+  distinct(Stream_ID) %>%
+  pull(Stream_ID)
 
-print(num_unique_stream_ids)
+# Count the number of unique Stream_IDs with NA
+num_unique_stream_ids_with_na <- length(unique_stream_ids_with_na)
+
+# Print results
+print(num_unique_stream_ids_with_na)
+print(unique_stream_ids_with_na)
 
 ## ------------------------------------------------------- ##
               # Spatial Drivers----
@@ -197,29 +241,25 @@ si_drivers$Stream_ID <- ifelse(si_drivers$Stream_ID=="Finnish Environmental Inst
 si_drivers$Stream_ID <- ifelse(si_drivers$Stream_ID=="Finnish Environmental Institute__SIMOJOKI AS. 13500      ",
                              "Finnish Environmental Institute__SIMOJOKI AS. 13500", si_drivers$Stream_ID)
 
-# Remove rows where Stream_Name starts with "Site" and duplicates based on shapefile name
-si_drivers <- si_drivers %>%
-  filter(!grepl("^Site", Stream_Name)) %>%  # Remove rows starting with "Site"
-  distinct(Shapefile_Name, .keep_all = TRUE)  # Remove duplicates by Shapefile_Name
-
+# # Remove rows where Stream_Name starts with "Site" and duplicates based on shapefile name
+# si_drivers <- si_drivers %>%
+#   filter(!grepl("^Site", Stream_Name)) %>%  # Remove rows starting with "Site"
+#   distinct(Shapefile_Name, .keep_all = TRUE)  # Remove duplicates by Shapefile_Name
 
 ## Before, using full abbrevs removed some of the spatial driver columns (e.g., "dec" in "deciduous" was causing
 #  deciduous land cover to be filtered out)
 months <- c("_jan_|_feb_|_mar_|_apr_|_may_|_jun_|_jul_|_aug_|_sep_|_oct_|_nov_|_dec_")
 months_cols <- si_drivers[,(colnames(si_drivers) %like% months)]
 
-# Confirm NA replacement for permafrost columns
-permafrost_cols <- grep("permafrost", colnames(si_drivers), value = TRUE)
+# Identify columns related to permafrost and prop_area
+cols_to_replace <- grep("permafrost|prop_area", colnames(si_drivers), value = TRUE)
 
-# Replace NA values with 0 for all permafrost columns
-si_drivers[, permafrost_cols] <- lapply(si_drivers[, permafrost_cols], function(x) {
+# Replace NA values with 0 in the identified columns
+si_drivers[, cols_to_replace] <- lapply(si_drivers[, cols_to_replace], function(x) {
   x <- as.numeric(x)  # Convert to numeric to avoid issues
   x[is.na(x)] <- 0
   return(x)
 })
-
-# Confirm updates
-summary(si_drivers[, permafrost_cols])
 
 # Parse out and clean annual data
 year_cols <- si_drivers[,!(colnames(si_drivers) %in% colnames(months_cols))]
@@ -251,30 +291,16 @@ year_cols_melt <- year_cols_melt[,-2]
 
 year_cols_melt <- merge(year_cols_melt, units_df_annual, by="driver")
 
-num_unique_stream_ids <- year_cols_melt %>%
-  pull(Stream_Name) %>%
-  n_distinct()
-
-print(num_unique_stream_ids)
-
 # Parse out character data
 character_cols <- si_drivers[,(colnames(si_drivers) %like% character_vars)]
 character_cols$Stream_Name <- si_drivers$Stream_Name
-
 
 ## ------------------------------------------------------- ##
     # Calculate Greenup Day ----
 ## ------------------------------------------------------- ##
 drivers <- year_cols_melt
-
 drivers <- subset(drivers, !drivers$driver %in% c("cycle1","num_days"))
-
-drivers_cropped <- subset(drivers, drivers$year > 2001 & drivers$year < 2024)
-
-# drivers_cast <- drivers_cropped %>%
-#   dplyr::select(!c(units_annual,X)) %>%
-#   tidyr::pivot_wider(names_from = driver, values_from=value)
-
+drivers_cropped <- subset(drivers, drivers$year > 2000 & drivers$year < 2024)
 drivers_cast <- drivers_cropped %>%
   # Remove duplicates based on relevant columns
   distinct(Stream_Name, year, driver, value, .keep_all = TRUE) %>%
@@ -300,34 +326,208 @@ all_spatial <- drivers_cast %>%
   # Rename columns with .x by removing the suffix
   rename_with(~ str_remove(., "\\.x$"))
 
-num_unique_stream_ids <- all_spatial %>%
-  pull(Stream_Name) %>%
-  n_distinct()
-
-print(num_unique_stream_ids)
-
-tot <- tot %>% 
-  left_join(all_spatial, by = c("Stream_Name", "Year")) 
-
-num_unique_stream_ids <- tot %>%
-  pull(Stream_Name) %>%
-  n_distinct()
-
-print(num_unique_stream_ids)
-
-# Combine with wrtds_df
 tot <- tot %>%
-  left_join(wrtds_df, by = c("Stream_Name", "Year")) %>%
-  # Remove columns with .x
-  select(-contains(".x")) %>%
+  left_join(all_spatial, by = c("Stream_Name", "Year")) %>%
+  filter(Year > 2000 & Year <= 2021) %>%  # Filter for years within range
+  distinct(Stream_ID, Year, .keep_all = TRUE) %>%
+  mutate(
+    permafrost_mean_m = as.numeric(permafrost_mean_m),
+    cycle0 = as.numeric(cycle0),
+    evapotrans = as.numeric(evapotrans),
+    npp = as.numeric(npp),
+    precip = as.numeric(precip),
+    prop_area = as.numeric(prop_area),
+    temp = as.numeric(temp)
+  ) %>%
+  mutate(
+    permafrost_mean_m = replace_na(as.numeric(permafrost_mean_m), 0),
+    prop_area = replace_na(as.numeric(prop_area), 0)
+  ) %>%
+  # Remove columns with .y
+  select(-contains(".y")) %>%
   # Rename columns with .x by removing the suffix
-  rename_with(~ str_remove(., "\\.y$"))
+  rename_with(~ str_remove(., "\\.x$"))
+
+# Identify missing values in numeric columns only
+missing_spatial_data_summary <- tot %>%
+  filter(Year > 2000 & Year <= 2021) %>%  # Filter for years within range
+  select(Stream_ID, Year, permafrost_mean_m, cycle0, evapotrans, npp, precip, prop_area, temp) %>%  # Keep only numeric columns + Stream_ID & Year
+  pivot_longer(cols = -c(Stream_ID, Year), names_to = "Variable", values_to = "Value") %>%  # Reshape
+  filter(is.na(Value)) %>%  # Keep only missing values
+  select(-Value)  # Remove the actual value column
+
+# Count unique sites missing data in 2001
+num_sites_missing_2001 <- missing_spatial_data_summary %>%
+  filter(Year == 2001) %>%
+  distinct(Stream_ID) %>%
+  nrow()
+
+# Print summary
+print(num_sites_missing_2001)  # Number of unique sites missing data in 2001
+print(nrow(missing_spatial_data_summary))  # Number of missing entries
+print(head(missing_spatial_data_summary))  # Preview first few rows
+
+# Export to CSV
+write.csv(missing_spatial_data_summary, "missing_spatial_data_summary_2001_2021.csv", row.names = FALSE)
+
+
+## ------------------------------------------------------- ##
+#  Gap Filling Missing Data ----
+## ------------------------------------------------------- ##
+# Load and process Krycklan slopes
+Krycklan_slopes <- transform(read.csv("Krycklan_basin_slopes.csv"), 
+                             basin_slope_mean_degree = atan(gradient_pct / 100) * (180 / pi))
+
+# Load and process US slopes
+US_slopes <- read.csv("DSi_Basin_Slope_missing_sites.csv", header = FALSE)
+colnames(US_slopes) <- US_slopes[1, ]
+US_slopes <- US_slopes[-1, ]
+US_slopes <- US_slopes %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "Stream_Name",
+    values_to = "basin_slope_mean_degree"
+  ) %>%
+  mutate(basin_slope_mean_degree = as.numeric(basin_slope_mean_degree))
+
+# Upload the Stream_Name to Stream_ID key file
+stream_key <- read.csv("basin_stream_id_conversions.csv", header = TRUE)
+
+# Merge stream key with Krycklan_slopes and US_slopes to add Stream_ID
+Krycklan_slopes <- left_join(Krycklan_slopes, stream_key, by = "Stream_Name") %>%
+  filter(!is.na(basin_slope_mean_degree))  # Remove rows with NA values after merging with key
+
+US_slopes <- left_join(US_slopes, stream_key, by = "Stream_Name") %>%
+  filter(!is.na(basin_slope_mean_degree))  # Remove rows with NA values after merging with key
+
+# Filter rows with NA slopes from 'tot'
+tot_with_na_slope <- tot %>%
+  filter(is.na(basin_slope_mean_degree)) %>%
+  select(Stream_ID)
+
+# Merge 'tot_with_na_slope' with US and Krycklan slope data
+tot_with_slope_filled <- tot_with_na_slope %>%
+  left_join(US_slopes %>% select(Stream_ID, basin_slope_mean_degree), by = "Stream_ID") %>%
+  left_join(Krycklan_slopes %>% select(Stream_ID, basin_slope_mean_degree), by = "Stream_ID", suffix = c("_US", "_Krycklan")) %>%
+  mutate(
+    basin_slope_mean_degree = coalesce(basin_slope_mean_degree_US, basin_slope_mean_degree_Krycklan)
+  ) %>%
+  select(Stream_ID, basin_slope_mean_degree) %>%
+  # Remove columns with .y
+  select(-contains(".y")) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.x$"))
+
+# Manually update specific values
+tot_with_slope_filled <- tot_with_slope_filled %>%
+  mutate(
+    basin_slope_mean_degree = case_when(
+      Stream_ID == "Walker Branch__east fork" ~ 2.2124321596241265,
+      Stream_ID == "Walker Branch__west fork" ~ 1.8972192246291828,       
+      TRUE ~ basin_slope_mean_degree               # Retain existing values
+    )
+  )
+
+# Convert to data.table for efficient key-based operations
+tot_with_slope_filled <- as.data.table(tot_with_slope_filled)
+tot <- as.data.table(tot)
+
+# Set keys for efficient join
+setkey(tot, Stream_ID)
+setkey(tot_with_slope_filled, Stream_ID)
+
+tot[tot_with_slope_filled, basin_slope_mean_degree := 
+      ifelse(is.na(basin_slope_mean_degree), i.basin_slope_mean_degree, basin_slope_mean_degree),
+    on = .(Stream_ID)]
+
+# Now do gap filling for elevation for the same sites:
+# Load the US elevation data without headers
+US_elev <- read.csv("DSi_Basin_Elevation_missing_sites.csv", header = FALSE)
+
+# Set the first row as column names and remove it from the data
+colnames(US_elev) <- US_elev[1, ]
+US_elev <- US_elev[-1, ]
+
+# Convert the dataframe from wide to long format
+US_elev <- US_elev %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "Stream_Name",
+    values_to = "elevation_mean_m"
+  )
+
+# Convert elevation_mean_m to numeric
+US_elev$elevation_mean_m <- as.numeric(US_elev$elevation_mean_m)
+
+# Merge with the stream key and remove rows with NA in elevation_mean_m after the merge
+US_elev <- left_join(US_elev, stream_key, by = "Stream_Name") %>%
+  filter(!is.na(elevation_mean_m))
+
+# Filter tot for rows with NA elevation values
+tot_with_na_elev <- tot %>%
+  filter(is.na(elevation_mean_m)) %>%
+  select(Stream_ID)
+
+# Merge tot_with_na_elev with US_elev to fill missing elevation values
+tot_with_elev_filled <- tot_with_na_elev %>%
+  left_join(US_elev %>% select(Stream_ID, elevation_mean_m), by = "Stream_ID") %>%
+  # Remove columns with .y
+  select(-contains(".y")) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.x$"))
+
+# Update tot with the filled elevation values
+tot <- tot %>%
+  left_join(tot_with_elev_filled, by = "Stream_ID", suffix = c("", "_filled"), relationship = "many-to-many") %>%
+  mutate(
+    elevation_mean_m = coalesce(elevation_mean_m_filled, elevation_mean_m)
+  ) %>%
+  mutate(
+    permafrost_mean_m = replace_na(as.numeric(permafrost_mean_m), 0),
+    prop_area = replace_na(as.numeric(prop_area), 0)
+  ) %>%
+  select(-elevation_mean_m_filled) %>%
+  # Remove columns with .y
+  select(-contains(".y")) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.x$"))
 
 num_unique_stream_ids <- tot %>%
-  pull(Stream_Name) %>%
+  pull(Stream_ID) %>%
   n_distinct()
 
 print(num_unique_stream_ids)
+
+# Create list of NA values for data up to this point
+# Exclude the land use and rock types, and remove "median" columns
+
+# Identify numeric columns (excluding Stream_ID, Year, and other character columns)
+numeric_cols <- tot %>%
+  select(-matches("rocks|land|median|min|max_m|max_degree")) %>%
+  select(where(is.numeric)) %>%
+  colnames()
+
+# Identify missing values in numeric columns only
+missing_elev_slope_data_summary <- tot %>%
+  filter(Year > 2000 & Year <= 2021) %>%  # Filter for years within range
+  select(Stream_ID, Year, basin_slope_mean_degree, elevation_mean_m) %>%  # Keep only numeric columns + Stream_ID & Year
+  pivot_longer(cols = -c(Stream_ID, Year), names_to = "Variable", values_to = "Value") %>%  # Reshape
+  filter(is.na(Value)) %>%  # Keep only missing values
+  select(-Value)  # Remove the actual value column
+
+# Count unique sites missing data in 2001
+num_sites_missing_2001 <- missing_elev_slope_data_summary %>%
+  filter(Year == 2001) %>%
+  distinct(Stream_ID) %>%
+  nrow()
+
+# Print summary
+print(num_sites_missing_2001)  # Number of unique sites missing data in 2001
+print(nrow(missing_elev_slope_data_summary))  # Number of missing entries
+print(head(missing_elev_slope_data_summary))  # Preview first few rows
+
+# Export to CSV
+write.csv(missing_elev_slope_data_summary, "missing_elev_slope_data_summary_2001_2021.csv", row.names = FALSE)
 
 # ## ------------------------------------------------------- ##
 #           # Import WRTDS N_P Data ---- 
@@ -432,24 +632,25 @@ combined_NP <- combined_NP %>%
   ) %>%
   select(-P_wrtds, -NOx_wrtds, -P_raw, -NOx_raw)  # Clean up intermediate columns
 
+
 # ## ------------------------------------------------------- ##
 #           # Merge Combined Data with `tot` ----
 # ## ------------------------------------------------------- ##
 
 # Merge the combined dataset with `tot`
 tot <- tot %>%
-  left_join(combined_NP, by = c("Stream_ID", "Year")) 
+  left_join(combined_NP, by = c("Stream_ID", "Year")) %>%
+  mutate(
+    permafrost_mean_m = replace_na(as.numeric(permafrost_mean_m), 0),
+    prop_area = replace_na(as.numeric(prop_area), 0)
+  )
 
 tot <- tot %>%
-  left_join(wrtds_NP_wide, by = c("Stream_ID", "Year")) %>%
-  
-  # Resolve duplicate values by replacing .x NAs with .y values
+  left_join(combined_NP, by = c("Stream_ID", "Year")) %>%
   mutate(
-    NOx = coalesce(NOx.x, NOx.y),
-    P = coalesce(P.x, P.y)
-  ) %>%
-  # Drop redundant columns
-  select(-contains(".x"), -contains(".y"))
+    permafrost_mean_m = ifelse(is.na(permafrost_mean_m), 0, as.numeric(permafrost_mean_m)),
+    prop_area = ifelse(is.na(prop_area), 0, as.numeric(prop_area))
+  )
 
 # Verify the number of unique Stream_IDs
 num_unique_stream_ids <- tot %>%
@@ -457,6 +658,22 @@ num_unique_stream_ids <- tot %>%
   n_distinct()
 
 print(num_unique_stream_ids)
+
+# Now generate a list of missing NOx and P sites-year combinations:
+missing_N_P_data_summary <- tot %>%
+  filter(Year > 2000 & Year <= 2021) %>%  # Filter for years within range
+  select(Stream_ID, Year, NOx, P) %>%  # Keep only Stream_ID, Year, NOx, and P columns
+  distinct(Stream_ID, Year, NOx, P) %>%  # Ensure no duplicate rows before reshaping
+  pivot_longer(cols = c(NOx, P), names_to = "Variable", values_to = "Value") %>%  # Reshape
+  filter(is.na(Value)) %>%  # Keep only missing values
+  select(-Value)  # Remove the actual value column
+
+# Export to CSV
+write.csv(missing_N_P_data_summary, "missing_N_P_data_summary_2001_2021.csv", row.names = FALSE)
+
+# Print summary
+print(nrow(missing_N_P_data_summary))  # Number of missing entries
+print(head(missing_N_P_data_summary))  # Preview first few rows
 
 ## ------------------------------------------------------- ##
               #  Silicate Weathering ----
@@ -555,124 +772,6 @@ num_unique_stream_ids <- tot %>%
 
 print(num_unique_stream_ids)
 
-## ------------------------------------------------------- ##
-#  Gap Filling Missing Data ----
-## ------------------------------------------------------- ##
-# Load and process Krycklan slopes
-Krycklan_slopes <- transform(read.csv("Krycklan_basin_slopes.csv"), 
-                             basin_slope_mean_degree = atan(gradient_pct / 100) * (180 / pi))
-
-# Load and process US slopes
-US_slopes <- read.csv("DSi_Basin_Slope_missing_sites.csv", header = FALSE)
-colnames(US_slopes) <- US_slopes[1, ]
-US_slopes <- US_slopes[-1, ]
-US_slopes <- US_slopes %>%
-  pivot_longer(
-    cols = everything(),
-    names_to = "Stream_Name",
-    values_to = "basin_slope_mean_degree"
-  ) %>%
-  mutate(basin_slope_mean_degree = as.numeric(basin_slope_mean_degree))
-
-# Upload the Stream_Name to Stream_ID key file
-stream_key <- read.csv("basin_stream_id_conversions.csv", header = TRUE)
-
-# Merge stream key with Krycklan_slopes and US_slopes to add Stream_ID
-Krycklan_slopes <- left_join(Krycklan_slopes, stream_key, by = "Stream_Name") %>%
-  filter(!is.na(basin_slope_mean_degree))  # Remove rows with NA values after merging with key
-
-US_slopes <- left_join(US_slopes, stream_key, by = "Stream_Name") %>%
-  filter(!is.na(basin_slope_mean_degree))  # Remove rows with NA values after merging with key
-
-# Filter rows with NA slopes from 'tot'
-tot_with_na_slope <- tot %>%
-  filter(is.na(basin_slope_mean_degree)) %>%
-  select(Stream_ID)
-
-# Merge 'tot_with_na_slope' with US and Krycklan slope data
-tot_with_slope_filled <- tot_with_na_slope %>%
-  left_join(US_slopes %>% select(Stream_ID, basin_slope_mean_degree), by = "Stream_ID") %>%
-  left_join(Krycklan_slopes %>% select(Stream_ID, basin_slope_mean_degree), by = "Stream_ID", suffix = c("_US", "_Krycklan")) %>%
-  mutate(
-    basin_slope_mean_degree = coalesce(basin_slope_mean_degree_US, basin_slope_mean_degree_Krycklan)
-  ) %>%
-  select(Stream_ID, basin_slope_mean_degree) %>%
-  # Remove columns with .y
-  select(-contains(".y")) %>%
-  # Rename columns with .x by removing the suffix
-  rename_with(~ str_remove(., "\\.x$"))
-
-# Manually update specific values
-tot_with_slope_filled <- tot_with_slope_filled %>%
-  mutate(
-    basin_slope_mean_degree = case_when(
-      Stream_ID == "Walker Branch__east fork" ~ 2.2124321596241265,
-      Stream_ID == "Walker Branch__west fork" ~ 1.8972192246291828,       
-      TRUE ~ basin_slope_mean_degree               # Retain existing values
-    )
-  )
-
-# Convert to data.table for efficient key-based operations
-tot_with_slope_filled <- as.data.table(tot_with_slope_filled)
-tot <- as.data.table(tot)
-
-# Set keys for efficient join
-setkey(tot, Stream_ID)
-setkey(tot_with_slope_filled, Stream_ID)
-
-tot[tot_with_slope_filled, basin_slope_mean_degree := 
-                 ifelse(is.na(basin_slope_mean_degree), i.basin_slope_mean_degree, basin_slope_mean_degree),
-               on = .(Stream_ID)]
-
-# Now do gap filling for elevation for the same sites:
-# Load the US elevation data without headers
-US_elev <- read.csv("DSi_Basin_Elevation_missing_sites.csv", header = FALSE)
-
-# Set the first row as column names and remove it from the data
-colnames(US_elev) <- US_elev[1, ]
-US_elev <- US_elev[-1, ]
-
-# Convert the dataframe from wide to long format
-US_elev <- US_elev %>%
-  pivot_longer(
-    cols = everything(),
-    names_to = "Stream_Name",
-    values_to = "elevation_mean_m"
-  )
-
-# Convert elevation_mean_m to numeric
-US_elev$elevation_mean_m <- as.numeric(US_elev$elevation_mean_m)
-
-# Merge with the stream key and remove rows with NA in elevation_mean_m after the merge
-US_elev <- left_join(US_elev, stream_key, by = "Stream_Name") %>%
-  filter(!is.na(elevation_mean_m))
-
-# Filter tot for rows with NA elevation values
-tot_with_na_elev <- tot %>%
-  filter(is.na(elevation_mean_m)) %>%
-  select(Stream_ID)
-
-# Merge tot_with_na_elev with US_elev to fill missing elevation values
-tot_with_elev_filled <- tot_with_na_elev %>%
-  left_join(US_elev %>% select(Stream_ID, elevation_mean_m), by = "Stream_ID") %>%
-  # Remove columns with .y
-  select(-contains(".y")) %>%
-  # Rename columns with .x by removing the suffix
-  rename_with(~ str_remove(., "\\.x$"))
-
-# Update tot with the filled elevation values
-tot <- tot %>%
-  left_join(tot_with_elev_filled, by = "Stream_ID", suffix = c("", "_filled"), relationship = "many-to-many") %>%
-  mutate(
-    elevation_mean_m = coalesce(elevation_mean_m_filled, elevation_mean_m)
-  ) %>%
-  select(-elevation_mean_m_filled) %>%
-  # Remove columns with .y
-  select(-contains(".y")) %>%
-  # Rename columns with .x by removing the suffix
-  rename_with(~ str_remove(., "\\.x$"))
-
-
 # Tidy data for export: 
 tot_si <- tot %>%
   dplyr::select(Stream_ID, Year, drainSqKm, NOx, P, precip, Q,
@@ -686,7 +785,9 @@ tot_si <- tot %>%
                 elevation = elevation_mean_m,
                 permafrost = permafrost_mean_m,
                 basin_slope = basin_slope_mean_degree) %>%
-  dplyr::mutate(permafrost = ifelse(is.na(permafrost), 0, permafrost)) 
+  dplyr::mutate(permafrost = ifelse(is.na(permafrost), 0, permafrost)) %>%
+  dplyr::mutate(snow_cover = ifelse(is.na(snow_cover), 0, snow_cover)) 
+
 
 # Convert numeric columns to numeric
 tot_annual <- tot_si %>%
@@ -749,5 +850,4 @@ print(num_unique_stream_ids)
 
 # Export annual data
 write.csv(as.data.frame(tot_average), "AllDrivers_Harmonized_Average_filtered_1_years.csv")
-
 
