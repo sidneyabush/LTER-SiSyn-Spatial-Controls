@@ -28,11 +28,12 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
   ) %>%
   filter(chemical == "DSi")
 
-num_unique_stream_ids <- wrtds_df %>%
-  pull(Stream_ID) %>%
-  n_distinct()
-
-print(num_unique_stream_ids)
+# Standardize Stream_ID formatting in all datasets to remove extra spaces
+standardize_stream_id <- function(df) {
+  df %>%
+    mutate(Stream_ID = str_trim(Stream_ID),  # Remove leading/trailing spaces
+           Stream_ID = str_replace_all(Stream_ID, "\\s+", " "))  # Convert multiple spaces to a single space
+}
 
 # Count number of years per site and filter for sites with at least 1 years of data
 site_year_counts <- wrtds_df %>%
@@ -44,39 +45,17 @@ site_year_counts <- wrtds_df %>%
 wrtds_df <- wrtds_df %>%
   filter(Stream_ID %in% site_year_counts$Stream_ID)
 
-# Output the number of sites that meet the criteria
-cat("Number of sites with at least 1 years of data:", nrow(site_year_counts), "\n")
-
 ## Need to tidy the Finnish site names:
 finn <- read.csv("FinnishSites.csv")
 
 finn$Stream_ID <- paste0("Finnish Environmental Institute__", finn$Site.ID)
 finn$Stream_ID2 <- paste0("Finnish Environmental Institute__", finn$Site)
 
-for (i in 1:nrow(finn)) {
-  site_id<-finn[i,3]
-  row_num<-which(wrtds_df$Stream_ID==site_id)
-  wrtds_df[row_num, "Stream_ID"]<-finn[i,4]
-}
-
-wrtds_df$Stream_ID <- ifelse(wrtds_df$Stream_ID=="Finnish Environmental Institute__TORNIONJ KUKKOLA 14310  ",
-                             "Finnish Environmental Institute__TORNIONJ KUKKOLA 14310", wrtds_df$Stream_ID)
-
-wrtds_df$Stream_ID <- ifelse(wrtds_df$Stream_ID=="Finnish Environmental Institute__SIMOJOKI AS. 13500      ",
-                             "Finnish Environmental Institute__SIMOJOKI AS. 13500", wrtds_df$Stream_ID)
-
-# Identify unique Stream_IDs with NA values
-unique_stream_ids_with_na <- wrtds_df %>%
-  filter(if_any(everything(), is.na)) %>%
-  distinct(Stream_ID) %>%
-  pull(Stream_ID)
-
-# Count the number of unique Stream_IDs with NA
-num_unique_stream_ids_with_na <- length(unique_stream_ids_with_na)
-
-# Print results
-print(num_unique_stream_ids_with_na)
-print(unique_stream_ids_with_na)
+# Use left_join instead of for-loop to ensure all Finnish sites are replaced
+wrtds_df <- wrtds_df %>%
+  left_join(finn %>% select(Stream_ID, Stream_ID2), by = "Stream_ID") %>%
+  mutate(Stream_ID = coalesce(Stream_ID2, Stream_ID)) %>%
+  select(-Stream_ID2)
 
 ## ------------------------------------------------------- ##
             # Calculate Yields ----
@@ -138,25 +117,6 @@ tot <- tot %>%
   # Rename columns with .x by removing the suffix
   rename_with(~ str_remove(., "\\.y$"))
 
-num_unique_stream_ids <- tot %>%
-  pull(Stream_ID) %>%
-  n_distinct()
-
-print(num_unique_stream_ids)
-
-# Identify unique Stream_IDs with NA values
-unique_stream_ids_with_na <- tot %>%
-  filter(if_any(everything(), is.na)) %>%
-  distinct(Stream_ID) %>%
-  pull(Stream_ID)
-
-# Count the number of unique Stream_IDs with NA
-num_unique_stream_ids_with_na <- length(unique_stream_ids_with_na)
-
-# Print results
-print(num_unique_stream_ids_with_na)
-print(unique_stream_ids_with_na)
-
 ## ------------------------------------------------------- ##
               # Import Daylength ----
 ## ------------------------------------------------------- ##
@@ -190,61 +150,35 @@ tot <- tot %>%
   left_join(daylen_range, by = "Stream_Name") %>%
   distinct(Stream_ID, Year, .keep_all = TRUE) 
 
-# Identify unique Stream_IDs with NA values
-unique_stream_ids_with_na <- tot %>%
-  filter(if_any(everything(), is.na)) %>%
-  distinct(Stream_ID) %>%
-  pull(Stream_ID)
-
-# Count the number of unique Stream_IDs with NA
-num_unique_stream_ids_with_na <- length(unique_stream_ids_with_na)
-
-# Print results
-print(num_unique_stream_ids_with_na)
-print(unique_stream_ids_with_na)
-
 ## ------------------------------------------------------- ##
               # Spatial Drivers----
 ## ------------------------------------------------------- ##
-# Define renamed and old names directly
-name_conversion <- data.frame(
-  Stream_ID = c("Walker Branch__East Fork", "Walker Branch__West Fork"),
-  Updated_StreamName = c("Walker Branch__east fork", "Walker Branch__west fork")
-)
-
 # Read and preprocess spatial drivers
 si_drivers <- read.csv("all-data_si-extract_2_202412.csv", stringsAsFactors = FALSE) %>%
   select(-contains("soil")) %>%
+  dplyr::mutate(
+    Stream_Name = case_when(
+      Stream_Name == "East Fork" ~ "east fork",
+      Stream_Name == "West Fork" ~ "west fork",
+      TRUE ~ Stream_Name
+    )) %>%
   # Create Stream_ID first using LTER and Stream_Name
   mutate(Stream_ID = paste0(LTER, "__", Stream_Name)) %>%
-  # Incorporate site renaming
-  left_join(name_conversion, by = "Stream_ID") %>%
-  mutate(
-    Stream_ID = coalesce(Updated_StreamName, Stream_ID)  # Replace Stream_ID with Updated_StreamName if available
-  ) %>%
-  select(-Updated_StreamName) %>%
   # Remove columns with .x
   select(-contains(".x")) %>%
   # Rename columns with .x by removing the suffix
   rename_with(~ str_remove(., "\\.x$"))
 
-# Need to also do this for the Finnish sites in si drivers to names are all consistent: 
-for (i in 1:nrow(finn)) {
-  site_id<-finn[i,3]
-  row_num<-which(si_drivers$Stream_ID==site_id)
-  si_drivers[row_num, "Stream_ID"]<-finn[i,4]
-}
+si_drivers <- standardize_stream_id(si_drivers)
 
-si_drivers$Stream_ID <- ifelse(si_drivers$Stream_ID=="Finnish Environmental Institute__TORNIONJ KUKKOLA 14310  ",
-                             "Finnish Environmental Institute__TORNIONJ KUKKOLA 14310", si_drivers$Stream_ID)
-
-si_drivers$Stream_ID <- ifelse(si_drivers$Stream_ID=="Finnish Environmental Institute__SIMOJOKI AS. 13500      ",
-                             "Finnish Environmental Institute__SIMOJOKI AS. 13500", si_drivers$Stream_ID)
-
-# # Remove rows where Stream_Name starts with "Site" and duplicates based on shapefile name
-# si_drivers <- si_drivers %>%
-#   filter(!grepl("^Site", Stream_Name)) %>%  # Remove rows starting with "Site"
-#   distinct(Shapefile_Name, .keep_all = TRUE)  # Remove duplicates by Shapefile_Name
+si_drivers <- si_drivers %>%
+  left_join(finn %>% select(Stream_ID, Stream_ID2), by = "Stream_ID") %>%
+  mutate(Stream_ID = coalesce(Stream_ID2, Stream_ID)) %>%
+  select(-Stream_ID2)  %>%
+  # Remove columns with .x
+  select(-contains(".y")) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.y$"))
 
 ## Before, using full abbrevs removed some of the spatial driver columns (e.g., "dec" in "deciduous" was causing
 #  deciduous land cover to be filtered out)
@@ -266,7 +200,12 @@ year_cols <- si_drivers[,!(colnames(si_drivers) %in% colnames(months_cols))]
 year_cols$Stream_Name <- si_drivers$Stream_Name
 character_vars <- c("elevation|rock|land|soil|slope|permafrost")
 year_cols <- year_cols[,!(colnames(year_cols) %like% character_vars)]
+
+year_cols <- year_cols %>%
+  dplyr::select(-LTER, -Stream_ID, -Shapefile_Name, -Discharge_File_Name)
+
 year_cols_melt <- melt(year_cols, id.vars = "Stream_Name")
+
 year_cols_melt$variable <- as.character(year_cols_melt$variable)
 year_cols_melt$year <- str_extract(year_cols_melt$variable, "(?<=_)[^_]+(?=\\MMDD$)")
 year_cols_melt$year <- ifelse(is.na(year_cols_melt$year), sapply(strsplit(year_cols_melt$variable, "_"), function(x) x[2]),
@@ -281,10 +220,10 @@ colnames(units_df_annual)[1] <- "driver"
 year_cols_melt$driver <- NA
 
 for (i in 1:length(vars_annual)) {
-  
-  year_cols_melt$driver <- ifelse(year_cols_melt$variable %like% vars_annual[i],paste(vars_annual[i]), 
+
+  year_cols_melt$driver <- ifelse(year_cols_melt$variable %like% vars_annual[i],paste(vars_annual[i]),
                                 year_cols_melt$driver)
-  
+
 }
 
 year_cols_melt <- year_cols_melt[,-2]
