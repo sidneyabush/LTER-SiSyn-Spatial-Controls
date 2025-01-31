@@ -218,10 +218,13 @@ closeAllConnections()  # Close all connections
 dev.off()  # Close any open graphic devices
 dev.new()  # Open new plotting window
 
-
 # Run RFE to select the best features ----
 set.seed(123)
-result_rfe <- rfe(x = x, y = y, sizes = c(1:size), rfeControl = control)
+# result_rfe <- rfe(x = x, y = y, sizes = c(1:size), rfeControl = control)
+result_rfe <- rfe(
+  x = x, y = y, sizes = seq(1, ncol(x), by = 1), 
+  rfeControl = control
+)
 
 # Print RFE results
 print(result_rfe)
@@ -259,7 +262,7 @@ tuneRF(kept_drivers, train[, 1], ntreeTry = 1000, stepFactor = 1, improve = 0.5,
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
 rf_model2 <- randomForest(rf_formula, data = train, 
-                          importance = TRUE, proximity = TRUE, ntree = 700, mtry = 10)
+                          importance = TRUE, proximity = TRUE, ntree = 1100, mtry = 10)
 
 # Visualize output for rf_model2
 print(rf_model2)

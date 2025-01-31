@@ -8,9 +8,9 @@ rm(list = ls())
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 # Load required data and model from the RF script
-load("GenYield_Ave_rf_model2.RData")
-load("GenYield_Ave_kept_drivers.RData")
-load("GenYield_Ave_drivers_df.RData")
+load("GenYield_Average_rf_model2.RData")
+load("GenYield_Average_kept_drivers.RData")
+load("GenYield_Average_train.RData")
 
 # Set global seed and output directory
 set.seed(123)
@@ -63,10 +63,10 @@ output_file <- sprintf("%s/GenYield_Ave_Overall_SHAP_Variable_Importance.pdf", o
 create_all_shapley_plots(shap_values, output_file)
 
 # Function to create SHAP-based partial dependence plots
-create_shap_partial_dependence_plots <- function(shap_values, kept_drivers, drivers_df, output_dir, color_var = "GenYield") {
-  # Check if the specified coloring variable exists in drivers_df
-  if (!(color_var %in% colnames(drivers_df))) {
-    stop(paste("The specified color_var:", color_var, "is not in the drivers_df dataframe."))
+create_shap_partial_dependence_plots <- function(shap_values, kept_drivers, train, output_dir, color_var = "GenYield") {
+  # Check if the specified coloring variable exists in train
+  if (!(color_var %in% colnames(train))) {
+    stop(paste("The specified color_var:", color_var, "is not in the train dataframe."))
   }
   
   # Open a PDF to save all SHAP partial dependence plots
@@ -78,7 +78,7 @@ create_shap_partial_dependence_plots <- function(shap_values, kept_drivers, driv
     shap_long <- tibble::tibble(
       feature_value = kept_drivers[[feature]],  # Feature values from kept_drivers
       shap_value = shap_values[, feature],     # SHAP values from shap_values (matrix indexing)
-      color_value = drivers_df[[color_var]]    # Coloring variable
+      color_value = train[[color_var]]    # Coloring variable
     )
     
     # Add the log scale for select drivers
@@ -111,12 +111,12 @@ create_shap_partial_dependence_plots <- function(shap_values, kept_drivers, driv
 create_shap_partial_dependence_plots(
   shap_values = shap_values,
   kept_drivers = kept_drivers,
-  drivers_df = drivers_df,
+  train = train,
   output_dir = output_dir,
   color_var = "GenYield"
 )
 
-# Function to create variable importance plots for multiple flexible subsets
+# Replace your existing `create_subset_importance_plots()` function with this one
 create_subset_importance_plots <- function(shap_values, conditions, kept_drivers, output_dir) {
   for (condition in conditions) {
     condition_column <- condition$column
@@ -129,8 +129,8 @@ create_subset_importance_plots <- function(shap_values, conditions, kept_drivers
       next
     }
     
-    # Filter kept_drivers based on the condition
-    subset_kept_drivers <- kept_drivers %>%
+    # Filter kept_drivers based on the condition (keeping all columns for now)
+    filtered_drivers <- kept_drivers %>%
       filter(case_when(
         operator == ">" ~ .data[[condition_column]] > condition_value,
         operator == "<" ~ .data[[condition_column]] < condition_value,
@@ -138,13 +138,16 @@ create_subset_importance_plots <- function(shap_values, conditions, kept_drivers
         TRUE ~ FALSE
       ))
     
-    # Subset SHAP values to match filtered drivers
-    subset_shap_values <- shap_values[rownames(subset_kept_drivers), ]
+    row_indices <- which(rownames(kept_drivers) %in% rownames(filtered_drivers))
+    subset_shap_values <- shap_values[row_indices, , drop = FALSE]
+    
+    # Now safely remove the filtering column from both filtered drivers & SHAP values
+    filtered_drivers <- filtered_drivers %>% select(-all_of(condition_column))
+    subset_shap_values <- as.data.frame(subset_shap_values) %>% select(-all_of(condition_column), everything())
     
     # Summarize feature importance
     subset_importance <- subset_shap_values %>%
-      as.data.frame() %>%
-      summarise(across(everything(), ~ mean(abs(.)))) %>%
+      summarise(across(everything(), ~ mean(abs(.), na.rm = TRUE))) %>%
       pivot_longer(cols = everything(), names_to = "feature", values_to = "importance") %>%
       arrange(desc(importance))
     
@@ -153,15 +156,16 @@ create_subset_importance_plots <- function(shap_values, conditions, kept_drivers
       geom_bar(stat = "identity", fill = "steelblue") +
       coord_flip() +
       labs(
-        title = paste("Variable Importance for", condition_column, operator, condition_value),
+        title = paste("GenYield Average", condition_column, operator, condition_value),
         x = "Feature",
         y = "Mean Absolute SHAP Value"
       ) +
       theme_minimal()
     
     # Save the plot
-    output_file <- file.path(output_dir, paste0("SHAP_Variable_Importance_", condition_column, "_", operator, "_", condition_value, ".pdf"))
+    output_file <- file.path(output_dir, paste0("SHAP_GenYield_Average", condition_column, "_", operator, "_", condition_value, ".pdf"))
     ggsave(output_file, plot = subset_importance_plot, width = 8, height = 6)
+    
     message(paste("Subset variable importance plot saved:", output_file))
   }
 }
@@ -170,8 +174,9 @@ create_subset_importance_plots <- function(shap_values, conditions, kept_drivers
 conditions <- list(
   list(column = "rocks_volcanic", value = 50, operator = ">"),
   list(column = "land_shrubland_grassland", value = 50, operator = ">"),
-  list(column = "drainage_area", value = 1000, operator = "<"),
-  list(column = "NOx", value = 0.1, operator = ">")
+  list(column = "land_shrubland_grassland", value = 50, operator = "<"),
+  list(column = "snow_cover", value = 0.4, operator = "<"),
+  list(column = "snow_cover", value = 0.4, operator = ">")
 )
 
 # Retain only conditions relevant to kept_drivers
@@ -192,3 +197,47 @@ create_subset_importance_plots(
   kept_drivers = kept_drivers,
   output_dir = output_dir
 )
+
+# Define multiple flexible conditions for subsetting
+conditions <- list(
+  list(column = "rocks_volcanic", value = 50, operator = ">"),
+  list(column = "land_shrubland_grassland", value = 50, operator = ">"),
+  list(column = "land_shrubland_grassland", value = 50, operator = "<"),
+  list(column = "snow_cover", value = 0.4, operator = "<"),
+  list(column = "snow_cover", value = 0.4, operator = ">")
+)
+
+# Retain only conditions relevant to kept_drivers
+valid_conditions <- lapply(conditions, function(cond) {
+  if (cond$column %in% colnames(kept_drivers)) {
+    return(cond)
+  } else {
+    message(paste("Skipping condition for non-kept feature:", cond$column))
+    return(NULL)
+  }
+})
+valid_conditions <- Filter(Negate(is.null), valid_conditions)  # Remove NULLs
+
+# Generate importance plots for valid subsets
+create_subset_importance_plots(
+  shap_values = shap_values,
+  conditions = valid_conditions,
+  kept_drivers = kept_drivers,
+  output_dir = output_dir
+)
+
+# Define a threshold
+threshold <- 0.33
+
+# Calculate how many sites have a majority land use for each type
+result <- train %>%
+  dplyr::select(starts_with("land_")) %>% # Select columns starting with "land_"
+  mutate(majority_land_use = apply(., 1, function(row) {
+    colnames(.)[which.max(row)] # Get the column name with the maximum value
+  })) %>%
+  filter(apply(., 1, max) > threshold) %>% # Keep rows where the maximum value is above the threshold
+  count(majority_land_use) # Count the number of occurrences of each land use type
+
+# View the result
+print(result)
+
