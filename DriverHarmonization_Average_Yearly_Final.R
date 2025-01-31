@@ -21,6 +21,7 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
     Stream_Name = case_when(
       Stream_Name == "East Fork" ~ "east fork",
       Stream_Name == "West Fork" ~ "west fork",
+      Stream_Name == "Amazon River at Obidos" ~ "Obidos",
       TRUE ~ Stream_Name
     ),
     Stream_ID = paste0(LTER, "__", Stream_Name),
@@ -103,6 +104,7 @@ KG <- read.csv("Koeppen_Geiger_2.csv") %>%
     Stream_Name = case_when(
       Stream_Name == "East Fork" ~ "east fork",
       Stream_Name == "West Fork" ~ "west fork",
+      Stream_Name == "Amazon River at Obidos" ~ "Obidos",
       TRUE ~ Stream_Name
     ),
     Stream_ID = paste0(LTER, "__", Stream_Name) # Closing parenthesis added here
@@ -124,12 +126,6 @@ tot <- tot %>%
 daylen <- read.csv("Monthly_Daylength_2.csv") %>%
   dplyr::select(-1)
 
-# Define renamed and old names directly in a streamlined manner
-name_conversion <- data.frame(
-  Stream_Name = c("East Fork", "West Fork"),
-  Updated_StreamName = c("east fork", "west fork")
-)
-
 # Calculate min and max daylength, update Stream_Name, and ensure all sites in "tot" are left-joined
 daylen_range <- daylen %>%
   dplyr::group_by(Stream_Name) %>%
@@ -137,9 +133,14 @@ daylen_range <- daylen %>%
     Min_Daylength = min(mean_daylength),
     Max_Daylength = max(mean_daylength)
   ) %>%
-  left_join(name_conversion, by = "Stream_Name") %>%
-  mutate(Stream_Name = coalesce(Updated_StreamName, Stream_Name)) %>%
-  dplyr::select(-Updated_StreamName, -Min_Daylength) %>%
+  dplyr::mutate(
+    Stream_Name = case_when(
+      Stream_Name == "East Fork" ~ "east fork",
+      Stream_Name == "West Fork" ~ "west fork",
+      Stream_Name == "Amazon River at Obidos" ~ "Obidos",
+      TRUE ~ Stream_Name
+    )) %>%
+  dplyr::select(-Min_Daylength) %>%
   # Remove columns with .x
   # select(-contains(".x")) %>%
   # Rename columns with .x by removing the suffix
@@ -160,10 +161,17 @@ si_drivers <- read.csv("all-data_si-extract_2_202412.csv", stringsAsFactors = FA
     Stream_Name = case_when(
       Stream_Name == "East Fork" ~ "east fork",
       Stream_Name == "West Fork" ~ "west fork",
+      Stream_Name == "Amazon River at Obidos" ~ "Obidos",
       TRUE ~ Stream_Name
     )) %>%
   # Create Stream_ID first using LTER and Stream_Name
   mutate(Stream_ID = paste0(LTER, "__", Stream_Name)) %>%
+  # Remove MCM LTER (no spatial data)
+  filter(!(LTER == "MCM")) %>%
+  # Remove specific Stream_IDs (no shapefiles or spatial data)
+  filter(!Stream_ID %in% c("MD__Barham", "MD__Jingellic", "USGS__Arkansas River at Murray Dam",
+                           "USGS__COLUMBIA RIVER AT PORT WESTWARD", "USGS__DMF Brazos River", 
+                           "USGS__YAMPA RIVER BELOW CRAIG")) %>%
   # Remove columns with .x
   select(-contains(".x")) %>%
   # Rename columns with .x by removing the suffix
@@ -480,6 +488,7 @@ wrtds_NP <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
     Stream_Name = case_when(
       Stream_Name == "East Fork" ~ "east fork",
       Stream_Name == "West Fork" ~ "west fork",
+      Stream_Name == "Amazon River at Obidos" ~ "Obidos",
       TRUE ~ Stream_Name
     ),
     Stream_ID = paste0(LTER, "__", Stream_Name),
@@ -581,15 +590,7 @@ tot <- tot %>%
   left_join(combined_NP, by = c("Stream_ID", "Year")) %>%
   mutate(
     permafrost_mean_m = replace_na(as.numeric(permafrost_mean_m), 0),
-    prop_area = replace_na(as.numeric(prop_area), 0)
-  )
-
-tot <- tot %>%
-  left_join(combined_NP, by = c("Stream_ID", "Year")) %>%
-  mutate(
-    permafrost_mean_m = ifelse(is.na(permafrost_mean_m), 0, as.numeric(permafrost_mean_m)),
-    prop_area = ifelse(is.na(prop_area), 0, as.numeric(prop_area))
-  )
+    prop_area = replace_na(as.numeric(prop_area), 0))
 
 # Verify the number of unique Stream_IDs
 num_unique_stream_ids <- tot %>%
@@ -598,12 +599,16 @@ num_unique_stream_ids <- tot %>%
 
 print(num_unique_stream_ids)
 
+# Standardize NOx and P column names by removing suffixes
+tot_cleaned <- tot %>%
+  rename_with(~ str_replace_all(., "\\.x$|\\.y$|\\.x.x$|\\.y.y$", ""))
+
 # Now generate a list of missing NOx and P sites-year combinations:
 missing_N_P_data_summary <- tot %>%
   filter(Year > 2000 & Year <= 2021) %>%  # Filter for years within range
-  select(Stream_ID, Year, NOx, P) %>%  # Keep only Stream_ID, Year, NOx, and P columns
-  distinct(Stream_ID, Year, NOx, P) %>%  # Ensure no duplicate rows before reshaping
-  pivot_longer(cols = c(NOx, P), names_to = "Variable", values_to = "Value") %>%  # Reshape
+  select(Stream_ID, Year, starts_with("NOx"), starts_with("P")) %>%  # Select columns dynamically
+  distinct(Stream_ID, Year, across(starts_with("NOx")), across(starts_with("P"))) %>%  # Ensure no duplicates
+  pivot_longer(cols = starts_with("NOx") | starts_with("P"), names_to = "Variable", values_to = "Value") %>%  # Reshape
   filter(is.na(Value)) %>%  # Keep only missing values
   select(-Value)  # Remove the actual value column
 

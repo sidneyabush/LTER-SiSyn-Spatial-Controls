@@ -85,45 +85,28 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 drivers_df <- read.csv("AllDrivers_Harmonized_Yearly_filtered_1_years.csv") %>%
   select(-contains("Yield"), -contains("Gen"), -contains("major"), -X) %>%
   dplyr::mutate_at(vars(19:34), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
-  select(FNConc, everything()) 
-  # %>%
-  # filter(complete.cases(.))  # Remove rows with any NAs
+  select(FNConc, everything()) %>%
+  filter(!Stream_ID %in% c("USGS__Dismal River")) %>% # outlier site
+  filter(complete.cases(.))  # Remove rows with any NAs
 
-# Identify Stream_IDs, Years, and Variables with NA values
-na_summary <- drivers_df %>%
-  pivot_longer(cols = -c(Stream_ID, Year), names_to = "Variable", values_to = "Value") %>%
-  filter(is.na(Value)) %>%
-  filter(is.na(Value) & Year >= 2002 & Year <= 2021) %>%
-  distinct(Stream_ID, Year, Variable)
-
-# Count the number of unique Stream_IDs before removing it
-unique_stream_id_na_count <- na_summary %>%
-  summarise(na_summary = n_distinct(Stream_ID)) %>%
-  pull(na_summary)
-
-# Print the result
-cat("Number of unique NAStream_IDs:", unique_stream_id_na_count, "\n")
-
-write.csv(unique_stream_id_na_count, "unique_NA_stream_ids_yearly.csv", row.names = FALSE)
-
-gc()
-
-# Here we can optionally remove data above and below a determined standard deviation about the mean
-# Calculate mean and standard deviation of FNConc
-mean_FNConc <- mean(drivers_df$FNConc, na.rm = TRUE)  # Calculate the mean
-std_FNConc <- sd(drivers_df$FNConc, na.rm = TRUE)  # Calculate the standard deviation
-threshold_FNConc <- mean_FNConc + 7 * std_FNConc  # Calculate 5 standard deviations above the mean
-
-# Output the results
-cat("Mean of FNConc:", mean_FNConc, "\n")
-cat("Standard Deviations of FNConc:", threshold_FNConc, "\n")
-
-# Remove rows with FNConc greater than the threshold
-drivers_df <- drivers_df %>%
-  filter(FNConc <= threshold_FNConc)
-
-# Output the number of rows remaining in the dataframe
-cat("Rows remaining after removing rows with FNConc greater than the threshold:", nrow(drivers_df), "\n")
+# # Identify Stream_IDs, Years, and Variables with NA values
+# na_summary <- drivers_df %>%
+#   pivot_longer(cols = -c(Stream_ID, Year), names_to = "Variable", values_to = "Value") %>%
+#   filter(is.na(Value)) %>%
+#   filter(is.na(Value) & Year >= 2002 & Year <= 2021) %>%
+#   distinct(Stream_ID, Year, Variable)
+# 
+# # Count the number of unique Stream_IDs before removing it
+# unique_stream_id_na_count <- na_summary %>%
+#   summarise(na_summary = n_distinct(Stream_ID)) %>%
+#   pull(na_summary)
+# 
+# # Print the result
+# cat("Number of unique NAStream_IDs:", unique_stream_id_na_count, "\n")
+# 
+# write.csv(unique_stream_id_na_count, "unique_NA_stream_ids_yearly.csv", row.names = FALSE)
+# 
+# gc()
 
 # Keep only complete cases
 drivers_df <- drivers_df %>%
@@ -144,9 +127,6 @@ write.csv(unique_stream_id_count, "unique_NA_stream_ids_yearly.csv", row.names =
 unique_stream_id_count <- drivers_df %>%
   summarise(drivers_df = n_distinct(Stream_ID)) %>%
   pull(drivers_df)
-
-# Print the result
-cat("Number of unique Stream_IDs:", drivers_df, "\n")
 
 write.csv(drivers_df, "unique_stream_ids_yearly.csv", row.names = FALSE)
 
