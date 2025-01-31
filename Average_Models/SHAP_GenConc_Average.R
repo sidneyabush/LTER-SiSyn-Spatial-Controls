@@ -138,13 +138,12 @@ create_subset_importance_plots <- function(shap_values, conditions, kept_drivers
         TRUE ~ FALSE
       ))
     
-    # Ensure row indices are aligned
-    row_indices <- rownames(filtered_drivers)
-    subset_shap_values <- shap_values[row_indices, , drop = FALSE]  # Subset rows first
+    row_indices <- which(rownames(kept_drivers) %in% rownames(filtered_drivers))
+    subset_shap_values <- shap_values[row_indices, , drop = FALSE]
     
     # Now safely remove the filtering column from both filtered drivers & SHAP values
     filtered_drivers <- filtered_drivers %>% select(-all_of(condition_column))
-    subset_shap_values <- subset_shap_values %>% select(-all_of(condition_column), everything())
+    subset_shap_values <- as.data.frame(subset_shap_values) %>% select(-all_of(condition_column), everything())
     
     # Summarize feature importance
     subset_importance <- subset_shap_values %>%
@@ -157,14 +156,14 @@ create_subset_importance_plots <- function(shap_values, conditions, kept_drivers
       geom_bar(stat = "identity", fill = "steelblue") +
       coord_flip() +
       labs(
-        title = paste("Variable Importance for", condition_column, operator, condition_value, "(Excluding Subset Driver)"),
+        title = paste("GenConc Average", condition_column, operator, condition_value),
         x = "Feature",
         y = "Mean Absolute SHAP Value"
       ) +
       theme_minimal()
     
     # Save the plot
-    output_file <- file.path(output_dir, paste0("SHAP_Variable_Importance_", condition_column, "_", operator, "_", condition_value, "_Excluding_Subset_Driver.pdf"))
+    output_file <- file.path(output_dir, paste0("SHAP_GenConc_Average", condition_column, "_", operator, "_", condition_value, ".pdf"))
     ggsave(output_file, plot = subset_importance_plot, width = 8, height = 6)
     
     message(paste("Subset variable importance plot saved:", output_file))
@@ -232,7 +231,7 @@ threshold <- 0.33
 
 # Calculate how many sites have a majority land use for each type
 result <- train %>%
-  select(starts_with("land_")) %>% # Select columns starting with "land_"
+  dplyr::select(starts_with("land_")) %>% # Select columns starting with "land_"
   mutate(majority_land_use = apply(., 1, function(row) {
     colnames(.)[which.max(row)] # Get the column name with the maximum value
   })) %>%
