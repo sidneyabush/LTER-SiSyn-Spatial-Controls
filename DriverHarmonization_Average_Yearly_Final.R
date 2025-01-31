@@ -43,7 +43,7 @@ standardize_stream_id <- function(df) {
 site_year_counts <- wrtds_df %>%
   dplyr::group_by(Stream_ID) %>%
   summarise(year_count = n_distinct(Year)) %>%
-  filter(year_count >= 1)
+  filter(year_count >= record_length)
 
 # Filter the main dataset to only include sites with sufficient data
 wrtds_df <- wrtds_df %>%
@@ -278,7 +278,7 @@ all_spatial <- drivers_cast %>%
 
 tot <- tot %>%
   left_join(all_spatial, by = c("Stream_Name", "Year")) %>%
-  filter(Year > 2000 & Year <= 2021) %>%  # Filter for years within range
+  filter(Year > 2000 & Year <= 2024) %>%  # Filter for years within range
   distinct(Stream_ID, Year, .keep_all = TRUE) %>%
   mutate(
     permafrost_mean_m = as.numeric(permafrost_mean_m),
@@ -300,7 +300,7 @@ tot <- tot %>%
 
 # Identify missing values in numeric columns only
 missing_spatial_data_summary <- tot %>%
-  filter(Year > 2000 & Year <= 2021) %>%  # Filter for years within range
+  filter(Year > 2000 & Year <= 2024) %>%  # Filter for years within range
   select(Stream_ID, Year, permafrost_mean_m, cycle0, evapotrans, npp, precip, prop_area, temp) %>%  # Keep only numeric columns + Stream_ID & Year
   pivot_longer(cols = -c(Stream_ID, Year), names_to = "Variable", values_to = "Value") %>%  # Reshape
   filter(is.na(Value)) %>%  # Keep only missing values
@@ -319,7 +319,7 @@ print(head(missing_spatial_data_summary))  # Preview first few rows
 
 # Export missing data summary with dynamic filename
 write.csv(missing_spatial_data_summary, 
-          sprintf("missing_spatial_data_summary_2001_2021_filtered_%d_years.csv", record_length), 
+          sprintf("missing_spatial_data_summary_2001_2024_filtered_%d_years.csv", record_length), 
           row.names = FALSE)
 
 ## ------------------------------------------------------- ##
@@ -464,7 +464,7 @@ print(num_unique_stream_ids)
 
 # Identify missing values in numeric columns only
 missing_elev_slope_data_summary <- tot %>%
-  filter(Year > 2000 & Year <= 2021) %>%  # Filter for years within range
+  filter(Year > 2000 & Year <= 2024) %>%  # Filter for years within range
   select(Stream_ID, Year, basin_slope_mean_degree, elevation_mean_m) %>%  # Keep only numeric columns + Stream_ID & Year
   pivot_longer(cols = -c(Stream_ID, Year), names_to = "Variable", values_to = "Value") %>%  # Reshape
   filter(is.na(Value)) %>%  # Keep only missing values
@@ -484,7 +484,7 @@ print(head(missing_elev_slope_data_summary))  # Preview first few rows
 
 # Export missing data summary with dynamic filename
 write.csv(missing_elev_slope_data_summary, 
-          sprintf("missing_elev_slope_data_summary_2001_2021_filtered_%d_years.csv", record_length), 
+          sprintf("missing_elev_slope_data_summary_2001_2024_filtered_%d_years.csv", record_length), 
           row.names = FALSE)
 
 
@@ -622,7 +622,7 @@ tot <- tot %>%
 
 # Now generate a list of missing NOx and P sites-year combinations:
 missing_N_P_data_summary <- tot %>%
-  filter(Year > 2000 & Year <= 2021) %>%  # Filter for years within range
+  filter(Year > 2000 & Year <= 2024) %>%  # Filter for years within range
   select(Stream_ID, Year, NOx, P) %>%
   distinct(Stream_ID, Year, across(starts_with("NOx")), across(starts_with("P"))) %>%  # Ensure no duplicates
   pivot_longer(cols = starts_with("NOx") | starts_with("P"), names_to = "Variable", values_to = "Value") %>%  # Reshape
@@ -631,7 +631,7 @@ missing_N_P_data_summary <- tot %>%
 
 # Export missing data summary with dynamic filename
 write.csv(missing_elev_slope_data_summary, 
-          sprintf("missing_elev_slope_data_summary_2001_2021_filtered_%d_years.csv", record_length), 
+          sprintf("missing_elev_slope_data_summary_2001_2024_filtered_%d_years.csv", record_length), 
           row.names = FALSE)
 
 # Get the number of unique Stream_IDs with missing NOx or P
@@ -780,7 +780,7 @@ write.csv(as.data.frame(tot_annual),
 
 # write.csv(as.data.frame(tot_annual), "AllDrivers_Harmonized_Yearly_filtered_1_years.csv")
 
-# Create the tot_average dataframe
+# Create the tot_average dataframe with mean, q_5, and q_95
 tot_average <- tot_annual %>%
   dplyr::group_by(Stream_ID) %>%
   summarise(
@@ -804,6 +804,11 @@ tot_average <- tot_annual %>%
     FNYield = mean(FNYield, na.rm = TRUE),
     GenConc = mean(GenConc, na.rm = TRUE),
     GenYield = mean(GenYield, na.rm = TRUE),
+    
+    # Calculate q_5 (5th percentile) and q_95 (95th percentile) for numerical variables
+    q_5 = quantile(Q, 0.05, na.rm = TRUE),
+    q_95 = quantile(Q, 0.95, na.rm = TRUE),
+    
     # Categorical variables: grab the first value
     across(contains("rocks"), ~ first(.)),
     across(contains("land_"), ~ first(.))
@@ -811,6 +816,10 @@ tot_average <- tot_annual %>%
   ungroup() %>%
   # Replace NaN with NA in all columns
   mutate(across(everything(), ~ ifelse(is.nan(.), NA, .)))
+
+# Print a preview
+print(head(tot_average))
+
 
 # Count the number of unique Stream_IDs
 num_unique_stream_ids <- tot_average %>%
@@ -824,6 +833,4 @@ write.csv(as.data.frame(tot_average),
           sprintf("AllDrivers_Harmonized_Average_filtered_%d_years.csv", record_length),
           row.names = FALSE)
 
-# # Export annual data
-# write.csv(as.data.frame(tot_average), "AllDrivers_Harmonized_Average_filtered_1_years.csv")
 

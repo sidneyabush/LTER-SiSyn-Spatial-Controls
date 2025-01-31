@@ -1,3 +1,5 @@
+dev.off()  # Close any open graphics device
+
 # Load needed packages
 librarian::shelf(remotes, RRF, caret, randomForest, DAAG, party, rpart, rpart.plot, mlbench, pROC, tree, dplyr,
                  plot.matrix, reshape2, rcartocolor, arsenal, googledrive, data.table, ggplot2, corrplot, pdp, 
@@ -77,52 +79,53 @@ test_numtree_parallel_optimized <- function(ntree_list, formula, data) {
 # Set the output directory path for saving PDFs
 output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/GenConc"
 
+# Define record length (1, 5, 10, 20... years)
+record_length <- 5
+
 # Read in and tidy data ----
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
 
-# Load and preprocess the data
-drivers_df <- read.csv("AllDrivers_Harmonized_Average_filtered_1_years.csv") %>%
-  select(-contains("Yield"), -contains("FN"), -contains("major"), -X) %>%
-  dplyr::mutate_at(vars(18:33), ~replace(., is.na(.), 0)) %>%  
+# Load and preprocess the data with dynamic file selection
+drivers_df <- read.csv(sprintf("AllDrivers_Harmonized_Average_filtered_%d_years.csv", record_length)) %>%
+  select(-contains("Yield"), -contains("FN"), -contains("major"), -Max_Daylength) %>%
+  dplyr::mutate_at(vars(19:34), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
   select(GenConc, everything()) %>%
-  drop_na()
+  filter(!Stream_ID %in% c("USGS__Dismal River"))  # Remove specific outlier site
 
-# Export unique Stream_IDs to a CSV file
-unique_stream_ids <- drivers_df %>%
-  select(Stream_ID) %>%
-  distinct()
+# Identify Stream_IDs, Years, and Variables with NA values
+na_summary <- drivers_df %>%
+  pivot_longer(cols = -c(Stream_ID), names_to = "Variable", values_to = "Value") %>%
+  filter(is.na(Value)) %>%
+  distinct(Stream_ID, Variable)
 
-# Here we can optionally remove data above and below a determined standard deviation about the mean
-# Calculate mean and standard deviation of GenConc
-mean_GenConc <- mean(drivers_df$GenConc, na.rm = TRUE)  # Calculate the mean
-std_GenConc <- sd(drivers_df$GenConc, na.rm = TRUE)  # Calculate the standard deviation
-threshold_GenConc <- mean_GenConc + 7 * std_GenConc  # Calculate 5 standard deviations above the mean
+# Count the number of unique Stream_IDs before removing it
+unique_stream_id_na_count <- na_summary %>%
+  summarise(na_summary = n_distinct(Stream_ID)) %>%
+  pull(na_summary)
 
-# Output the results
-cat("Mean of GenConc:", mean_GenConc, "\n")
-cat("Standard Deviations of GenConc:", threshold_GenConc, "\n")
+# Export unique NA Stream_IDs with dynamic filename
+write.csv(na_summary, 
+          sprintf("average_NA_stream_ids_%d_years.csv", record_length), 
+          row.names = FALSE)
 
-# Remove rows with GenConc greater than the threshold
+gc()
+
+# Keep only complete cases
 drivers_df <- drivers_df %>%
-  filter(GenConc <= threshold_GenConc)
-
-# Output the number of rows remaining in the dataframe
-cat("Rows remaining after removing rows with GenConc greater than the threshold:", nrow(drivers_df), "\n")
-
-# Export unique Stream_IDs to a CSV file
-unique_stream_ids <- drivers_df %>%
-  select(Stream_ID) %>%
-  distinct()
-
-write.csv(unique_stream_ids, "unique_stream_ids_average.csv", row.names = FALSE)
+  select(GenConc, everything()) %>%
+  filter(complete.cases(.))
 
 # Count the number of unique Stream_IDs before removing it
 unique_stream_id_count <- drivers_df %>%
-  summarise(n_unique_stream_ids = n_distinct(Stream_ID)) %>%
-  pull(n_unique_stream_ids)
+  summarise(unique_count = n_distinct(Stream_ID)) %>%
+  pull(unique_count)
 
-# Print the result
-cat("Number of unique Stream_IDs:", unique_stream_id_count, "\n")
+# Export with dynamic filename
+write.csv(drivers_df, 
+          sprintf("unique_stream_ids_average_%d_years.csv", record_length), 
+          row.names = FALSE)
+
+gc()
 
 # Final step: Remove Stream_ID and Year
 drivers_df <- drivers_df %>%
@@ -151,6 +154,8 @@ MSE_df_rf1 <- data.frame(
   ntree = ntree_values,
   mean_MSE = sapply(MSE_list_rf1, mean)
 )
+
+dev.new()  # Open new plotting window
 
 ggplot(MSE_df_rf1, aes(ntree, mean_MSE)) + 
   geom_point() + 
@@ -320,6 +325,6 @@ test_results <- test %>%
 
 write.csv(test_results, "Test_Predictions_rf_model2_Average.csv", row.names = FALSE)
 
-cat("Test predictions saved to Test_Predictions_rf_model2.csv\n")
+cat("Test predictions saved to Test_Predictions_rf_model2_Average.csv\n")
 
 
