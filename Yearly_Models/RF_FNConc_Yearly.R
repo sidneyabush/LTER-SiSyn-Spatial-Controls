@@ -83,8 +83,8 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 # Load and preprocess the data
 drivers_df <- read.csv("AllDrivers_Harmonized_Yearly_filtered_1_years.csv") %>%
-  select(-contains("Yield"), -contains("Gen"), -contains("major"), -X) %>%
-  dplyr::mutate_at(vars(19:34), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
+  select(-contains("Yield"), -contains("Gen"), -contains("major"), -X, -Max_Daylength) %>%
+  dplyr::mutate_at(vars(18:33), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
   select(FNConc, everything()) %>%
   filter(!Stream_ID %in% c("USGS__Dismal River")) %>% # outlier site
   filter(complete.cases(.))  # Remove rows with any NAs
@@ -107,21 +107,11 @@ drivers_df <- read.csv("AllDrivers_Harmonized_Yearly_filtered_1_years.csv") %>%
 # write.csv(unique_stream_id_na_count, "unique_NA_stream_ids_yearly.csv", row.names = FALSE)
 # 
 # gc()
-
-# Keep only complete cases
-drivers_df <- drivers_df %>%
-  select(FNConc, everything()) %>%
-  filter(complete.cases(.))
-
-# Count the number of unique Stream_IDs before removing it
-unique_stream_id_count <- drivers_df %>%
-  summarise(n_unique_stream_ids = n_distinct(Stream_ID)) %>%
-  pull(n_unique_stream_ids)
-
-# Print the result
-cat("Number of unique Stream_IDs:", unique_stream_id_count, "\n")
-
-write.csv(unique_stream_id_count, "unique_NA_stream_ids_yearly.csv", row.names = FALSE)
+# 
+# # Keep only complete cases
+# drivers_df <- drivers_df %>%
+#   select(FNConc, everything()) %>%
+#   filter(complete.cases(.))
 
 # Count the number of unique Stream_IDs before removing it
 unique_stream_id_count <- drivers_df %>%
@@ -137,7 +127,7 @@ drivers_df <- drivers_df %>%
   select(-Stream_ID, -Year)
 
 # Plot and save correlation matrix ----
-numeric_drivers <- 2:32 # Change this range to reflect data frame length
+numeric_drivers <- 2:31 # Change this range to reflect data frame length
 driver_cor <- cor(drivers_df[, numeric_drivers])
 save_correlation_plot(driver_cor, output_dir)
 
