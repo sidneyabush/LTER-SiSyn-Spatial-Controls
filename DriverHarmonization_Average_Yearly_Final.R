@@ -4,6 +4,9 @@ librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr, stri
 # Clear environment
 rm(list = ls())
 
+# Define the record length in years (change this to 1, 5, 10, 20... as needed)
+record_length <- 20  
+
 # ## ------------------------------------------------------- ##
 #              # Read in and Tidy Data ----
 # ## ------------------------------------------------------- ##
@@ -168,10 +171,10 @@ si_drivers <- read.csv("all-data_si-extract_2_202412.csv", stringsAsFactors = FA
   mutate(Stream_ID = paste0(LTER, "__", Stream_Name)) %>%
   # Remove MCM LTER (no spatial data)
   filter(!(LTER == "MCM")) %>%
-  # Remove specific Stream_IDs (no shapefiles or spatial data)
-  filter(!Stream_ID %in% c("MD__Barham", "MD__Jingellic", "USGS__Arkansas River at Murray Dam",
-                           "USGS__COLUMBIA RIVER AT PORT WESTWARD", "USGS__DMF Brazos River", 
-                           "USGS__YAMPA RIVER BELOW CRAIG")) %>%
+  # # Remove specific Stream_IDs (no shapefiles or spatial data)
+  # filter(!Stream_ID %in% c("MD__Barham", "MD__Jingellic", "USGS__Arkansas River at Murray Dam",
+  #                          "USGS__COLUMBIA RIVER AT PORT WESTWARD", "USGS__DMF Brazos River", 
+  #                          "USGS__YAMPA RIVER BELOW CRAIG")) %>%
   # Remove columns with .x
   select(-contains(".x")) %>%
   # Rename columns with .x by removing the suffix
@@ -314,9 +317,10 @@ print(num_sites_missing_2001)  # Number of unique sites missing data in 2001
 print(nrow(missing_spatial_data_summary))  # Number of missing entries
 print(head(missing_spatial_data_summary))  # Preview first few rows
 
-# Export to CSV
-write.csv(missing_spatial_data_summary, "missing_spatial_data_summary_2001_2021.csv", row.names = FALSE)
-
+# Export missing data summary with dynamic filename
+write.csv(missing_spatial_data_summary, 
+          sprintf("missing_spatial_data_summary_2001_2021_filtered_%d_years.csv", record_length), 
+          row.names = FALSE)
 
 ## ------------------------------------------------------- ##
 #  Gap Filling Missing Data ----
@@ -374,11 +378,12 @@ tot_with_slope_filled <- tot_with_slope_filled %>%
       Stream_ID == "ARC__Imnavait Weir" ~ 3.83,   ## Need to confirm this value with Arial S.    
       TRUE ~ basin_slope_mean_degree               # Retain existing values
     )
-  ) %>%
-  # Remove specific Stream_IDs (no shapefiles or spatial data)
-  dplyr::filter(!Stream_ID %in% c("MD__Barham", "MD__Jingellic", "USGS__Arkansas River at Murray Dam",
-                         "USGS__COLUMBIA RIVER AT PORT WESTWARD", "USGS__DMF Brazos River", 
-                         "USGS__YAMPA RIVER BELOW CRAIG"))
+  ) 
+  # %>%
+  # # Remove specific Stream_IDs (no shapefiles or spatial data)
+  # dplyr::filter(!Stream_ID %in% c("MD__Barham", "MD__Jingellic", "USGS__Arkansas River at Murray Dam",
+  #                        "USGS__COLUMBIA RIVER AT PORT WESTWARD", "USGS__DMF Brazos River", 
+  #                        "USGS__YAMPA RIVER BELOW CRAIG"))
 
 # Convert to data.table for efficient key-based operations
 tot_with_slope_filled <- as.data.table(tot_with_slope_filled)
@@ -439,10 +444,10 @@ tot <- tot %>%
     prop_area = replace_na(as.numeric(prop_area), 0)
   ) %>%
   select(-elevation_mean_m_filled) %>%
-  # Remove specific Stream_IDs (no shapefiles or spatial data)
-  filter(!Stream_ID %in% c("MD__Barham", "MD__Jingellic", "USGS__Arkansas River at Murray Dam",
-                           "USGS__COLUMBIA RIVER AT PORT WESTWARD", "USGS__DMF Brazos River", 
-                           "USGS__YAMPA RIVER BELOW CRAIG")) %>%
+  # # Remove specific Stream_IDs (no shapefiles or spatial data)
+  # filter(!Stream_ID %in% c("MD__Barham", "MD__Jingellic", "USGS__Arkansas River at Murray Dam",
+  #                          "USGS__COLUMBIA RIVER AT PORT WESTWARD", "USGS__DMF Brazos River", 
+  #                          "USGS__YAMPA RIVER BELOW CRAIG")) %>%
   # Remove columns with .y
   select(-contains(".y")) %>%
   # Rename columns with .x by removing the suffix
@@ -476,8 +481,12 @@ print(num_sites_missing_2001)  # Number of unique sites missing data in 2001
 print(nrow(missing_elev_slope_data_summary))  # Number of missing entries
 print(head(missing_elev_slope_data_summary))  # Preview first few rows
 
-# Export to CSV
-write.csv(missing_elev_slope_data_summary, "missing_elev_slope_data_summary_2001_2021.csv", row.names = FALSE)
+
+# Export missing data summary with dynamic filename
+write.csv(missing_elev_slope_data_summary, 
+          sprintf("missing_elev_slope_data_summary_2001_2021_filtered_%d_years.csv", record_length), 
+          row.names = FALSE)
+
 
 # ## ------------------------------------------------------- ##
 #           # Import WRTDS N_P Data ---- 
@@ -593,11 +602,12 @@ tot <- tot %>%
   left_join(combined_NP, by = c("Stream_ID", "Year")) %>%
   mutate(
     permafrost_mean_m = replace_na(as.numeric(permafrost_mean_m), 0),
-    prop_area = replace_na(as.numeric(prop_area), 0)) %>%
-  # Remove specific Stream_IDs (no shapefiles or spatial data)
-  filter(!Stream_ID %in% c("MD__Barham", "MD__Jingellic", "USGS__Arkansas River at Murray Dam",
-                           "USGS__COLUMBIA RIVER AT PORT WESTWARD", "USGS__DMF Brazos River", 
-                           "USGS__YAMPA RIVER BELOW CRAIG"))
+    prop_area = replace_na(as.numeric(prop_area), 0)) 
+  # %>%
+  # # Remove specific Stream_IDs (no shapefiles or spatial data)
+  # filter(!Stream_ID %in% c("MD__Barham", "MD__Jingellic", "USGS__Arkansas River at Murray Dam",
+  #                          "USGS__COLUMBIA RIVER AT PORT WESTWARD", "USGS__DMF Brazos River", 
+  #                          "USGS__YAMPA RIVER BELOW CRAIG"))
 
 # Verify the number of unique Stream_IDs
 num_unique_stream_ids <- tot %>%
@@ -607,7 +617,7 @@ num_unique_stream_ids <- tot %>%
 print(num_unique_stream_ids)
 
 # Standardize NOx and P column names by removing suffixes
-tot_cleaned <- tot %>%
+tot <- tot %>%
   rename_with(~ str_replace_all(., "\\.x$|\\.y$|\\.x.x$|\\.y.y$", ""))
 
 # Now generate a list of missing NOx and P sites-year combinations:
@@ -619,11 +629,18 @@ missing_N_P_data_summary <- tot %>%
   filter(is.na(Value)) %>%  # Keep only missing values
   select(-Value)  # Remove the actual value column
 
-# Export to CSV
-write.csv(missing_N_P_data_summary, "missing_N_P_data_summary_2001_2021.csv", row.names = FALSE)
+# Export missing data summary with dynamic filename
+write.csv(missing_elev_slope_data_summary, 
+          sprintf("missing_elev_slope_data_summary_2001_2021_filtered_%d_years.csv", record_length), 
+          row.names = FALSE)
+
+# Get the number of unique Stream_IDs with missing NOx or P
+num_unique_missing_streams <- missing_N_P_data_summary %>%
+  distinct(Stream_ID) %>%
+  nrow()
 
 # Print summary
-print(nrow(missing_N_P_data_summary))  # Number of missing entries
+print((num_unique_missing_streams))  # Number of missing entries
 print(head(missing_N_P_data_summary))  # Preview first few rows
 
 ## ------------------------------------------------------- ##
@@ -756,9 +773,12 @@ num_unique_stream_ids <- tot_annual %>%
 
 print(num_unique_stream_ids)
 
-# Export annual data
-write.csv(as.data.frame(tot_annual), "AllDrivers_Harmonized_Yearly_filtered_1_years.csv")
+# Export annual data with dynamic filename
+write.csv(as.data.frame(tot_annual), 
+          sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.csv", record_length),
+          row.names = FALSE)
 
+# write.csv(as.data.frame(tot_annual), "AllDrivers_Harmonized_Yearly_filtered_1_years.csv")
 
 # Create the tot_average dataframe
 tot_average <- tot_annual %>%
@@ -799,6 +819,11 @@ num_unique_stream_ids <- tot_average %>%
 
 print(num_unique_stream_ids) 
 
-# Export annual data
-write.csv(as.data.frame(tot_average), "AllDrivers_Harmonized_Average_filtered_1_years.csv")
+# Export average data with dynamic filename
+write.csv(as.data.frame(tot_average), 
+          sprintf("AllDrivers_Harmonized_Average_filtered_%d_years.csv", record_length),
+          row.names = FALSE)
+
+# # Export annual data
+# write.csv(as.data.frame(tot_average), "AllDrivers_Harmonized_Average_filtered_1_years.csv")
 
