@@ -370,10 +370,15 @@ tot_with_slope_filled <- tot_with_slope_filled %>%
   mutate(
     basin_slope_mean_degree = case_when(
       Stream_ID == "Walker Branch__east fork" ~ 2.2124321596241265,
-      Stream_ID == "Walker Branch__west fork" ~ 1.8972192246291828,       
+      Stream_ID == "Walker Branch__west fork" ~ 1.8972192246291828,  
+      Stream_ID == "ARC__Imnavait Weir" ~ 3.83,   ## Need to confirm this value with Arial S.    
       TRUE ~ basin_slope_mean_degree               # Retain existing values
     )
-  )
+  ) %>%
+  # Remove specific Stream_IDs (no shapefiles or spatial data)
+  dplyr::filter(!Stream_ID %in% c("MD__Barham", "MD__Jingellic", "USGS__Arkansas River at Murray Dam",
+                         "USGS__COLUMBIA RIVER AT PORT WESTWARD", "USGS__DMF Brazos River", 
+                         "USGS__YAMPA RIVER BELOW CRAIG"))
 
 # Convert to data.table for efficient key-based operations
 tot_with_slope_filled <- as.data.table(tot_with_slope_filled)
@@ -434,6 +439,10 @@ tot <- tot %>%
     prop_area = replace_na(as.numeric(prop_area), 0)
   ) %>%
   select(-elevation_mean_m_filled) %>%
+  # Remove specific Stream_IDs (no shapefiles or spatial data)
+  filter(!Stream_ID %in% c("MD__Barham", "MD__Jingellic", "USGS__Arkansas River at Murray Dam",
+                           "USGS__COLUMBIA RIVER AT PORT WESTWARD", "USGS__DMF Brazos River", 
+                           "USGS__YAMPA RIVER BELOW CRAIG")) %>%
   # Remove columns with .y
   select(-contains(".y")) %>%
   # Rename columns with .x by removing the suffix
@@ -447,12 +456,6 @@ print(num_unique_stream_ids)
 
 # Create list of NA values for data up to this point
 # Exclude the land use and rock types, and remove "median" columns
-
-# Identify numeric columns (excluding Stream_ID, Year, and other character columns)
-numeric_cols <- tot %>%
-  select(-matches("rocks|land|median|min|max_m|max_degree")) %>%
-  select(where(is.numeric)) %>%
-  colnames()
 
 # Identify missing values in numeric columns only
 missing_elev_slope_data_summary <- tot %>%
@@ -590,7 +593,11 @@ tot <- tot %>%
   left_join(combined_NP, by = c("Stream_ID", "Year")) %>%
   mutate(
     permafrost_mean_m = replace_na(as.numeric(permafrost_mean_m), 0),
-    prop_area = replace_na(as.numeric(prop_area), 0))
+    prop_area = replace_na(as.numeric(prop_area), 0)) %>%
+  # Remove specific Stream_IDs (no shapefiles or spatial data)
+  filter(!Stream_ID %in% c("MD__Barham", "MD__Jingellic", "USGS__Arkansas River at Murray Dam",
+                           "USGS__COLUMBIA RIVER AT PORT WESTWARD", "USGS__DMF Brazos River", 
+                           "USGS__YAMPA RIVER BELOW CRAIG"))
 
 # Verify the number of unique Stream_IDs
 num_unique_stream_ids <- tot %>%
@@ -606,7 +613,7 @@ tot_cleaned <- tot %>%
 # Now generate a list of missing NOx and P sites-year combinations:
 missing_N_P_data_summary <- tot %>%
   filter(Year > 2000 & Year <= 2021) %>%  # Filter for years within range
-  select(Stream_ID, Year, starts_with("NOx"), starts_with("P")) %>%  # Select columns dynamically
+  select(Stream_ID, Year, NOx, P) %>%
   distinct(Stream_ID, Year, across(starts_with("NOx")), across(starts_with("P"))) %>%  # Ensure no duplicates
   pivot_longer(cols = starts_with("NOx") | starts_with("P"), names_to = "Variable", values_to = "Value") %>%  # Reshape
   filter(is.na(Value)) %>%  # Keep only missing values

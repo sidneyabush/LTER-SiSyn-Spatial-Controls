@@ -325,7 +325,7 @@ dev.off()
 test_results <- test %>%
   mutate(Predicted_FNConc = test_predictions)  # Add predictions to test data
 
-write.csv(test_results, "Test_Predictions_rf_model2.csv", row.names = FALSE)
+write.csv(test_results, "Test_Predictions_rf_model2_annual.csv", row.names = FALSE)
 
 cat("Test predictions saved to Test_Predictions_rf_model2.csv\n")
 
