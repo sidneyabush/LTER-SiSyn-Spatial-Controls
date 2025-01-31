@@ -16,7 +16,7 @@ set.seed(123)
 save_correlation_plot <- function(driver_cor, output_dir) {
   pdf(sprintf("%s/correlation_plot_GenConc_Average_5_years.pdf", output_dir), width = 10, height = 10)
   corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = FALSE)
-  title("average Gen Si Concentration")
+  title("Average GenConc")
   dev.off()
 }
 
