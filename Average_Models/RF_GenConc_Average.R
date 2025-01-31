@@ -157,12 +157,14 @@ MSE_df_rf1 <- data.frame(
 
 dev.new()  # Open new plotting window
 
-ggplot(MSE_df_rf1, aes(ntree, mean_MSE)) + 
+p <- ggplot(MSE_df_rf1, aes(ntree, mean_MSE)) + 
   geom_point() + 
   geom_line() + 
   theme_classic() + 
   scale_x_continuous(breaks = seq(100, 2000, 100)) + 
   theme(text = element_text(size = 20))
+
+print(p)
 
 
 # Manually select ntree for rf_model1 ----
@@ -184,20 +186,12 @@ randomForest::varImpPlot(rf_model1)
 
 # Generate plots comparing predicted vs observed ----
 lm_plot <- plot(rf_model1$predicted, train$GenConc, pch = 16, cex = 1.5,
-                xlab = "Predicted", ylab = "Observed", main = "Trained RF Model 1 average Gen Concentration",
+                xlab = "Predicted", ylab = "Observed", main = "Trained RF Model 1 Average Gen Concentration",
                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
   theme(text = element_text(size = 40), face = "bold")
 legend("topleft", bty = "n", cex = 1.5, legend = paste("R2 =", format(mean(rf_model1$rsq), digits = 3)))
 legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(rf_model1$mse), digits = 3)))
-
-# Evaluate RF Model on Train/Test Datasets
-train_pred <- predict(rf_model1, train)
-test_pred <- predict(rf_model1, test)
-
-cat("Train R²:", cor(train_pred, train$GenConc)^2, "\n")
-cat("Test R²:", cor(test_pred, test$GenConc)^2, "\n")
-
 
 # Start Tuning with RFE and 2nd RFModel ----
 # Global seed for RFE ----
@@ -222,6 +216,8 @@ y <- train$GenConc
 sink(NULL)  # Reset output sink
 closeAllConnections()  # Close all connections
 dev.off()  # Close any open graphic devices
+dev.new()  # Open new plotting window
+
 
 # Run RFE to select the best features ----
 set.seed(123)
@@ -262,7 +258,8 @@ tuneRF(kept_drivers, train[, 1], ntreeTry = 1000, stepFactor = 1, improve = 0.5,
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
-rf_model2 <- randomForest(rf_formula, data = train, importance = TRUE, proximity = TRUE, ntree = 1000, mtry = 5)
+rf_model2 <- randomForest(rf_formula, data = train, 
+                          importance = TRUE, proximity = TRUE, ntree = 700, mtry = 10)
 
 # Visualize output for rf_model2
 print(rf_model2)
@@ -270,7 +267,7 @@ randomForest::varImpPlot(rf_model2)
 
 # Generate plots comparing predicted vs observed ----
 lm_plot <- plot(rf_model2$predicted, train$GenConc, pch = 16, cex = 1.5,
-                xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers - Average Gen Concentration",
+                xlab = "Predicted", ylab = "Observed", main = "Trained RF Model 2 Average Gen Concentration",
                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
   theme(text = element_text(size = 40), face = "bold")
@@ -317,7 +314,26 @@ legend(
   "bottomright", bty = "n", cex = 1.5,
   legend = paste("MSE =", format(test_mse, digits = 3))
 )
-dev.off()
+dev.off()  # Close the PDF device
+dev.new()  # Open new plotting window
+
+# ---- Now Display in RStudio ----
+plot(
+  test_predictions, test$GenConc, 
+  pch = 16, cex = 1.5,
+  xlab = "Predicted", ylab = "Observed", 
+  main = "Observed vs Predicted - Test Data (rf_model2)",
+  cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5
+)
+abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2)
+legend(
+  "topleft", bty = "n", cex = 1.5,
+  legend = paste("R² =", format(test_r2, digits = 3))
+)
+legend(
+  "bottomright", bty = "n", cex = 1.5,
+  legend = paste("MSE =", format(test_mse, digits = 3))
+)
 
 # ---- Save Test Predictions ----
 test_results <- test %>%
