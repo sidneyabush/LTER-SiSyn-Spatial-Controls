@@ -82,13 +82,14 @@ output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
 
 # Define record length (1, 5, 10, 20... years)
-record_length <- 20
+record_length <- 5
 
 # Read in and tidy data ----
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
 
 # Load and preprocess the data with dynamic file selection
 drivers_df <- read.csv(sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.csv", record_length)) %>%
+  filter(GenYield <= 80) %>%  # Remove rows where FNYield > 60 %>% 
   select(-contains("Yield"), -contains("Gen"), -contains("major"), -Max_Daylength) %>%
   dplyr::mutate_at(vars(18:33), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
   select(FNConc, everything()) %>%
@@ -98,7 +99,7 @@ drivers_df <- read.csv(sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.c
 na_summary <- drivers_df %>%
   pivot_longer(cols = -c(Stream_ID, Year), names_to = "Variable", values_to = "Value") %>%
   filter(is.na(Value)) %>%
-  filter(Year >= 2002 & Year <= 2024) %>%
+  filter(Year >= 2001 & Year <= 2024) %>%
   distinct(Stream_ID, Year, Variable)
 
 # Count the number of unique Stream_IDs before removing it

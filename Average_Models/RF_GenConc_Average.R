@@ -1,5 +1,3 @@
-dev.off()  # Close any open graphics device
-
 # Load needed packages
 librarian::shelf(remotes, RRF, caret, randomForest, DAAG, party, rpart, rpart.plot, mlbench, pROC, tree, dplyr,
                  plot.matrix, reshape2, rcartocolor, arsenal, googledrive, data.table, ggplot2, corrplot, pdp, 
@@ -23,15 +21,15 @@ save_correlation_plot <- function(driver_cor, output_dir) {
 # Save RF Variable Importance Plot
 save_rf_importance_plot <- function(rf_model, output_dir) {
   pdf(sprintf("%s/RF_variable_importance_GenConc_Average_5_years.pdf", output_dir), width = 8, height = 6)
-  randomForest::varImpPlot(rf_model, main = "RF Variable Importance - average Gen Concentration", col = "darkblue")
+  randomForest::varImpPlot(rf_model, main = "RF Variable Importance - Average Gen Concentration", col = "darkblue")
   dev.off()
 }
 
 # Save Linear Model (LM) Plot
 save_lm_plot <- function(rf_model, observed, output_dir) {
-  pdf(sprintf("%s/RF_lm_plot_GenConc_Average_5_years.pdf", output_dir), width = 8, height = 8)
+  pdf(sprintf("%s/RF_lm_plot_GenConc_Average_5_years_Train.pdf", output_dir), width = 8, height = 8)
   plot(rf_model$predicted, observed, pch = 16, cex = 1.5,
-       xlab = "Predicted", ylab = "Observed", main = "Observed vs Predicted - average Gen Concentration",
+       xlab = "Predicted", ylab = "Observed", main = "Observed vs Predicted - Average Gen Concentration",
        cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5)
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2)
   legend("topleft", bty = "n", cex = 1.5, legend = paste("R² =", format(mean(rf_model$rsq), digits = 3)))
@@ -87,10 +85,12 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 # Load and preprocess the data with dynamic file selection
 drivers_df <- read.csv(sprintf("AllDrivers_Harmonized_Average_filtered_%d_years.csv", record_length)) %>%
-  select(-contains("Yield"), -contains("FN"), -contains("major"), -Max_Daylength) %>%
+  filter(!grepl("^MCM", Stream_ID)) %>% # Remove all Stream_IDs that start with "MCM"
+  filter(GenYield <= 80) %>%  # Remove rows where FNYield > 60 %>% 
+  dplyr::select(-contains("Yield"), -contains("FN"), -contains("major"), -Max_Daylength) %>%
   dplyr::mutate_at(vars(19:34), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
   select(GenConc, everything()) %>%
-  filter(!Stream_ID %in% c("USGS__Dismal River"))  # Remove specific outlier site
+  filter(!Stream_ID %in% c("USGS__Dismal River", "KRR__S65E"))  # Remove specific outlier site
 
 # Identify Stream_IDs, Years, and Variables with NA values
 na_summary <- drivers_df %>%
@@ -265,18 +265,10 @@ rf_model2 <- randomForest(rf_formula, data = train,
 print(rf_model2)
 randomForest::varImpPlot(rf_model2)
 
-# Generate plots comparing predicted vs observed ----
-lm_plot <- plot(rf_model2$predicted, train$GenConc, pch = 16, cex = 1.5,
-                xlab = "Predicted", ylab = "Observed", main = "Trained RF Model 2 Average Gen Concentration",
-                cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
-  abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
-  theme(text = element_text(size = 40), face = "bold")
-legend("topleft", bty = "n", cex = 1.5, legend = paste("R2 =", format(mean(rf_model2$rsq), digits = 3)))
-legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(rf_model2$mse), digits = 3)))
-
 # Save RF variable importance plot and LM plot for rf_model2
 save_rf_importance_plot(rf_model2, output_dir)
 save_lm_plot(rf_model2, train$GenConc, output_dir)
+
 
 # Save model and required objects for SHAP analysis
 save(rf_model2, file = "GenConc_Average_rf_model2.RData")
@@ -322,7 +314,7 @@ plot(
   test_predictions, test$GenConc, 
   pch = 16, cex = 1.5,
   xlab = "Predicted", ylab = "Observed", 
-  main = "Observed vs Predicted - Test Data",
+  main = "Observed vs Predicted - GenConc Average Test Data",
   cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5
 )
 abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2)
@@ -339,8 +331,8 @@ legend(
 test_results <- test %>%
   mutate(Predicted_GenConc = test_predictions)  # Add predictions to test data
 
-write.csv(test_results, "Test_Predictions_rf_model2_Average.csv", row.names = FALSE)
+write.csv(test_results, "Test_Predictions_rf_model2_GenConc_Average.csv", row.names = FALSE)
 
-cat("Test predictions saved to Test_Predictions_rf_model2_Average.csv\n")
+cat("Test predictions saved to Test_Predictions_rf_model2_GenConc_Average.csv\n")
 
 

@@ -39,14 +39,15 @@ save_lm_plot <- function(rf_model, observed, output_dir) {
 
 # Parallelized function to test ntree
 test_numtree_parallel <- function(ntree_list, formula, data) {
-  num_cores <- parallel::detectCores() - 1
+  num_cores <- min(4, parallel::detectCores() - 2)  # Use a maximum of 4 cores
   cl <- parallel::makeCluster(num_cores)
   doParallel::registerDoParallel(cl)
+  
   
   # Collect results
   MSE <- foreach(ntree = ntree_list, .combine = 'c', .packages = 'randomForest') %dopar% {
     set.seed(123)
-    rf_model <- randomForest(formula, data = data, importance = TRUE, proximity = TRUE, ntree = ntree)
+    rf_model <- randomForest(formula, data = data, importance = TRUE, ntree = ntree)
     mean(rf_model$mse)  # Return the mean of the MSE vector
   }
   
@@ -74,239 +75,82 @@ test_numtree_parallel_optimized <- function(ntree_list, formula, data) {
   return(MSE)
 }
 
-
 # Set the output directory path for saving PDFs
 output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model/FNYield"
 
 # Read in and tidy data ----
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
 
-drivers_df <- read.csv("AllDrivers_Harmonized_Yearly.csv") %>%
-  filter(FNYield <= 60) %>%  # Remove rows where FNYield > 60 %>% 
-  filter_all(all_vars(!is.infinite(.))) %>%
-  filter(FNYield <= 1.5 * FNYield & FNYield >= 0.5 * FNYield) %>%  # Filter rows where FNYield is within 50% of FNYield
-  select(-contains("Conc"), -contains("Gen"), -contains("major"), -X, -drainage_area) %>%
-  dplyr::mutate_at(vars(17:32), ~replace(., is.na(.), 0)) %>%
-  # mutate(
-  #   permafrost_mean_m = ifelse(is.na(permafrost_mean_m), 0, permafrost_mean_m),  # Set NA values in permafrost_mean_m to 0
-  #   # num_days = ifelse(is.na(num_days), 0, num_days),        # Set NA values in num_days to 0
-  #   # max_prop_area = ifelse(is.na(max_prop_area), 0, max_prop_area),  # Set NA values in max_prop_area to 0
-  #   across(where(is.integer), as.numeric)) %>%
-  select(FNYield, everything()) %>%# Load needed packages
-  librarian::shelf(iml, ggplot2, dplyr, tidyr, reshape2, parallel, foreach, randomForest, tibble, viridis)
+# Define record length (1, 5, 10, 20... years)
+record_length <- 5
 
-# Clear environment
-rm(list = ls())
+# Read in and tidy data ----
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
 
-# Set working directory                 
-setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
+# Load and preprocess the data with dynamic file selection
+drivers_df <- read.csv(sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.csv", record_length)) %>%
+  filter(GenYield <= 80) %>%  # Remove rows where FNYield > 60 %>% 
+  select(-contains("Conc"), -contains("Gen"), -contains("major"), -Max_Daylength) %>%
+  dplyr::mutate_at(vars(18:33), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
+  select(FNYield, everything()) %>%
+  filter(!Stream_ID %in% c("USGS__Dismal River"))  # Remove specific outlier site
 
-# Load required data and model from the RF script
-load("FNYield_Yearly_rf_model2.RData")
-load("FNYield_Yearly_kept_drivers.RData")
-load("FNYield_Yearly_train.RData")
+# Identify Stream_IDs, Years, and Variables with NA values
+na_summary <- drivers_df %>%
+  pivot_longer(cols = -c(Stream_ID, Year), names_to = "Variable", values_to = "Value") %>%
+  filter(is.na(Value)) %>%
+  filter(Year >= 2001 & Year <= 2024) %>%
+  distinct(Stream_ID, Year, Variable)
 
-drivers_df <- train
+# Count the number of unique Stream_IDs before removing it
+unique_stream_id_na_count <- na_summary %>%
+  summarise(na_summary = n_distinct(Stream_ID)) %>%
+  pull(na_summary)
 
-# Set global seed and output directory
-set.seed(123)
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model/FNYield"
+# Export unique NA Stream_IDs with dynamic filename
+write.csv(na_summary, 
+          sprintf("yearly_NA_stream_ids_%d_years.csv", record_length), 
+          row.names = FALSE)
 
-# Function to create SHAP values
-generate_shap_values <- function(model, kept_drivers, sample_size = 30) {
-  # Define a custom prediction function
-  custom_predict <- function(object, newdata) {
-    newdata <- as.data.frame(newdata)
-    predict(object, newdata = newdata)
-  }
-  
-  # Compute SHAP values using fastshap
-  shap_values <- fastshap::explain(
-    object = model,
-    X = kept_drivers,
-    pred_wrapper = custom_predict,
-    nsim = sample_size
-  )
-  
-  return(shap_values)
-}
+gc()
 
-# Generate SHAP values
-shap_values <- generate_shap_values(rf_model2, kept_drivers, sample_size = 30)
+# Keep only complete cases
+drivers_df <- drivers_df %>%
+  select(FNYield, everything()) %>%
+  filter(complete.cases(.))
 
-# Function to create overall SHAP plots for the full model
-create_all_shapley_plots <- function(shap_values, output_file) {
-  # Calculate overall feature importance
-  overall_feature_importance <- shap_values %>%
-    as.data.frame() %>%
-    summarise(across(everything(), ~ mean(abs(.)))) %>%
-    pivot_longer(cols = everything(), names_to = "feature", values_to = "importance") %>%
-    arrange(desc(importance))
-  
-  # Create the feature importance plot
-  pdf(output_file, width = 8, height = 8)
-  overall_importance_plot <- ggplot(overall_feature_importance, aes(x = reorder(feature, importance), y = importance)) +
-    geom_bar(stat = "identity", fill = "steelblue") +
-    coord_flip() +
-    labs(x = "Feature", y = "Mean Absolute SHAP Value", title = "Overall Feature Importance") +
-    theme_minimal()
-  print(overall_importance_plot)
-  dev.off()
-}
+# Count the number of unique Stream_IDs before removing it
+unique_stream_id_count <- drivers_df %>%
+  summarise(unique_count = n_distinct(Stream_ID)) %>%
+  pull(unique_count)
 
-# Output full SHAP plots
-output_file <- sprintf("%s/FNYield_Yearly_Overall_SHAP_Variable_Importance.pdf", output_dir)
-create_all_shapley_plots(shap_values, output_file)
+# Export with dynamic filename
+write.csv(drivers_df, 
+          sprintf("unique_stream_ids_yearly_%d_years.csv", record_length), 
+          row.names = FALSE)
 
-# Function to create SHAP-based partial dependence plots
-create_shap_partial_dependence_plots <- function(shap_values, kept_drivers, drivers_df, output_dir, color_var = "FNYield") {
-  # Check if the specified coloring variable exists in drivers_df
-  if (!(color_var %in% colnames(drivers_df))) {
-    stop(paste("The specified color_var:", color_var, "is not in the drivers_df dataframe."))
-  }
-  
-  # Open a PDF to save all SHAP partial dependence plots
-  pdf(file = file.path(output_dir, "FNYield_Yearly_SHAP_Partial_Dependence_Plots.pdf"), width = 8, height = 8)
-  
-  # Loop through each feature in shap_values
-  for (feature in colnames(shap_values)) {
-    # Extract SHAP values for the current feature
-    shap_long <- tibble::tibble(
-      feature_value = kept_drivers[[feature]],  # Feature values from kept_drivers
-      shap_value = shap_values[, feature],     # SHAP values from shap_values (matrix indexing)
-      color_value = drivers_df[[color_var]]    # Coloring variable
-    )
-    
-    # Add the log scale for select drivers
-    log_scaled_drivers <- c("drainage_area", "q_5", "evapotrans", "silicate_weathering")
-    
-    # Create the SHAP-based partial dependence plot
-    shap_pdp_plot <- ggplot(shap_long, aes(x = feature_value, y = shap_value, color = color_value)) +
-      geom_point(alpha = 0.6) +
-      scale_color_viridis_c(name = color_var) +
-      geom_hline(yintercept = 0, color = "darkred", linetype = "dashed", size = 1) +
-      labs(
-        title = paste("SHAP Partial Dependence Plot for", feature),
-        x = ifelse(feature %in% log_scaled_drivers, paste("log(", feature, ")", sep = ""), paste("Value of", feature)),
-        y = "SHAP Value"
-      ) +
-      theme_minimal() +
-      theme(plot.title = element_text(size = 16, face = "bold")) +
-      if (feature %in% log_scaled_drivers) scale_x_log10()
-    
-    # Print the plot to the PDF
-    print(shap_pdp_plot)
-  }
-  
-  # Close the PDF file
-  dev.off()
-  message("SHAP partial dependence plots saved to PDF.")
-}
+gc()
 
-# Generate SHAP-based partial dependence plots
-create_shap_partial_dependence_plots(
-  shap_values = shap_values,
-  kept_drivers = kept_drivers,
-  drivers_df = drivers_df,
-  output_dir = output_dir,
-  color_var = "FNYield"
-)
-
-create_subset_importance_plots <- function(shap_values, conditions, kept_drivers, output_dir) {
-  for (condition in conditions) {
-    condition_column <- condition$column
-    condition_value <- condition$value
-    operator <- condition$operator
-    
-    # Skip conditions for features not in kept_drivers
-    if (!condition_column %in% colnames(kept_drivers)) {
-      message(paste("Skipping condition:", condition_column, "not found in kept_drivers."))
-      next
-    }
-    
-    # Filter kept_drivers based on the condition
-    subset_kept_drivers <- kept_drivers %>%
-      filter(case_when(
-        operator == ">" ~ .data[[condition_column]] > condition_value,
-        operator == "<" ~ .data[[condition_column]] < condition_value,
-        operator == "=" ~ .data[[condition_column]] == condition_value,
-        TRUE ~ FALSE
-      ))
-    
-    # Exclude the condition_column from the drivers
-    subset_kept_drivers <- subset_kept_drivers %>%
-      select(-all_of(condition_column))
-    
-    # Subset SHAP values to match filtered drivers
-    subset_shap_values <- shap_values[rownames(subset_kept_drivers), ]
-    
-    # Convert subset_shap_values to a data frame and exclude the condition_column
-    subset_shap_values <- as.data.frame(subset_shap_values) %>%
-      select(-all_of(condition_column))
-    
-    # Summarize feature importance
-    subset_importance <- subset_shap_values %>%
-      summarise(across(everything(), ~ mean(abs(.)))) %>%
-      pivot_longer(cols = everything(), names_to = "feature", values_to = "importance") %>%
-      arrange(desc(importance))
-    
-    # Create the importance plot
-    subset_importance_plot <- ggplot(subset_importance, aes(x = reorder(feature, importance), y = importance)) +
-      geom_bar(stat = "identity", fill = "steelblue") +
-      coord_flip() +
-      labs(
-        title = paste("Variable Importance for", condition_column, operator, condition_value, "(Excluding Subset Driver)"),
-        x = "Feature",
-        y = "Mean Absolute SHAP Value"
-      ) +
-      theme_minimal()
-    
-    # Save the plot
-    output_file <- file.path(output_dir, paste0("SHAP_Variable_Importance_", condition_column, "_", operator, "_", condition_value, "_Excluding_Subset_Driver.pdf"))
-    ggsave(output_file, plot = subset_importance_plot, width = 8, height = 6)
-    message(paste("Subset variable importance plot saved:", output_file))
-  }
-}
-
-
-# Define multiple flexible conditions for subsetting
-conditions <- list(
-  list(column = "rocks_volcanic", value = 50, operator = ">"),
-  list(column = "land_shrubland_grassland", value = 50, operator = ">"),
-  list(column = "land_shrubland_grassland", value = 50, operator = "<"),
-  list(column = "Max_Daylength", value = 17, operator = "<"),
-  list(column = "Max_Daylength", value = 17, operator = ">")
-)
-
-# Retain only conditions relevant to kept_drivers
-valid_conditions <- lapply(conditions, function(cond) {
-  if (cond$column %in% colnames(kept_drivers)) {
-    return(cond)
-  } else {
-    message(paste("Skipping condition for non-kept feature:", cond$column))
-    return(NULL)
-  }
-})
-valid_conditions <- Filter(Negate(is.null), valid_conditions)  # Remove NULLs
-
-# Generate importance plots for valid subsets
-create_subset_importance_plots(
-  shap_values = shap_values,
-  conditions = valid_conditions,
-  kept_drivers = kept_drivers,
-  output_dir = output_dir
-)
-
-  select(-Stream_ID, -Year) %>%
-  drop_na()
+# Final step: Remove Stream_ID and Year
+drivers_df <- drivers_df %>%
+  select(-Stream_ID, -Year)
 
 # Plot and save correlation matrix ----
-numeric_drivers <- 2:30
+numeric_drivers <- 2:31 # Change this range to reflect data frame length
 driver_cor <- cor(drivers_df[, numeric_drivers])
 save_correlation_plot(driver_cor, output_dir)
 
-# Test different ntree values for rf_model1 ----
-ntree_values <- seq(100, 2000, by = 100)  # Define ntree values
+# ---- Split Data into Train/Test ----
+# Add the new training and testing workflow here
+set.seed(123)
+split_index <- sample(2, nrow(drivers_df), replace = TRUE, prob = c(0.7, 0.3))
+train <- drivers_df[split_index == 1, ]
+test <- drivers_df[split_index == 2, ]
+
+# ---- Train Initial RF Model ----
+# Test different ntree values for rf_model1
+ntree_values <- seq(100, 2000, by = 100)  # Reduce to avoid memory overload
+
 set.seed(123)
 MSE_list_rf1 <- test_numtree_parallel(ntree_values, FNYield ~ ., drivers_df)
 
@@ -316,6 +160,8 @@ MSE_df_rf1 <- data.frame(
   mean_MSE = sapply(MSE_list_rf1, mean)
 )
 
+gc()
+
 ggplot(MSE_df_rf1, aes(ntree, mean_MSE)) + 
   geom_point() + 
   geom_line() + 
@@ -323,26 +169,50 @@ ggplot(MSE_df_rf1, aes(ntree, mean_MSE)) +
   scale_x_continuous(breaks = seq(100, 2000, 100)) + 
   theme(text = element_text(size = 20))
 
+gc()
 
 # Manually select ntree for rf_model1 ----
-manual_ntree_rf1 <- 1000  # Replace with your chosen value
+manual_ntree_rf1 <- 700  # Replace with chosen value
+
+gc()
 
 # Tune mtry for rf_model1 ----
-tuneRF(drivers_df[, 2:ncol(drivers_df)], drivers_df[, 1], ntreeTry = manual_ntree_rf1, stepFactor = 1, improve = 0.5, plot = TRUE)
+tuneRF(train[, 2:ncol(train)], train[, 1], ntreeTry = manual_ntree_rf1, stepFactor = 1, improve = 0.5, plot = TRUE)
+
+gc()
 
 # Manually select mtry for rf_model1 ----
-manual_mtry_rf1 <- 10  # Replace with your chosen value
+manual_mtry_rf1 <- 10  # Replace with chosen value
+
+gc()
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
-rf_model1 <- randomForest(FNYield ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = manual_ntree_rf1, mtry = manual_mtry_rf1)
+rf_model1 <- randomForest(FNYield ~ ., data = train, importance = TRUE, proximity = TRUE, ntree = manual_ntree_rf1, mtry = manual_mtry_rf1)
 
 # Visualize output for rf_model1
 print(rf_model1)
 randomForest::varImpPlot(rf_model1)
 
+# Generate plots comparing predicted vs observed ----
+lm_plot <- plot(rf_model1$predicted, train$FNYield, pch = 16, cex = 1.5,
+                xlab = "Predicted", ylab = "Observed", main = "Trained RF Model 1 Yearly FN Yield",
+                cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
+  abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
+  theme(text = element_text(size = 40), face = "bold")
+legend("topleft", bty = "n", cex = 1.5, legend = paste("R2 =", format(mean(rf_model1$rsq), digits = 3)))
+legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(rf_model1$mse), digits = 3)))
+
+# Evaluate RF Model on Train/Test Datasets
+train_pred <- predict(rf_model1, train)
+test_pred <- predict(rf_model1, test)
+
+cat("Train R²:", cor(train_pred, train$FNYield)^2, "\n")
+cat("Test R²:", cor(test_pred, test$FNYield)^2, "\n")
+
+# Start Tuning with RFE and 2nd RFModel ----
 # Global seed for RFE ----
-size <- ncol(drivers_df) - 1  # This is the number of predictor variables
+size <- ncol(train) - 1  # This is the number of predictor variables
 cv_repeats <- 5
 cv_number <- 5
 total_repeats <- (cv_repeats * cv_number) + 1
@@ -357,8 +227,8 @@ control <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = cv_r
                       number = cv_number, verbose = TRUE, allowParallel = FALSE)
 
 # Divide data into predictor variables (x) and response variable (y)
-x <- drivers_df[, !(colnames(drivers_df) == "FNYield")]
-y <- drivers_df$FNYield
+x <- train[, !(colnames(train) == "FNYield")]
+y <- train$FNYield
 
 sink(NULL)  # Reset output sink
 closeAllConnections()  # Close all connections
@@ -377,10 +247,10 @@ new_rf_input <- paste(predictors(result_rfe), collapse = "+")
 # Format those features into a formula for the optimized random forest model
 rf_formula <- formula(paste("FNYield ~", new_rf_input))
 
-# Test different ntree values using parallel processing
-ntree_values <- seq(100, 2000, by = 100)  # Define ntree values to test
+# Test different ntree values 
+ntree_values <- seq(100, 2000, by = 100)  
 set.seed(123)
-MSE_list_parallel <- test_numtree_parallel_optimized(ntree_values, rf_formula, drivers_df)
+MSE_list_parallel <- test_numtree_parallel_optimized(ntree_values, rf_formula, train)
 
 # Create a data frame for visualization
 MSE_df_parallel <- data.frame(
@@ -398,19 +268,19 @@ ggplot(MSE_df_parallel, aes(x = ntree, y = mean_MSE)) +
 
 # Global seed before re-tuning mtry
 set.seed(123)
-kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
-tuneRF(kept_drivers, drivers_df[, 1], ntreeTry = 1000, stepFactor = 1, improve = 0.5, plot = FALSE)
+kept_drivers <- train[, colnames(train) %in% predictors(result_rfe)]
+tuneRF(kept_drivers, train[, 1], ntreeTry = 1000, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
-rf_model2 <- randomForest(rf_formula, data = drivers_df, importance = TRUE, proximity = TRUE, ntree = 1000, mtry = 5)
+rf_model2 <- randomForest(rf_formula, data = train, importance = TRUE, proximity = TRUE, ntree = 1000, mtry = 5)
 
 # Visualize output for rf_model2
 print(rf_model2)
 randomForest::varImpPlot(rf_model2)
 
 # Generate plots comparing predicted vs observed ----
-lm_plot <- plot(rf_model2$predicted, drivers_df$FNYield, pch = 16, cex = 1.5,
+lm_plot <- plot(rf_model2$predicted, train$FNYield, pch = 16, cex = 1.5,
                 xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers - Yearly FN Yield",
                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
@@ -420,10 +290,50 @@ legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(
 
 # Save RF variable importance plot and LM plot for rf_model2
 save_rf_importance_plot(rf_model2, output_dir)
-save_lm_plot(rf_model2, drivers_df$FNYield, output_dir)
+save_lm_plot(rf_model2, train$FNYield, output_dir)
 
 # Save model and required objects for SHAP analysis
 save(rf_model2, file = "FNYield_Yearly_rf_model2.RData")
-kept_drivers <- drivers_df[, colnames(drivers_df) %in% predictors(result_rfe)]
+kept_drivers <- train[, colnames(train) %in% predictors(result_rfe)]
 save(kept_drivers, file = "FNYield_Yearly_kept_drivers.RData")
-save(drivers_df, file = "FNYield_Yearly_drivers_df.RData")
+save(train, file = "FNYield_Yearly_train.RData")
+
+# ---- Use Predict Function on Test Data ----
+# Predict on test data using rf_model2
+test_predictions <- predict(rf_model2, test)
+
+# Evaluate predictions: Calculate R² and Mean Squared Error
+test_r2 <- cor(test_predictions, test$FNYield)^2
+test_mse <- mean((test_predictions - test$FNYield)^2)
+
+cat("Test R² for rf_model2:", test_r2, "\n")
+cat("Test MSE for rf_model2:", test_mse, "\n")
+
+# ---- Visualize Observed vs Predicted ----
+# Save observed vs predicted plot for test data
+pdf(sprintf("%s/RF_Observed_vs_Predicted_Test_rf_model2.pdf", output_dir), width = 8, height = 8)
+plot(
+  test_predictions, test$FNYield, 
+  pch = 16, cex = 1.5,
+  xlab = "Predicted", ylab = "Observed", 
+  main = "Observed vs Predicted - Test Data (rf_model2)",
+  cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5
+)
+abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2)
+legend(
+  "topleft", bty = "n", cex = 1.5,
+  legend = paste("R² =", format(test_r2, digits = 3))
+)
+legend(
+  "bottomright", bty = "n", cex = 1.5,
+  legend = paste("MSE =", format(test_mse, digits = 3))
+)
+dev.off()
+
+# ---- Save Test Predictions ----
+test_results <- test %>%
+  mutate(Predicted_FNYield = test_predictions)  # Add predictions to test data
+
+write.csv(test_results, "Test_Predictions_rf_model2_annual_FNYield_Yearly.csv", row.names = FALSE)
+
+
