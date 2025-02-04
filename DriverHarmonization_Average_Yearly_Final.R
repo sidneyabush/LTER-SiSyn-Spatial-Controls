@@ -5,7 +5,7 @@ librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr, stri
 rm(list = ls())
 
 # Define the record length in years (change this to 1, 5, 10, 20... as needed)
-record_length <- 20  
+record_length <- 5  
 
 # ## ------------------------------------------------------- ##
 #              # Read in and Tidy Data ----
@@ -158,7 +158,7 @@ tot <- tot %>%
               # Spatial Drivers----
 ## ------------------------------------------------------- ##
 # Read and preprocess spatial drivers
-si_drivers <- read.csv("all-data_si-extract_2_202412.csv", stringsAsFactors = FALSE) %>%
+si_drivers <- read.csv("all-data_si-extract_2_20250203.csv", stringsAsFactors = FALSE) %>%
   select(-contains("soil")) %>%
   dplyr::mutate(
     Stream_Name = case_when(
@@ -171,14 +171,11 @@ si_drivers <- read.csv("all-data_si-extract_2_202412.csv", stringsAsFactors = FA
   mutate(Stream_ID = paste0(LTER, "__", Stream_Name)) %>%
   # Remove MCM LTER (no spatial data)
   filter(!(LTER == "MCM")) %>%
-  # # Remove specific Stream_IDs (no shapefiles or spatial data)
-  # filter(!Stream_ID %in% c("MD__Barham", "MD__Jingellic", "USGS__Arkansas River at Murray Dam",
-  #                          "USGS__COLUMBIA RIVER AT PORT WESTWARD", "USGS__DMF Brazos River", 
-  #                          "USGS__YAMPA RIVER BELOW CRAIG")) %>%
   # Remove columns with .x
-  select(-contains(".x")) %>%
+  select(-contains(".y"), -contains(".x")) 
+  # %>%
   # Rename columns with .x by removing the suffix
-  rename_with(~ str_remove(., "\\.x$"))
+  # rename_with(~ str_remove(., "\\.x$"))
 
 si_drivers <- standardize_stream_id(si_drivers)
 

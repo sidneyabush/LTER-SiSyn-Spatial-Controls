@@ -14,26 +14,26 @@ set.seed(123)
 save_correlation_plot <- function(driver_cor, output_dir) {
   pdf(sprintf("%s/correlation_plot_GenConc_Average_5_years.pdf", output_dir), width = 10, height = 10)
   corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = FALSE)
-  title("Average GenConc")
+  title("All Data Average GenConc")
   dev.off()
 }
 
 # Save RF Variable Importance Plot
 save_rf_importance_plot <- function(rf_model, output_dir) {
   pdf(sprintf("%s/RF_variable_importance_GenConc_Average_5_years.pdf", output_dir), width = 8, height = 6)
-  randomForest::varImpPlot(rf_model, main = "RF Variable Importance - Average Gen Concentration", col = "darkblue")
+  randomForest::varImpPlot(rf_model, main = "rf_model2 - Ave GenConc", col = "darkblue")
   dev.off()
 }
 
 # Save Linear Model (LM) Plot
-save_lm_plot <- function(rf_model, observed, output_dir) {
-  pdf(sprintf("%s/RF_lm_plot_GenConc_Average_5_years_Train.pdf", output_dir), width = 8, height = 8)
-  plot(rf_model$predicted, observed, pch = 16, cex = 1.5,
-       xlab = "Predicted", ylab = "Observed", main = "Observed vs Predicted - Average Gen Concentration",
+save_lm_plot <- function(rf_model2, observed, output_dir) {
+  pdf(sprintf("%s/RF2_lm_plot_GenConc_Average_5_years_Train.pdf", output_dir), width = 8, height = 8)
+  plot(rf_model2$predicted, observed, pch = 16, cex = 1.5,
+       xlab = "Predicted", ylab = "Observed", main = "RF Model 2 Trained Data Ave GenConc",
        cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5)
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2)
-  legend("topleft", bty = "n", cex = 1.5, legend = paste("R² =", format(mean(rf_model$rsq), digits = 3)))
-  legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(rf_model$mse), digits = 3)))
+  legend("topleft", bty = "n", cex = 1.5, legend = paste("R² =", format(mean(rf_model2$rsq), digits = 3)))
+  legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(rf_model2$mse), digits = 3)))
   dev.off()
 }
 
@@ -186,7 +186,7 @@ randomForest::varImpPlot(rf_model1)
 
 # Generate plots comparing predicted vs observed ----
 lm_plot <- plot(rf_model1$predicted, train$GenConc, pch = 16, cex = 1.5,
-                xlab = "Predicted", ylab = "Observed", main = "Trained RF Model 1 Average GenConc",
+                xlab = "Predicted", ylab = "Observed", main = "RF Model 1 Trained Data - Ave GenConc",
                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
   theme(text = element_text(size = 40), face = "bold")
@@ -294,7 +294,7 @@ plot(
   test_predictions, test$GenConc, 
   pch = 16, cex = 1.5,
   xlab = "Predicted", ylab = "Observed", 
-  main = "Observed vs Predicted - Test Data (rf_model2)",
+  main = "RF Model 2 Test Data Ave GenConc",
   cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5
 )
 abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2)
@@ -314,7 +314,7 @@ plot(
   test_predictions, test$GenConc, 
   pch = 16, cex = 1.5,
   xlab = "Predicted", ylab = "Observed", 
-  main = "Observed vs Predicted - GenConc Average Test Data",
+  main = "RF Model 2 Test Data- Ave GenConc",
   cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5
 )
 abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2)
