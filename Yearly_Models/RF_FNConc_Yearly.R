@@ -14,14 +14,14 @@ set.seed(123)
 save_correlation_plot <- function(driver_cor, output_dir) {
   pdf(sprintf("%s/correlation_plot.pdf", output_dir), width = 10, height = 10)
   corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = FALSE)
-  title("Yearly FN Si Concentration")
+  title("Yearly FNConc")
   dev.off()
 }
 
 # Save RF Variable Importance Plot
 save_rf_importance_plot <- function(rf_model, output_dir) {
   pdf(sprintf("%s/RF_variable_importance.pdf", output_dir), width = 8, height = 6)
-  randomForest::varImpPlot(rf_model, main = "RF Variable Importance - Yearly FN Concentration", col = "darkblue")
+  randomForest::varImpPlot(rf_model, main = "RF Model 2 Trained Data - Yearly FNConc", col = "darkblue")
   dev.off()
 }
 
@@ -29,7 +29,7 @@ save_rf_importance_plot <- function(rf_model, output_dir) {
 save_lm_plot <- function(rf_model, observed, output_dir) {
   pdf(sprintf("%s/RF_lm_plot.pdf", output_dir), width = 8, height = 8)
   plot(rf_model$predicted, observed, pch = 16, cex = 1.5,
-       xlab = "Predicted", ylab = "Observed", main = "Observed vs Predicted - Yearly FN Concentration",
+       xlab = "Predicted", ylab = "Observed", main = "RF Model 2 Trained Data - Yearly FNConc",
        cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5)
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2)
   legend("topleft", bty = "n", cex = 1.5, legend = paste("R² =", format(mean(rf_model$rsq), digits = 3)))
@@ -90,10 +90,10 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 # Load and preprocess the data with dynamic file selection
 drivers_df <- read.csv(sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.csv", record_length)) %>%
   filter(GenYield <= 80) %>%  # Remove rows where FNYield > 60 %>% 
-  select(-contains("Yield"), -contains("Gen"), -contains("major"), -Max_Daylength) %>%
-  dplyr::mutate_at(vars(18:33), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
+  select(-contains("Yield"), -contains("Gen"), -contains("major"), -Max_Daylength, -Q) %>%
+  dplyr::mutate_at(vars(17:32), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
   select(FNConc, everything()) %>%
-  filter(!Stream_ID %in% c("USGS__Dismal River"))  # Remove specific outlier site
+  filter(!Stream_ID %in% c("USGS__Dismal River", "KRR__S65E"))  # Remove specific outlier sites
 
 # Identify Stream_IDs, Years, and Variables with NA values
 na_summary <- drivers_df %>%
@@ -136,7 +136,7 @@ drivers_df <- drivers_df %>%
   select(-Stream_ID, -Year)
 
 # Plot and save correlation matrix ----
-numeric_drivers <- 2:31 # Change this range to reflect data frame length
+numeric_drivers <- 2:30 # Change this range to reflect data frame length
 driver_cor <- cor(drivers_df[, numeric_drivers])
 save_correlation_plot(driver_cor, output_dir)
 
@@ -194,14 +194,14 @@ rf_model1 <- randomForest(FNConc ~ ., data = train, importance = TRUE, proximity
 print(rf_model1)
 randomForest::varImpPlot(rf_model1)
 
-# Generate plots comparing predicted vs observed ----
-lm_plot <- plot(rf_model1$predicted, train$FNConc, pch = 16, cex = 1.5,
-                xlab = "Predicted", ylab = "Observed", main = "Trained RF Model 1 Yearly FN Concentration",
-                cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
-  abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
-  theme(text = element_text(size = 40), face = "bold")
-legend("topleft", bty = "n", cex = 1.5, legend = paste("R2 =", format(mean(rf_model1$rsq), digits = 3)))
-legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(rf_model1$mse), digits = 3)))
+# # Generate plots comparing predicted vs observed ----
+# lm_plot <- plot(rf_model1$predicted, train$FNConc, pch = 16, cex = 1.5,
+#                 xlab = "Predicted", ylab = "Observed", main = "RF Model 1 Trained Data - Yearly FNConc",
+#                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
+#   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
+#   theme(text = element_text(size = 40), face = "bold")
+# legend("topleft", bty = "n", cex = 1.5, legend = paste("R2 =", format(mean(rf_model1$rsq), digits = 3)))
+# legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(rf_model1$mse), digits = 3)))
 
 # Evaluate RF Model on Train/Test Datasets
 train_pred <- predict(rf_model1, train)
@@ -281,7 +281,7 @@ randomForest::varImpPlot(rf_model2)
 
 # Generate plots comparing predicted vs observed ----
 lm_plot <- plot(rf_model2$predicted, train$FNConc, pch = 16, cex = 1.5,
-                xlab = "Predicted", ylab = "Observed", main = "All Spatial Drivers - Yearly FN Concentration",
+                xlab = "Predicted", ylab = "Observed", main = "RF Model 2 Trained Data - Yearly FNConc",
                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
   theme(text = element_text(size = 40), face = "bold")
@@ -316,7 +316,7 @@ plot(
   test_predictions, test$FNConc, 
   pch = 16, cex = 1.5,
   xlab = "Predicted", ylab = "Observed", 
-  main = "Observed vs Predicted - Test Data (rf_model2)",
+  main = "RF Model 2 Test Data Yearly FNConc",
   cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5
 )
 abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2)
@@ -334,8 +334,8 @@ dev.off()
 test_results <- test %>%
   mutate(Predicted_FNConc = test_predictions)  # Add predictions to test data
 
-write.csv(test_results, "Test_Predictions_rf_model2_annual.csv", row.names = FALSE)
+write.csv(test_results, "Test_Predictions_rf_model2_yearly_FNConc.csv", row.names = FALSE)
 
-cat("Test predictions saved to Test_Predictions_rf_model2.csv\n")
+cat("Test predictions saved to Test_Predictions_rf_model2_yearly_FNConc.csv\n")
 
 

@@ -52,7 +52,7 @@ create_all_shapley_plots <- function(shap_values, output_file) {
   overall_importance_plot <- ggplot(overall_feature_importance, aes(x = reorder(feature, importance), y = importance)) +
     geom_bar(stat = "identity", fill = "steelblue") +
     coord_flip() +
-    labs(x = "Feature", y = "Mean Absolute SHAP Value", title = "Overall Feature Importance") +
+    labs(x = "Feature", y = "Mean Absolute SHAP Value", title = "GenConc Average - Overall Feature Importance") +
     theme_minimal()
   print(overall_importance_plot)
   dev.off()
@@ -90,7 +90,7 @@ create_shap_partial_dependence_plots <- function(shap_values, kept_drivers, trai
       scale_color_viridis_c(name = color_var) +
       geom_hline(yintercept = 0, color = "darkred", linetype = "dashed", size = 1) +
       labs(
-        title = paste("SHAP Partial Dependence Plot for", feature),
+        title = paste("Ave GenConc SHAP Partial Dependence Plot for", feature),
         x = ifelse(feature %in% log_scaled_drivers, paste("log(", feature, ")", sep = ""), paste("Value of", feature)),
         y = "SHAP Value"
       ) +

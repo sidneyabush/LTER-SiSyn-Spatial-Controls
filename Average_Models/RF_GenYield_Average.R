@@ -1,5 +1,3 @@
-dev.off()  # Close any open graphics device
-
 # Load needed packages
 librarian::shelf(remotes, RRF, caret, randomForest, DAAG, party, rpart, rpart.plot, mlbench, pROC, tree, dplyr,
                  plot.matrix, reshape2, rcartocolor, arsenal, googledrive, data.table, ggplot2, corrplot, pdp, 
@@ -16,26 +14,26 @@ set.seed(123)
 save_correlation_plot <- function(driver_cor, output_dir) {
   pdf(sprintf("%s/correlation_plot_GenYield_Average_5_years.pdf", output_dir), width = 10, height = 10)
   corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = FALSE)
-  title("Average GenYield")
+  title("All Data Average GenYield")
   dev.off()
 }
 
 # Save RF Variable Importance Plot
 save_rf_importance_plot <- function(rf_model, output_dir) {
-  pdf(sprintf("%s/RF_variable_importance_GenYield_Average_5_years_Train.pdf", output_dir), width = 8, height = 6)
-  randomForest::varImpPlot(rf_model, main = "RF Variable Importance - Average GenYield", col = "darkblue")
+  pdf(sprintf("%s/RF_variable_importance_GenYield_Average_5_years.pdf", output_dir), width = 8, height = 6)
+  randomForest::varImpPlot(rf_model, main = "rf_model2 - Ave GenYield", col = "darkblue")
   dev.off()
 }
 
 # Save Linear Model (LM) Plot
-save_lm_plot <- function(rf_model, observed, output_dir) {
-  pdf(sprintf("%s/RF_lm_plot_GenYield_Average_5_years.pdf", output_dir), width = 8, height = 8)
-  plot(rf_model$predicted, observed, pch = 16, cex = 1.5,
-       xlab = "Predicted", ylab = "Observed", main = "Observed vs Predicted - Average GenYield",
+save_lm_plot <- function(rf_model2, observed, output_dir) {
+  pdf(sprintf("%s/RF2_lm_plot_GenYield_Average_5_years_Train.pdf", output_dir), width = 8, height = 8)
+  plot(rf_model2$predicted, observed, pch = 16, cex = 1.5,
+       xlab = "Predicted", ylab = "Observed", main = "RF Model 2 Trained Data Ave GenYield",
        cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5)
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2)
-  legend("topleft", bty = "n", cex = 1.5, legend = paste("R² =", format(mean(rf_model$rsq), digits = 3)))
-  legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(rf_model$mse), digits = 3)))
+  legend("topleft", bty = "n", cex = 1.5, legend = paste("R² =", format(mean(rf_model2$rsq), digits = 3)))
+  legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(rf_model2$mse), digits = 3)))
   dev.off()
 }
 
@@ -89,8 +87,8 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 drivers_df <- read.csv(sprintf("AllDrivers_Harmonized_Average_filtered_%d_years.csv", record_length)) %>%
   filter(!grepl("^MCM", Stream_ID)) %>% # Remove all Stream_IDs that start with "MCM"
   filter(GenYield <= 80) %>%  # Remove rows where FNYield > 60 %>% 
-  select(-contains("Conc"), -contains("FN"), -contains("major"), -Max_Daylength) %>%
-  dplyr::mutate_at(vars(19:34), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
+  dplyr::select(-contains("Conc"), -contains("FN"), -contains("major"), -Max_Daylength, -drainage_area) %>%
+  dplyr::mutate_at(vars(18:33), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
   select(GenYield, everything()) %>%
   filter(!Stream_ID %in% c("USGS__Dismal River", "KRR__S65E"))  # Remove specific outlier sites
 
@@ -188,7 +186,7 @@ randomForest::varImpPlot(rf_model1)
 
 # Generate plots comparing predicted vs observed ----
 lm_plot <- plot(rf_model1$predicted, train$GenYield, pch = 16, cex = 1.5,
-                xlab = "Predicted", ylab = "Observed", main = "Trained RF Model 1 Average GenYield",
+                xlab = "Predicted", ylab = "Observed", main = "RF Model 1 Trained Data - Ave GenYield",
                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
   theme(text = element_text(size = 40), face = "bold")
@@ -228,119 +226,113 @@ result_rfe <- rfe(x = x, y = y, sizes = c(1:size), rfeControl = control)
 # Print RFE results
 print(result_rfe)
 
-# Check how many variables are selected by RFE
-selected_variables <- predictors(result_rfe)
+# Put selected features into variable
+new_rf_input <- paste(predictors(result_rfe), collapse = "+")
 
-if (length(selected_variables) == 1) {
-  # If only one variable is left, use a simple linear regression
-  lm_formula <- as.formula(paste("GenYield ~", selected_variables))
-  
-  cat("Only one variable selected (", selected_variables, "). Running linear regression instead of RF.\n")
-  
-  # Train linear model
-  lm_model <- lm(lm_formula, data = train)
-  
-  # Save model for later use
-  save(lm_model, file = "GenYield_Average_lm_model.RData")
-  
-  # Predict on test data
-  test_predictions <- predict(lm_model, test)
-  train_predictions <- predict(lm_model, train)  # Predict on training data
-  
-  # Evaluate test predictions
-  test_r2 <- cor(test_predictions, test$GenYield)^2
-  test_mse <- mean((test_predictions - test$GenYield)^2)
-  
-  # Evaluate train predictions
-  train_r2 <- cor(train_predictions, train$GenYield)^2
-  train_mse <- mean((train_predictions - train$GenYield)^2)
-  
-  cat("Test R² for lm_model:", test_r2, "\n")
-  cat("Test MSE for lm_model:", test_mse, "\n")
-  cat("Train R² for lm_model:", train_r2, "\n")
-  cat("Train MSE for lm_model:", train_mse, "\n")
-  
-  # Save observed vs predicted plot for test data
-  pdf(sprintf("%s/LM_GenYield_Average_Observed_vs_Predicted_Test.pdf", output_dir), width = 8, height = 8)
-  plot(
-    test_predictions, test$GenYield, 
-    pch = 16, cex = 1.5,
-    xlab = "Predicted", ylab = "Observed", 
-    main = "Observed vs Predicted - GenYield Average Test Data (lm_model)",
-    cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5
-  )
-  abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2)
-  legend(
-    "topleft", bty = "n", cex = 1.5,
-    legend = paste("R² =", format(test_r2, digits = 3))
-  )
-  legend(
-    "bottomright", bty = "n", cex = 1.5,
-    legend = paste("MSE =", format(test_mse, digits = 3))
-  )
-  dev.off()  # Close the PDF device
-  
-  # Save observed vs predicted plot for train data
-  pdf(sprintf("%s/LM_GenYield_Average_Observed_vs_Predicted_Train.pdf", output_dir), width = 8, height = 8)
-  plot(
-    train_predictions, train$GenYield, 
-    pch = 16, cex = 1.5,
-    xlab = "Predicted", ylab = "Observed", 
-    main = "Observed vs Predicted - GenYield Average Train Data (lm_model)",
-    cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5
-  )
-  abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2)
-  legend(
-    "topleft", bty = "n", cex = 1.5,
-    legend = paste("R² =", format(train_r2, digits = 3))
-  )
-  legend(
-    "bottomright", bty = "n", cex = 1.5,
-    legend = paste("MSE =", format(train_mse, digits = 3))
-  )
-  dev.off()  # Close the PDF device
-  
-  # Save test predictions
-  test_results <- test %>%
-    mutate(Predicted_GenYield = test_predictions)
-  
-  write.csv(test_results, "Test_Predictions_lm_Average.csv", row.names = FALSE)
-  
-  # Save train predictions
-  train_results <- train %>%
-    mutate(Predicted_GenYield = train_predictions)
-  
-  write.csv(train_results, "Train_Predictions_lm_Average.csv", row.names = FALSE)
-  
-  cat("Test predictions saved to Test_Predictions_lm_Average.csv\n")
-  cat("Train predictions saved to Train_Predictions_lm_Average.csv\n")
+# Format those features into a formula for the optimized random forest model
+rf_formula <- formula(paste("GenYield ~", new_rf_input))
 
-} else {
-  # If multiple variables remain, proceed with random forest model
-  rf_formula <- as.formula(paste("GenYield ~", paste(selected_variables, collapse = "+")))
-  
-  set.seed(123)
-  rf_model2 <- randomForest(rf_formula, data = train, 
-                            importance = TRUE, proximity = TRUE, ntree = 1100, mtry = 10)
-  
-  # Save model
-  save(rf_model2, file = "GenYield_Average_rf_model2.RData")
-  
-  # Predict on test data
-  test_predictions <- predict(rf_model2, test)
-  
-  # Evaluate predictions
-  test_r2 <- cor(test_predictions, test$GenYield)^2
-  test_mse <- mean((test_predictions - test$GenYield)^2)
-  
-  cat("Test R² for rf_model2:", test_r2, "\n")
-  cat("Test MSE for rf_model2:", test_mse, "\n")
-  
-  # Save test predictions
-  test_results <- test %>%
-    mutate(Predicted_GenYield = test_predictions)
-  
-  write.csv(test_results, "Test_Predictions_rf_model2_Average.csv", row.names = FALSE)
-  
-  cat("Test predictions saved to Test_Predictions_rf_model2_Average.csv\n")
-}
+# Test different ntree values 
+ntree_values <- seq(100, 2000, by = 100)  
+set.seed(123)
+MSE_list_parallel <- test_numtree_parallel_optimized(ntree_values, rf_formula, train)
+
+# Create a data frame for visualization
+MSE_df_parallel <- data.frame(
+  ntree = ntree_values,
+  mean_MSE = MSE_list_parallel
+)
+
+# Visualize the MSE results
+ggplot(MSE_df_parallel, aes(x = ntree, y = mean_MSE)) + 
+  geom_point() + 
+  geom_line() + 
+  theme_classic() + 
+  scale_x_continuous(breaks = seq(100, 2000, 100)) + 
+  theme(text = element_text(size = 20))
+
+# Global seed before re-tuning mtry
+set.seed(123)
+kept_drivers <- train[, colnames(train) %in% predictors(result_rfe)]
+tuneRF(kept_drivers, train[, 1], ntreeTry = 1000, stepFactor = 1, improve = 0.5, plot = FALSE)
+
+# Run optimized random forest model, with re-tuned ntree and mtry parameters ----
+set.seed(123)
+rf_model2 <- randomForest(rf_formula, data = train, 
+                          importance = TRUE, proximity = TRUE, ntree = 700, mtry = 10)
+
+# Visualize output for rf_model2
+print(rf_model2)
+randomForest::varImpPlot(rf_model2)
+
+# Save RF variable importance plot and LM plot for rf_model2
+save_rf_importance_plot(rf_model2, output_dir)
+save_lm_plot(rf_model2, train$GenYield, output_dir)
+
+
+# Save model and required objects for SHAP analysis
+save(rf_model2, file = "GenYield_Average_rf_model2.RData")
+kept_drivers <- train[, colnames(train) %in% predictors(result_rfe)]
+save(kept_drivers, file = "GenYield_Average_kept_drivers.RData")
+save(train, file = "GenYield_Average_train.RData")
+
+# ---- Use Predict Function on Test Data ----
+# Predict on test data using rf_model2
+test_predictions <- predict(rf_model2, test)
+
+# Evaluate predictions: Calculate R² and Mean Squared Error
+test_r2 <- cor(test_predictions, test$GenYield)^2
+test_mse <- mean((test_predictions - test$GenYield)^2)
+
+cat("Test R² for rf_model2:", test_r2, "\n")
+cat("Test MSE for rf_model2:", test_mse, "\n")
+
+# ---- Visualize Observed vs Predicted ----
+# Save observed vs predicted plot for test data
+pdf(sprintf("%s/RF_GenYield_Average_Observed_vs_Predicted_Test_rf_model2.pdf", output_dir), width = 8, height = 8)
+plot(
+  test_predictions, test$GenYield, 
+  pch = 16, cex = 1.5,
+  xlab = "Predicted", ylab = "Observed", 
+  main = "RF Model 2 Test Data Ave GenYield",
+  cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5
+)
+abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2)
+legend(
+  "topleft", bty = "n", cex = 1.5,
+  legend = paste("R² =", format(test_r2, digits = 3))
+)
+legend(
+  "bottomright", bty = "n", cex = 1.5,
+  legend = paste("MSE =", format(test_mse, digits = 3))
+)
+dev.off()  # Close the PDF device
+dev.new()  # Open new plotting window
+
+# ---- Now Display in RStudio ----
+plot(
+  test_predictions, test$GenYield, 
+  pch = 16, cex = 1.5,
+  xlab = "Predicted", ylab = "Observed", 
+  main = "RF Model 2 Test Data- Ave GenYield",
+  cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5
+)
+abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2)
+legend(
+  "topleft", bty = "n", cex = 1.5,
+  legend = paste("R² =", format(test_r2, digits = 3))
+)
+legend(
+  "bottomright", bty = "n", cex = 1.5,
+  legend = paste("MSE =", format(test_mse, digits = 3))
+)
+
+# ---- Save Test Predictions ----
+test_results <- test %>%
+  mutate(Predicted_GenYield = test_predictions)  # Add predictions to test data
+
+write.csv(test_results, "Test_Predictions_rf_model2_GenYield_Average.csv", row.names = FALSE)
+
+cat("Test predictions saved to Test_Predictions_rf_model2_GenYield_Average.csv\n")
+
+

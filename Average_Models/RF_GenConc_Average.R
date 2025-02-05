@@ -90,7 +90,7 @@ drivers_df <- read.csv(sprintf("AllDrivers_Harmonized_Average_filtered_%d_years.
   dplyr::select(-contains("Yield"), -contains("FN"), -contains("major"), -Max_Daylength) %>%
   dplyr::mutate_at(vars(19:34), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
   select(GenConc, everything()) %>%
-  filter(!Stream_ID %in% c("USGS__Dismal River", "KRR__S65E"))  # Remove specific outlier site
+  filter(!Stream_ID %in% c("USGS__Dismal River", "KRR__S65E"))  # Remove specific outlier sites
 
 # Identify Stream_IDs, Years, and Variables with NA values
 na_summary <- drivers_df %>%
@@ -132,7 +132,7 @@ drivers_df <- drivers_df %>%
   select(-Stream_ID)
 
 # Plot and save correlation matrix ----
-numeric_drivers <- 2:32 # Change this range to reflect data frame length
+numeric_drivers <- 2:33 # Change this range to reflect data frame length
 driver_cor <- cor(drivers_df[, numeric_drivers])
 save_correlation_plot(driver_cor, output_dir)
 
