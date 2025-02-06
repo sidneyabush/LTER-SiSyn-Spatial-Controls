@@ -3,6 +3,9 @@ library(dplyr)
 library(dendextend)
 library(colorspace)
 
+# Set working directory
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
+
 # Load data
 data <- read.csv("unique_stream_ids_average_5_years.csv") %>%
   dplyr::select("Stream_ID", "P", "rocks_volcanic", "silicate_weathering", "snow_cover", "basin_slope")
