@@ -10,23 +10,18 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 # Clear environment
 rm(list = ls())
 
+load("GenConc_Average_train_noWeathering.RData")
+
 # Load data -- change this to trained data from RF Model2
-data <- read.csv("unique_stream_ids_average_5_years.csv") %>%
-  dplyr::select("Stream_ID", "P", "rocks_volcanic", "snow_cover", "basin_slope")
-
-# Set row names for dendrogram labeling
-rownames(data) <- data$Stream_ID  # Ensure Stream_ID is used as labels
-
-# Remove Stream_ID column for clustering
-numerical_data <- data %>%
-  select(-Stream_ID)
+data <- train %>%
+  dplyr::select("P", "snow_cover", "precip", "NOx", "rocks_volcanic", "basin_slope")
 
 # Scale the data
 
 
 
 ## Keira's Code----
-weights_clust <- numerical_data 
+cluster_input <- scaled_data 
 
 set.seed(123)
 

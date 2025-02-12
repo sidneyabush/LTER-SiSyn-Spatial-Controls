@@ -104,6 +104,10 @@ genconc_lower <- genconc_mean - SD_val * genconc_sd
 drivers_df <- drivers_df %>%
   filter(GenConc >= genconc_lower & GenConc <= genconc_upper)
 
+# Preserve Stream_ID before removing it
+drivers_df <- drivers_df %>%
+  select(Stream_ID, everything())  # Ensure Stream_ID is the first column
+
 # ---- Proceed with existing NA removal and processing ----
 # Identify Stream_IDs, Years, and Variables with NA values
 na_summary <- drivers_df %>%
@@ -138,11 +142,6 @@ write.csv(drivers_df,
           row.names = FALSE)
 
 gc()
-
-# Final step: Remove Stream_ID and Year
-drivers_df <- drivers_df %>%
-  select(-Stream_ID)
-
 
 # Plot and save correlation matrix ----
 numeric_drivers <- 2:25 # Change this range to reflect data frame length
