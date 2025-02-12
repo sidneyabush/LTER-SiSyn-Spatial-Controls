@@ -10,29 +10,46 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 # Clear environment
 rm(list = ls())
 
-load("GenConc_Average_train_noWeathering.RData")
+# Read in and tidy data ----
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
 
-# Load data -- change this to trained data from RF Model2
+# Read in and preprocess the data
+train <- read.csv("train_data_stream_id.csv")
+
 data <- train %>%
-  dplyr::select("P", "snow_cover", "precip", "NOx", "rocks_volcanic", "basin_slope")
+  dplyr::select("Stream_ID", "P", "snow_cover", "precip", "NOx", "rocks_volcanic", "basin_slope")
 
-# Scale the data
+# Scale the selected numerical columns (excluding Stream_ID) and ensure correct column names
+scaled_data <- data %>%
+  mutate(across(-Stream_ID, ~ as.numeric(scale(.))))
 
-
-
-## Keira's Code----
-cluster_input <- scaled_data 
-
+# Set seed for reproducibility
 set.seed(123)
 
-p2 <- fviz_nbclust(weights_clust, kmeans, method= "silhouette", k.max = 20)
+# Perform silhouette method to determine optimal clusters
+p2 <- fviz_nbclust(scaled_data %>% select(-Stream_ID), kmeans, method= "silhouette", k.max = 20)
 p2
 
-kmeans_cluster <- kmeans(weights_clust, iter.max = 50, nstart = 50, centers = 2)
+kmeans_result <- kmeans(scaled_data %>% select(-Stream_ID), iter.max = 50, nstart = 50, centers = 5)
 
-data$clust <- kmeans_cluster$cluster
+# Add cluster assignments to the reg data
+data <- data %>%
+  mutate(cluster = as.factor(kmeans_result$cluster))
 
-# facet_wrap top 5 drivers with distributions for each cluster -- box plots
+scaled_data <- scaled_data %>%
+  mutate(cluster = as.factor(kmeans_result$cluster))
+
+# Reshape data to long format for ggplot
+long_data <- scaled_data %>%
+  pivot_longer(-c(Stream_ID, cluster), names_to = "Driver", values_to = "Value")
+
+# Create box plots with facet_wrap
+ggplot(long_data, aes(x = Driver, y = Value, fill = cluster)) +
+  geom_boxplot() +
+  facet_wrap(~cluster, scales = "free") +
+  theme_minimal() +
+  labs(x = NULL, y = "Scaled Value") +
+  theme(legend.position = "none")
 
 # silhouette plot with squared euclidean distance by cluster
 

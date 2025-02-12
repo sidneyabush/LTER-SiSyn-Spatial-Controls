@@ -152,8 +152,16 @@ save_correlation_plot(driver_cor, output_dir)
 # Add the new training and testing workflow here
 set.seed(123)
 split_index <- sample(2, nrow(drivers_df), replace = TRUE, prob = c(0.7, 0.3))
-train <- drivers_df[split_index == 1, ]
-test <- drivers_df[split_index == 2, ]
+train_id <- drivers_df[split_index == 1, ]
+test_id <- drivers_df[split_index == 2, ]
+
+# Save train and test data with Stream_ID included. We will need this for SHAP and clustering.
+write.csv(train_id, "train_data_stream_id.csv", row.names = FALSE)
+write.csv(test_id, "test_data_stream_id.csv", row.names = FALSE)
+
+# ---- Remove Stream_ID for RF training ----
+train <- train_id %>% select(-Stream_ID)
+test <- test_id %>% select(-Stream_ID)
 
 # ---- Train Initial RF Model ----
 # Test different ntree values for rf_model1
@@ -184,7 +192,7 @@ manual_ntree_rf1 <- 2000  # Replace with chosen value
 tuneRF(train[, 2:ncol(train)], train[, 1], ntreeTry = manual_ntree_rf1, stepFactor = 1, improve = 0.5, plot = TRUE)
 
 # Manually select mtry for rf_model1 ----
-manual_mtry_rf1 <- 9  # Replace with chosen value
+manual_mtry_rf1 <- 8  # Replace with chosen value
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
