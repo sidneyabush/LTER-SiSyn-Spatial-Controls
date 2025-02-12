@@ -737,6 +737,13 @@ num_unique_stream_ids <- tot %>%
 
 print(num_unique_stream_ids)
 
+# Sum all land use types that contain "forest" into a new column `land_forest_all`
+tot <- tot %>%
+  rowwise() %>%
+  mutate(land_forest_all = sum(c_across(contains("forest")), na.rm = TRUE)) %>%
+  ungroup() %>%
+  select(-contains("forest"), land_forest_all)  # Remove old "forest" columns but keep the new one
+
 # Tidy data for export: 
 tot_si <- tot %>%
   dplyr::select(Stream_ID, Year, drainSqKm, NOx, P, precip, Q,

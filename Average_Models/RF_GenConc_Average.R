@@ -83,17 +83,28 @@ record_length <- 5
 # Read in and tidy data ----
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
 
-# Load and preprocess the data with dynamic file selection
+# Read in and preprocess the data
 drivers_df <- read.csv(sprintf("AllDrivers_Harmonized_Average_filtered_%d_years.csv", record_length)) %>%
   filter(!grepl("^MCM", Stream_ID)) %>% # Remove all Stream_IDs that start with "MCM"
-  filter(GenYield <= 80) %>%  
-  filter(GenConc <= 18) %>% 
+  # filter(GenYield <= 80) %>%  
+  # filter(GenConc <= 15) %>% 
   dplyr::select(-contains("Yield"), -contains("FN"), -contains("major"), 
                 -Max_Daylength, -silicate_weathering, -Q, -q_95, -drainage_area) %>%
-  dplyr::mutate_at(vars(15:30), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
+  dplyr::mutate_at(vars(15:26), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
   select(GenConc, everything()) %>%
   filter(!Stream_ID %in% c("USGS__Dismal River", "KRR__S65E"))  # Remove specific outlier sites
 
+# ---- Remove Outliers for GenConc (3 SD Rule) ----
+genconc_mean <- mean(drivers_df$GenConc, na.rm = TRUE)
+SD_val <- 3
+genconc_sd <- sd(drivers_df$GenConc, na.rm = TRUE)
+genconc_upper <- genconc_mean + SD_val * genconc_sd
+genconc_lower <- genconc_mean - SD_val * genconc_sd
+
+drivers_df <- drivers_df %>%
+  filter(GenConc >= genconc_lower & GenConc <= genconc_upper)
+
+# ---- Proceed with existing NA removal and processing ----
 # Identify Stream_IDs, Years, and Variables with NA values
 na_summary <- drivers_df %>%
   pivot_longer(cols = -c(Stream_ID), names_to = "Variable", values_to = "Value") %>%
@@ -114,7 +125,6 @@ gc()
 
 # Keep only complete cases
 drivers_df <- drivers_df %>%
-  select(GenConc, everything()) %>%
   filter(complete.cases(.))
 
 # Count the number of unique Stream_IDs before removing it
@@ -133,8 +143,9 @@ gc()
 drivers_df <- drivers_df %>%
   select(-Stream_ID)
 
+
 # Plot and save correlation matrix ----
-numeric_drivers <- 2:29 # Change this range to reflect data frame length
+numeric_drivers <- 2:25 # Change this range to reflect data frame length
 driver_cor <- cor(drivers_df[, numeric_drivers])
 save_correlation_plot(driver_cor, output_dir)
 
@@ -157,7 +168,6 @@ MSE_df_rf1 <- data.frame(
   mean_MSE = sapply(MSE_list_rf1, mean)
 )
 
-dev.new()  # Open new plotting window
 
 p <- ggplot(MSE_df_rf1, aes(ntree, mean_MSE)) + 
   geom_point() + 
@@ -168,7 +178,6 @@ p <- ggplot(MSE_df_rf1, aes(ntree, mean_MSE)) +
 
 print(p)
 
-
 # Manually select ntree for rf_model1 ----
 manual_ntree_rf1 <- 2000  # Replace with chosen value
 
@@ -176,7 +185,7 @@ manual_ntree_rf1 <- 2000  # Replace with chosen value
 tuneRF(train[, 2:ncol(train)], train[, 1], ntreeTry = manual_ntree_rf1, stepFactor = 1, improve = 0.5, plot = TRUE)
 
 # Manually select mtry for rf_model1 ----
-manual_mtry_rf1 <- 20  # Replace with chosen value
+manual_mtry_rf1 <- 9  # Replace with chosen value
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
@@ -217,8 +226,6 @@ y <- train$GenConc
 
 sink(NULL)  # Reset output sink
 closeAllConnections()  # Close all connections
-dev.off()  # Close any open graphic devices
-dev.new()  # Open new plotting window
 
 
 # Run RFE to select the best features ----
@@ -308,8 +315,6 @@ legend(
   "bottomright", bty = "n", cex = 1.5,
   legend = paste("MSE =", format(test_mse, digits = 3))
 )
-dev.off()  # Close the PDF device
-dev.new()  # Open new plotting window
 
 # ---- Now Display in RStudio ----
 plot(
