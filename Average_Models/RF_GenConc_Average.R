@@ -12,7 +12,7 @@ set.seed(123)
 # Load Functions ----
 # Function to save correlation matrix as PDF
 save_correlation_plot <- function(driver_cor, output_dir) {
-  pdf(sprintf("%s/correlation_plot_GenConc_Average_5_years.pdf", output_dir), width = 10, height = 10)
+  pdf(sprintf("%s/correlation_plot_GenConc_Average_5_years_noWeathering.pdf", output_dir), width = 10, height = 10)
   corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = FALSE)
   title("All Data Average GenConc")
   dev.off()
@@ -20,14 +20,14 @@ save_correlation_plot <- function(driver_cor, output_dir) {
 
 # Save RF Variable Importance Plot
 save_rf_importance_plot <- function(rf_model, output_dir) {
-  pdf(sprintf("%s/RF_variable_importance_GenConc_Average_5_years.pdf", output_dir), width = 8, height = 6)
+  pdf(sprintf("%s/RF_variable_importance_GenConc_Average_5_years_noWeathering.pdf", output_dir), width = 8, height = 6)
   randomForest::varImpPlot(rf_model, main = "rf_model2 - Ave GenConc", col = "darkblue")
   dev.off()
 }
 
 # Save Linear Model (LM) Plot
 save_lm_plot <- function(rf_model2, observed, output_dir) {
-  pdf(sprintf("%s/RF2_lm_plot_GenConc_Average_5_years_Train.pdf", output_dir), width = 8, height = 8)
+  pdf(sprintf("%s/RF2_lm_plot_GenConc_Average_5_years_Train_noWeathering.pdf", output_dir), width = 8, height = 8)
   plot(rf_model2$predicted, observed, pch = 16, cex = 1.5,
        xlab = "Predicted", ylab = "Observed", main = "RF Model 2 Trained Data Ave GenConc",
        cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5)
@@ -86,9 +86,11 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 # Load and preprocess the data with dynamic file selection
 drivers_df <- read.csv(sprintf("AllDrivers_Harmonized_Average_filtered_%d_years.csv", record_length)) %>%
   filter(!grepl("^MCM", Stream_ID)) %>% # Remove all Stream_IDs that start with "MCM"
-  filter(GenYield <= 80) %>%  # Remove rows where FNYield > 60 %>% 
-  dplyr::select(-contains("Yield"), -contains("FN"), -contains("major"), -Max_Daylength) %>%
-  dplyr::mutate_at(vars(19:34), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
+  filter(GenYield <= 80) %>%  
+  filter(GenConc <= 18) %>% 
+  dplyr::select(-contains("Yield"), -contains("FN"), -contains("major"), 
+                -Max_Daylength, -silicate_weathering, -Q, -q_95, -drainage_area) %>%
+  dplyr::mutate_at(vars(15:30), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
   select(GenConc, everything()) %>%
   filter(!Stream_ID %in% c("USGS__Dismal River", "KRR__S65E"))  # Remove specific outlier sites
 
@@ -105,7 +107,7 @@ unique_stream_id_na_count <- na_summary %>%
 
 # Export unique NA Stream_IDs with dynamic filename
 write.csv(na_summary, 
-          sprintf("average_NA_stream_ids_%d_years.csv", record_length), 
+          sprintf("average_NA_stream_ids_%d_years_noWeathering.csv", record_length), 
           row.names = FALSE)
 
 gc()
@@ -122,7 +124,7 @@ unique_stream_id_count <- drivers_df %>%
 
 # Export with dynamic filename
 write.csv(drivers_df, 
-          sprintf("unique_stream_ids_average_%d_years.csv", record_length), 
+          sprintf("unique_stream_ids_average_%d_years_noWeathering.csv", record_length), 
           row.names = FALSE)
 
 gc()
@@ -132,7 +134,7 @@ drivers_df <- drivers_df %>%
   select(-Stream_ID)
 
 # Plot and save correlation matrix ----
-numeric_drivers <- 2:33 # Change this range to reflect data frame length
+numeric_drivers <- 2:29 # Change this range to reflect data frame length
 driver_cor <- cor(drivers_df[, numeric_drivers])
 save_correlation_plot(driver_cor, output_dir)
 
@@ -168,13 +170,13 @@ print(p)
 
 
 # Manually select ntree for rf_model1 ----
-manual_ntree_rf1 <- 700  # Replace with chosen value
+manual_ntree_rf1 <- 2000  # Replace with chosen value
 
 # Tune mtry for rf_model1 ----
 tuneRF(train[, 2:ncol(train)], train[, 1], ntreeTry = manual_ntree_rf1, stepFactor = 1, improve = 0.5, plot = TRUE)
 
 # Manually select mtry for rf_model1 ----
-manual_mtry_rf1 <- 10  # Replace with chosen value
+manual_mtry_rf1 <- 20  # Replace with chosen value
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
@@ -271,10 +273,10 @@ save_lm_plot(rf_model2, train$GenConc, output_dir)
 
 
 # Save model and required objects for SHAP analysis
-save(rf_model2, file = "GenConc_Average_rf_model2.RData")
+save(rf_model2, file = "GenConc_Average_rf_model2_noWeathering.RData")
 kept_drivers <- train[, colnames(train) %in% predictors(result_rfe)]
-save(kept_drivers, file = "GenConc_Average_kept_drivers.RData")
-save(train, file = "GenConc_Average_train.RData")
+save(kept_drivers, file = "GenConc_Average_kept_drivers_noWeathering.RData")
+save(train, file = "GenConc_Average_train_noWeathering.RData")
 
 # ---- Use Predict Function on Test Data ----
 # Predict on test data using rf_model2
@@ -289,7 +291,7 @@ cat("Test MSE for rf_model2:", test_mse, "\n")
 
 # ---- Visualize Observed vs Predicted ----
 # Save observed vs predicted plot for test data
-pdf(sprintf("%s/RF_GenConc_Average_Observed_vs_Predicted_Test_rf_model2.pdf", output_dir), width = 8, height = 8)
+pdf(sprintf("%s/RF_GenConc_Average_Observed_vs_Predicted_Test_rf_model2_noWeathering.pdf", output_dir), width = 8, height = 8)
 plot(
   test_predictions, test$GenConc, 
   pch = 16, cex = 1.5,
@@ -331,8 +333,8 @@ legend(
 test_results <- test %>%
   mutate(Predicted_GenConc = test_predictions)  # Add predictions to test data
 
-write.csv(test_results, "Test_Predictions_rf_model2_GenConc_Average.csv", row.names = FALSE)
+write.csv(test_results, "Test_Predictions_rf_model2_GenConc_Average_noWeathering.csv", row.names = FALSE)
 
-cat("Test predictions saved to Test_Predictions_rf_model2_GenConc_Average.csv\n")
+cat("Test predictions saved to Test_Predictions_rf_model2_GenConc_Average_noWeathering.csv\n")
 
 
