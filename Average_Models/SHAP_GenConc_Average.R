@@ -180,20 +180,25 @@ generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, ou
     pivot_longer(cols = everything(), names_to = "feature", values_to = "importance") %>%
     arrange(desc(importance))
   
-  # Define a colorblind-friendly palette
+  # Define a colorblind-friendly palette in order
   cb_palette <- c("#E69F00", "#56B4E9", "#009E73", "#D55E00", "#CC79A7")
+  
+  # Ensure clusters are sorted so they are assigned the correct colors
+  sorted_clusters <- sort(unique(combined_data$cluster))
+  
+  # Map cluster ID to the corresponding color in order
+  cluster_index <- match(cluster_id, sorted_clusters)
+  cluster_color <- cb_palette[cluster_index]
   
   # Save the feature importance plot
   output_file <- sprintf("%s/SHAP_GenConc_Ave_Cluster_%s_Variable_Importance.pdf", output_dir, cluster_id)
   
   pdf(output_file, width = 8, height = 8)
-  cluster_importance_plot <- ggplot(overall_feature_importance, aes(x = reorder(feature, importance), y = importance, fill = as.factor(feature))) +
-    geom_bar(stat = "identity") +
-    scale_fill_manual(values = rep(cb_palette, length.out = nrow(overall_feature_importance))) +  # Apply color palette
+  cluster_importance_plot <- ggplot(overall_feature_importance, aes(x = reorder(feature, importance), y = importance)) +
+    geom_bar(stat = "identity", fill = cluster_color) +  # Use a single color for all bars per cluster
     coord_flip() +
     labs(x = "Feature", y = "Mean Absolute SHAP Value",
-         title = paste("GenConc Average - Feature Importance for Cluster", cluster_id),
-         fill = "Feature") +  # Legend for features
+         title = paste("GenConc Average - Feature Importance for Cluster", cluster_id)) +
     theme_minimal()
   print(cluster_importance_plot)
   dev.off()
@@ -201,10 +206,10 @@ generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, ou
   return(overall_feature_importance)
 }
 
+# Ensure clusters are in correct order before running the function
+unique_clusters <- sort(unique(combined_data$cluster))
 
-
-# Generate SHAP values and plots for each cluster
-unique_clusters <- unique(combined_data$cluster)
+# Generate SHAP values and plots for each cluster in correct order
 shap_importance_by_cluster <- lapply(unique_clusters, generate_shap_plots_for_cluster, 
                                      model = rf_model2, combined_data = combined_data, output_dir = output_dir, sample_size = 30)
 
