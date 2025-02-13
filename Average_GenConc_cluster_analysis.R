@@ -1,16 +1,38 @@
 # Load necessary libraries
 librarian::shelf(ggplot2, dplyr, tidyr, factoextra, cluster)
 
+# Clear environment
+rm(list = ls())
+
 # Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
-# Clear environment
-rm(list = ls())
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/GenConc"
+
+# Function to create SHAP values
+generate_shap_values <- function(model, kept_drivers, sample_size = 30) {
+  # Define a custom prediction function
+  custom_predict <- function(object, newdata) {
+    newdata <- as.data.frame(newdata)
+    predict(object, newdata = newdata)
+  }
+  
+  # Compute SHAP values using fastshap
+  shap_values <- fastshap::explain(
+    object = model,
+    X = kept_drivers,
+    pred_wrapper = custom_predict,
+    nsim = sample_size
+  )
+  
+  return(shap_values)
+}
 
 # Read in and preprocess the data
 # train <- read.csv("train_data_stream_id.csv")
 load("GenConc_Average_kept_drivers_full.RData")
 load("GenConc_Average_full_stream_ids.RData")
+load("GenConc_Average_rf_model2_full.RData")
 
 data <- kept_drivers
 
@@ -64,21 +86,24 @@ long_data <- scaled_data %>%
 
 box_plot <- ggplot(long_data, aes(x = Driver, y = Value, fill = cluster)) +
   geom_boxplot() +
-  facet_wrap(~cluster, scales = "fixed") +  # Keep y-axis fixed
+  facet_wrap(~cluster, ncol = 2, scales = "free") +  
   scale_fill_manual(values = cb_palette) +  # Apply colorblind-friendly colors
   labs(title = "Average Model", x = NULL, y = "Scaled Value") +
+  coord_cartesian(ylim = c(-3, 13)) + # Set Y-axis limits without removing data
   theme_classic() +
   theme(
     legend.position = "none",
     axis.text.x = element_text(angle = 45, hjust = 1, size = 10),  # Rotate x-axis labels
     strip.text = element_text(size = 12, face = "bold"),  # Keep facet labels in place
     plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),  # Center & bold title
-    panel.spacing = unit(0, "lines")  # Reduce space between facets to keep alignment
-  ) +
-  guides(x = guide_axis())  # Ensure x-axis labels appear on all facets
-
-
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 1),  # Add panel borders
+    panel.spacing = unit(1, "lines"),  # Ensure spacing between facets
+    axis.title.x = element_blank())  # Remove x-axis title but keep labels
+  
 print(box_plot)
+
+ggsave(filename = "GenConc_Average_Cluster_Drivers_Boxplot.png", plot = box_plot, width = 8, height = 8, dpi = 300)
+
 
 # Compute silhouette scores
 sil <- silhouette(kmeans_result$cluster, dist(scaled_data %>% select(-cluster), method = "euclidean")^2)
@@ -99,14 +124,23 @@ sil_plot <- fviz_silhouette(sil) +
 
 print(sil_plot)
 
+ggsave(filename = "GenConc_Average_Cluster_SilPlot.png", plot = sil_plot, width = 6, height = 4, dpi = 300)
+
+
+# Select only Stream_ID and GenConc from drivers_df
+drivers_subset <- drivers_df %>% select(Stream_ID, GenConc)
+
 # Merge clusters with kept_drivers (ensuring row alignment)
-genconc_clusters <- bind_cols(kept_drivers, final_data)
+all_data <- bind_cols(kept_drivers, drivers_subset)
+
+# Merge with final_data
+all_data <- bind_cols(all_data, final_data)
 
 # Ensure 'cluster' is a factor
-genconc_clusters$cluster <- as.factor(genconc_clusters$cluster)
+all_data$cluster <- as.factor(all_data$cluster)
 
 # Create a boxplot with the custom color palette
-ggplot(genconc_clusters, aes(x = cluster, y = GenConc, fill = cluster)) +
+dist <- ggplot(all_data, aes(x = cluster, y = GenConc, fill = cluster)) +
   geom_boxplot(alpha = 0.7, outlier.shape = NA) +  # Boxplot without outliers
   geom_jitter(alpha = 0.3, width = 0.2) +  # Add individual points
   scale_fill_manual(values = cb_palette) +  # Apply custom color palette
@@ -121,11 +155,16 @@ ggplot(genconc_clusters, aes(x = cluster, y = GenConc, fill = cluster)) +
     plot.title = element_text(hjust = 0.5, size = 14, face = "bold")  # Center & bold title
   )
 
-# Merge clusters with kept_drivers (ensuring row alignment)
-combined_data <- bind_cols(kept_drivers, clusters)
+print(dist)
 
-# Ensure 'cluster' is a factor
-combined_data$cluster <- as.factor(combined_data$cluster)
+ggsave(filename = "GenConc_Average_Cluster_Boxplot.png", plot = dist, width = 6, height = 6, dpi = 300)
+
+# Save  so we can look at Stream_ID and distribution later
+write.csv(all_data, file= "Average_GenConc_Cluster_Stream_ID.csv")
+
+# Now remove GenConc and Stream_ID columns to put into SHAP analysis
+combined_data <- all_data %>%
+  dplyr::select(-GenConc, -Stream_ID)
 
 generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, output_dir, sample_size = 30) {
   # Filter data for the specific cluster and exclude non-predictor variables
