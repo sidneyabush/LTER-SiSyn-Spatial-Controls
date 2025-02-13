@@ -37,7 +37,7 @@ load("FNYield_Yearly_rf_model2_full.RData")
 data <- kept_drivers
 
 data <- data %>%
-  dplyr::select("basin_slope", "P", "elevation", "rocks_volcanic", "land_shrubland_grassland")
+  dplyr::select("rocks_volcanic", "basin_slope", "land_shrubland_grassland", "npp", "land_forest_all")
 
 # Scale the selected numerical columns 
 scaled_data <- data %>%
@@ -73,13 +73,13 @@ cb_palette <- c(
 long_data <- scaled_data %>%
   pivot_longer(-cluster, names_to = "Driver", values_to = "Value") %>%
   mutate(
-    Driver = factor(Driver, levels = c("basin_slope", "P", "elevation", "rocks_volcanic", "land_shrubland_grassland")),
+    Driver = factor(Driver, levels = c("rocks_volcanic", "basin_slope", "land_shrubland_grassland", "npp", "land_forest_all")),
     Driver = recode(Driver, 
-                    "basin_slope" = "Basin Slope",
-                    "P" = "P",
-                    "elevation" = "Elevation",
                     "rocks_volcanic" = "Volcanic Rock",
-                    "land_shrubland_grassland" = "Land: Shrubland/Grassland"
+                    "basin_slope" = "Basin Slope",
+                    "land_shrubland_grassland" = "Land: Shrubland/Grassland",
+                    "npp" = "NPP",
+                    "land_forest_all" = "Land: Forest"
     )
   )
 
@@ -89,7 +89,7 @@ box_plot <- ggplot(long_data, aes(x = Driver, y = Value, fill = cluster)) +
   facet_wrap(~cluster, ncol = 2, scales = "free") +  
   scale_fill_manual(values = cb_palette) +  # Apply colorblind-friendly colors
   labs(title = "FNYield Yearly", x = NULL, y = "Scaled Value") +
-  coord_cartesian(ylim = c(-2, 20)) + # Set Y-axis limits without removing data
+  coord_cartesian(ylim = c(-2, 10)) + # Set Y-axis limits without removing data
   theme_classic() +
   theme(
     legend.position = "none",
@@ -248,6 +248,6 @@ shap_importance_by_cluster <- lapply(unique_clusters, generate_shap_plots_for_cl
 shap_importance_summary <- bind_rows(shap_importance_by_cluster, .id = "cluster")
 
 # Save the summary as a CSV
-write.csv(shap_importance_summary, file = sprintf("%s/SHAP_FNYield_Ave_Cluster_Importance_Summary.csv", output_dir), row.names = FALSE)
+# write.csv(shap_importance_summary, file = sprintf("%s/SHAP_FNYield_Ave_Cluster_Importance_Summary.csv", output_dir), row.names = FALSE)
 
 message("SHAP importance analysis per cluster completed and saved.")
