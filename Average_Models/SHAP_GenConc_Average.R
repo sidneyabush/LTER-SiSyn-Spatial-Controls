@@ -67,3 +67,40 @@ create_all_shapley_plots <- function(shap_values, output_file) {
 # Output full SHAP plots
 output_file <- sprintf("%s/SHAP_GenConc_Ave_Overall_Variable_Importance.pdf", output_dir)
 create_all_shapley_plots(shap_values, output_file)
+
+
+# Function to create SHAP dot plot showing positive/negative influence
+create_all_shapley_dot_plot <- function(shap_values, output_file) {
+  # Convert SHAP values to a data frame
+  shap_df <- as.data.frame(shap_values)
+  
+  # Calculate mean and absolute mean SHAP values for each feature
+  feature_importance <- shap_df %>%
+    summarise(across(everything(), list(mean = mean, abs_mean = ~ mean(abs(.))))) %>%
+    pivot_longer(cols = everything(), names_to = c("feature", ".value"), names_sep = "_") %>%
+    arrange(desc(abs_mean))  # Order by absolute importance
+  
+  # Create the SHAP dot plot
+  pdf(output_file, width = 9, height = 8)
+  shap_dot_plot <- ggplot(feature_importance, aes(x = reorder(feature, abs_mean), y = mean)) +
+    geom_point(aes(color = mean), size = 4) +  # Color indicates directionality
+    geom_segment(aes(x = feature, xend = feature, y = 0, yend = mean), color = "gray") + # Line to zero
+    scale_color_gradient2(low = "red", mid = "white", high = "blue", midpoint = 0) +  # Red = negative, Blue = positive
+    coord_flip() +
+    labs(x = "Feature", y = "Mean SHAP Value", title = "GenConc Average - SHAP Variable Importance") +
+    theme_minimal() +
+    theme(
+      axis.text.y = element_text(size = 14),
+      axis.title.x = element_text(size = 14),
+      plot.title = element_text(size = 16, face = "bold"),
+      legend.title = element_text(size = 12),
+      legend.text = element_text(size = 10)
+    )
+  print(shap_dot_plot)
+  dev.off()
+}
+
+# Output SHAP dot plot
+output_file <- sprintf("%s/SHAP_GenConc_Ave_Overall_Variable_Importance_DotPlot.pdf", output_dir)
+create_all_shapley_dot_plot(shap_values, output_file)
+

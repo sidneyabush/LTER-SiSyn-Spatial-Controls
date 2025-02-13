@@ -86,13 +86,12 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 # Read in and preprocess the data
 drivers_df <- read.csv(sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.csv", record_length)) %>%
   filter(!grepl("^MCM", Stream_ID)) %>% # Remove all Stream_IDs that start with "MCM"
-  # filter(GenYield <= 80) %>%  
-  # filter(FNConc <= 15) %>% 
   dplyr::select(-contains("Yield"), -contains("Gen"), -contains("major"), 
                 -Max_Daylength, -silicate_weathering, -Q, -drainage_area) %>%
   dplyr::mutate_at(vars(15:26), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
-  select(FNConc, everything()) %>%
-  filter(!Stream_ID %in% c("USGS__Dismal River", "KRR__S65E"))  # Remove specific outlier sites
+  select(FNConc, everything()) 
+  # %>%
+  # filter(!Stream_ID %in% c("USGS__Dismal River"))  # Remove specific outlier sites
 
 # ---- Remove Outliers for FNConc (3 SD Rule) ----
 FNConc_mean <- mean(drivers_df$FNConc, na.rm = TRUE)
@@ -101,7 +100,7 @@ FNConc_sd <- sd(drivers_df$FNConc, na.rm = TRUE)
 FNConc_upper <- FNConc_mean + SD_val * FNConc_sd
 FNConc_lower <- FNConc_mean - SD_val * FNConc_sd
 
-drivers_df <- drivers_df %>%
+drivers_df_sd <- drivers_df %>%
   filter(FNConc >= FNConc_lower & FNConc <= FNConc_upper)
 
 # Preserve Stream_ID before removing it

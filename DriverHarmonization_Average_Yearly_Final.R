@@ -72,6 +72,7 @@ yields <- wrtds_df %>%
 tot <- wrtds_df %>%
   left_join(yields, by = c("Stream_ID", "Year")) %>%
   distinct(Stream_ID, Year, .keep_all = TRUE) %>%
+  filter(FNYield >= 0.5 * GenYield & FNYield <= 1.5 * GenYield)  %>% 
   # Remove columns with .y
   select(-contains(".y")) %>%
   # Rename columns with .x by removing the suffix
@@ -152,14 +153,18 @@ daylen_range <- daylen %>%
 # Ensure the result is left-joined to "tot"
 tot <- tot %>% 
   left_join(daylen_range, by = "Stream_Name") %>%
-  distinct(Stream_ID, Year, .keep_all = TRUE) 
+  distinct(Stream_ID, Year, .keep_all = TRUE) %>%
+  # Remove columns with .x
+  select(-contains(".x")) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.y$"))
 
 ## ------------------------------------------------------- ##
               # Spatial Drivers----
 ## ------------------------------------------------------- ##
 # Read and preprocess spatial drivers
 si_drivers <- read.csv("all-data_si-extract_2_20250203.csv", stringsAsFactors = FALSE) %>%
-  select(-contains("soil")) %>%
+  select(-contains("soil"), -contains("cycle1")) %>%
   dplyr::mutate(
     Stream_Name = case_when(
       Stream_Name == "East Fork" ~ "east fork",
@@ -173,11 +178,17 @@ si_drivers <- read.csv("all-data_si-extract_2_20250203.csv", stringsAsFactors = 
   filter(!(LTER == "MCM")) %>%
   # Remove columns with .x
   select(-contains(".y"), -contains(".x")) 
-  # %>%
-  # Rename columns with .x by removing the suffix
-  # rename_with(~ str_remove(., "\\.x$"))
 
 si_drivers <- standardize_stream_id(si_drivers)
+
+# Identify and convert all greenup-related columns to Date format
+greenup_cols <- grep("greenup_", colnames(si_drivers), value = TRUE)
+
+si_drivers[, greenup_cols] <- lapply(si_drivers[, greenup_cols], function(x) {
+  as.Date(x, format = "%m/%d/%y")
+})
+
+si_drivers[, greenup_cols] <- lapply(si_drivers[, greenup_cols], function(x) format(x, "%j"))
 
 si_drivers <- si_drivers %>%
   left_join(finn %>% select(Stream_ID, Stream_ID2), by = "Stream_ID") %>%
@@ -243,11 +254,13 @@ character_cols <- si_drivers[,(colnames(si_drivers) %like% character_vars)]
 character_cols$Stream_Name <- si_drivers$Stream_Name
 
 ## ------------------------------------------------------- ##
-    # Calculate Greenup Day ----
+# Calculate Greenup Day ----
 ## ------------------------------------------------------- ##
+# Melt data for processing
 drivers <- year_cols_melt
-drivers <- subset(drivers, !drivers$driver %in% c("cycle1","num_days"))
+# drivers <- subset(drivers, !drivers$driver %in% c("cycle1", "num_days"))
 drivers_cropped <- subset(drivers, drivers$year > 2000 & drivers$year < 2024)
+
 drivers_cast <- drivers_cropped %>%
   # Remove duplicates based on relevant columns
   distinct(Stream_Name, year, driver, value, .keep_all = TRUE) %>%
@@ -260,10 +273,6 @@ drivers_cast <- drivers_cropped %>%
   # Pivot the data
   tidyr::pivot_wider(names_from = driver, values_from = value)
 
-# Convert green up day to Julian Day
-drivers_cast$cycle0 <- as.Date(unlist(drivers_cast$cycle0))
-drivers_cast$cycle0 <- format(as.Date(drivers_cast$cycle0), "%j")
-
 # Combine with character columns: 
 all_spatial <- drivers_cast %>% 
   left_join(character_cols, by = "Stream_Name") %>%
@@ -273,6 +282,7 @@ all_spatial <- drivers_cast %>%
   # Rename columns with .x by removing the suffix
   rename_with(~ str_remove(., "\\.x$"))
 
+# Merge with final dataset and clean up
 tot <- tot %>%
   left_join(all_spatial, by = c("Stream_Name", "Year")) %>%
   filter(Year > 2000 & Year <= 2024) %>%  # Filter for years within range
@@ -287,8 +297,8 @@ tot <- tot %>%
     temp = as.numeric(temp)
   ) %>%
   mutate(
-    permafrost_mean_m = replace_na(as.numeric(permafrost_mean_m), 0),
-    prop_area = replace_na(as.numeric(prop_area), 0)
+    permafrost_mean_m = replace_na(permafrost_mean_m, 0),
+    prop_area = replace_na(prop_area, 0)
   ) %>%
   # Remove columns with .y
   select(-contains(".y")) %>%
