@@ -89,8 +89,8 @@ drivers_df <- read.csv(sprintf("AllDrivers_Harmonized_Average_filtered_%d_years.
   # filter(GenYield <= 80) %>%  
   # filter(GenYield <= 15) %>% 
   dplyr::select(-contains("Conc"), -contains("FN"), -contains("major"), 
-                -Max_Daylength, -silicate_weathering, -q_5, -q_95, -drainage_area) %>%
-  dplyr::mutate_at(vars(15:26), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
+                -Max_Daylength, -silicate_weathering, -q_5, -q_95, -drainage_area, -Q) %>%
+  dplyr::mutate_at(vars(14:25), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
   select(GenYield, everything()) %>%
   filter(!Stream_ID %in% c("USGS__Dismal River", "KRR__S65E"))  # Remove specific outlier sites
 
@@ -144,7 +144,7 @@ write.csv(drivers_df,
 gc()
 
 # Plot and save correlation matrix ----
-numeric_drivers <- 2:25 # Change this range to reflect data frame length
+numeric_drivers <- 2:24 # Change this range to reflect data frame length
 driver_cor <- cor(drivers_df[, numeric_drivers])
 save_correlation_plot(driver_cor, output_dir)
 
@@ -180,7 +180,7 @@ manual_ntree_rf1 <- 2000  # Replace with chosen value
 tuneRF(drivers_numeric[, 2:ncol(drivers_numeric)], drivers_numeric[, 1], ntreeTry = manual_ntree_rf1, stepFactor = 1, improve = 0.5, plot = TRUE)
 
 # Manually select mtry for rf_model1 ----
-manual_mtry_rf1 <- 8  # Replace with chosen value
+manual_mtry_rf1 <- 7  # Replace with chosen value
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
@@ -263,7 +263,7 @@ tuneRF(kept_drivers, drivers_numeric[, 1], ntreeTry = 2000, stepFactor = 1, impr
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
 rf_model2 <- randomForest(rf_formula, data = drivers_numeric, 
-                          importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 6)
+                          importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 3)
 
 # Visualize output for rf_model2
 print(rf_model2)

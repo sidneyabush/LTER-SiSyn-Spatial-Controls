@@ -37,7 +37,7 @@ load("GenYield_Average_rf_model2_full.RData")
 data <- kept_drivers
 
 data <- data %>%
-  dplyr::select("P", "snow_cover", "precip", "rocks_volcanic", "basin_slope", "NOx")
+  dplyr::select("rocks_volcanic", "precip", "basin_slope", "land_shrubland_grassland", "NOx")
 
 # Scale the selected numerical columns 
 scaled_data <- data %>%
@@ -51,7 +51,7 @@ set.seed(123)
 p2 <- fviz_nbclust(scaled_data, kmeans, method= "silhouette", k.max = 20)
 p2
 
-kmeans_result <- kmeans(scaled_data, iter.max = 50, nstart = 50, centers = 4)
+kmeans_result <- kmeans(scaled_data, iter.max = 50, nstart = 50, centers = 2)
 
 # Add cluster assignments to the reg data
 final_data <- data %>%
@@ -73,14 +73,13 @@ cb_palette <- c(
 long_data <- scaled_data %>%
   pivot_longer(-cluster, names_to = "Driver", values_to = "Value") %>%
   mutate(
-    Driver = factor(Driver, levels = c("P", "snow_cover", "precip", "NOx", "rocks_volcanic", "basin_slope")),
+    Driver = factor(Driver, levels = c("rocks_volcanic", "precip", "basin_slope", "land_shrubland_grassland", "NOx")),
     Driver = recode(Driver, 
-                    "P" = "P",
-                    "snow_cover" = "Snow",
-                    "precip" = "Precip",
-                    "NOx" = "NOx",
                     "rocks_volcanic" = "Volcanic Rock",
-                    "basin_slope" = "Basin Slope"
+                    "precip" = "Precip",
+                    "basin_slope" = "Basin Slope",
+                    "land_shrubland_grassland" = "Land: Shrubland/ Grassland",
+                    "NOx" = "NOx"
     )
   )
 
@@ -89,23 +88,24 @@ box_plot <- ggplot(long_data, aes(x = Driver, y = Value, fill = cluster)) +
   facet_wrap(~cluster, ncol = 2, scales = "free") +  
   scale_fill_manual(values = cb_palette) +  # Apply colorblind-friendly colors
   labs(title = "GenYield Average", x = NULL, y = "Scaled Value") +
-  coord_cartesian(ylim = c(-3, 13)) + # Set Y-axis limits without removing data
+  coord_cartesian(ylim = c(-3, 5)) + # Set Y-axis limits without removing data
   theme_classic() +
   theme(
     legend.position = "none",
     axis.text.x = element_text(angle = 45, hjust = 1, size = 14),  # Rotate x-axis labels
-    strip.text = element_text(size = 14, face = "bold"),  # Keep facet labels in place
+    axis.text.y = element_text(size = 14),  # Rotate x-axis labels
+    strip.text = element_text(size = 14, face = "bold"), 
     plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),  # Center & bold title
     panel.border = element_rect(color = "black", fill = NA, linewidth = 1),  # Add panel borders
     panel.spacing = unit(1, "lines"),  # Ensure spacing between facets
-    axis.title.x = element_blank())  # Remove x-axis title but keep labels
+    axis.title = element_text(size = 15, face = "bold"))  
 
 print(box_plot)
 
 ggsave(
   filename = "GenYield_Average_Cluster_Drivers_Boxplot.png",
   plot = box_plot,
-  width = 8,
+  width = 12,
   height = 8,
   dpi = 300,
   path = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/GenYield"
@@ -126,8 +126,8 @@ sil_plot <- fviz_silhouette(sil) +
     axis.ticks.x = element_blank(),  # Remove x-axis ticks
     legend.position = "right",
     strip.text = element_text(size = 14, face = "bold"),  # Enlarge facet labels
-    plot.title = element_text(hjust = 0.5, size = 14, face = "bold")  # Center & bold title
-  )
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"), 
+    axis.title = element_text(size = 14, face = "bold"))  
 
 print(sil_plot)
 
@@ -164,10 +164,10 @@ dist <- ggplot(all_data, aes(x = cluster, y = GenYield, fill = cluster)) +
   theme_classic() +
   theme(
     legend.position = "none",
-    axis.text.x = element_text(size = 14),  # Rotate x-axis labels
+    axis.text = element_text(size = 14),  # Rotate x-axis labels
     strip.text = element_text(size = 14, face = "bold"),  # Enlarge facet labels
-    plot.title = element_text(hjust = 0.5, size = 14, face = "bold")  # Center & bold title
-  )
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    axis.title = element_text(size = 14, face = "bold"))  
 
 print(dist)
 
@@ -247,6 +247,7 @@ shap_importance_by_cluster <- lapply(unique_clusters, generate_shap_plots_for_cl
 shap_importance_summary <- bind_rows(shap_importance_by_cluster, .id = "cluster")
 
 # Save the summary as a CSV
-write.csv(shap_importance_summary, file = sprintf("%s/SHAP_GenYield_Ave_Cluster_Importance_Summary.csv", output_dir), row.names = FALSE)
+# write.csv(shap_importance_summary, file = sprintf("%s/SHAP_GenYield_Ave_Cluster_Importance_Summary.csv", output_dir), row.names = FALSE)
 
 message("SHAP importance analysis per cluster completed and saved.")
+

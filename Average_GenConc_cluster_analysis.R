@@ -37,7 +37,7 @@ load("GenConc_Average_rf_model2_full.RData")
 data <- kept_drivers
 
 data <- data %>%
-  dplyr::select("P", "snow_cover", "precip", "rocks_volcanic", "basin_slope", "NOx")
+  dplyr::select("P", "snow_cover", "precip", "rocks_volcanic", "basin_slope")
 
 # Scale the selected numerical columns 
 scaled_data <- data %>%
@@ -73,12 +73,11 @@ cb_palette <- c(
 long_data <- scaled_data %>%
   pivot_longer(-cluster, names_to = "Driver", values_to = "Value") %>%
   mutate(
-    Driver = factor(Driver, levels = c("P", "snow_cover", "precip", "NOx", "rocks_volcanic", "basin_slope")),
+    Driver = factor(Driver, levels = c("P", "snow_cover", "precip", "rocks_volcanic", "basin_slope")),
     Driver = recode(Driver, 
                     "P" = "P",
                     "snow_cover" = "Snow",
                     "precip" = "Precip",
-                    "NOx" = "NOx",
                     "rocks_volcanic" = "Volcanic Rock",
                     "basin_slope" = "Basin Slope"
     )
@@ -89,11 +88,12 @@ box_plot <- ggplot(long_data, aes(x = Driver, y = Value, fill = cluster)) +
   facet_wrap(~cluster, ncol = 2, scales = "free") +  
   scale_fill_manual(values = cb_palette) +  # Apply colorblind-friendly colors
   labs(title = "GenConc Average", x = NULL, y = "Scaled Value") +
-  coord_cartesian(ylim = c(-3, 13)) + # Set Y-axis limits without removing data
+  coord_cartesian(ylim = c(-3, 8)) + # Set Y-axis limits without removing data
   theme_classic() +
   theme(
     legend.position = "none",
-    axis.text = element_text(angle = 45, hjust = 1, size = 14),  # Rotate x-axis labels
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 14),  # Rotate x-axis labels
+    axis.text.y = element_text(size = 14),  # Rotate x-axis labels
     strip.text = element_text(size = 14, face = "bold"), 
     plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),  # Center & bold title
     panel.border = element_rect(color = "black", fill = NA, linewidth = 1),  # Add panel borders
@@ -126,7 +126,7 @@ sil_plot <- fviz_silhouette(sil) +
     axis.ticks.x = element_blank(),  # Remove x-axis ticks
     legend.position = "right",
     strip.text = element_text(size = 14, face = "bold"),  # Enlarge facet labels
-    plot.title = element_text(hjust = 0.5, size = 14, face = "bold") +
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"), 
     axis.title = element_text(size = 14, face = "bold"))  
 
 print(sil_plot)
@@ -166,7 +166,7 @@ dist <- ggplot(all_data, aes(x = cluster, y = GenConc, fill = cluster)) +
     legend.position = "none",
     axis.text = element_text(size = 14),  # Rotate x-axis labels
     strip.text = element_text(size = 14, face = "bold"),  # Enlarge facet labels
-    plot.title = element_text(hjust = 0.5, size = 14, face = "bold") +
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
     axis.title = element_text(size = 14, face = "bold"))  
 
 print(dist)
