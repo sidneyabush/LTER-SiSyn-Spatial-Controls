@@ -192,7 +192,7 @@ randomForest::varImpPlot(rf_model1)
 
 # Generate plots comparing predicted vs observed ----
 lm_plot <- plot(rf_model1$predicted, drivers_numeric$GenConc, pch = 16, cex = 1.5,
-                xlab = "Predicted", ylab = "Observed", main = "RF Model 1 Trained Data - Ave GenConc",
+                xlab = "Predicted", ylab = "Observed", main = "RF Model 1 Full Data - Ave GenConc",
                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
   theme(text = element_text(size = 40), face = "bold")
@@ -279,4 +279,6 @@ save(rf_model2, file = "GenConc_Average_rf_model2_full.RData")
 kept_drivers <- drivers_numeric[, colnames(drivers_numeric) %in% predictors(result_rfe)]
 save(kept_drivers, file = "GenConc_Average_kept_drivers_full.RData")
 save(drivers_numeric, file = "GenConc_Average_full.RData")
+save(drivers_df, file = "GenConc_Average_full_stream_ids.RData")
+
 
