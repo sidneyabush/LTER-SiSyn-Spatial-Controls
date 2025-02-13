@@ -201,7 +201,14 @@ generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, ou
     coord_flip() +
     labs(x = "Feature", y = "Mean Absolute SHAP Value",
          title = paste("GenYield Average - Feature Importance for Cluster", cluster_id)) +
-    theme_minimal()
+    theme_classic() +
+    theme(
+      axis.text.x = element_text(size = 14),  # Increase x-axis text size
+      axis.text.y = element_text(size = 14),  # Increase y-axis (feature labels) text size
+      axis.title.x = element_text(size = 16, face = "bold"),  # Increase and bold x-axis title
+      axis.title.y = element_text(size = 16, face = "bold"),  # Increase and bold y-axis title
+      plot.title = element_text(size = 18, face = "bold", hjust = 0.5)  # Make title larger & centered
+    )
   print(cluster_importance_plot)
   dev.off()
   

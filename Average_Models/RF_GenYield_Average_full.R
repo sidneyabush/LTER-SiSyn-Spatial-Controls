@@ -88,7 +88,7 @@ drivers_df <- read.csv(sprintf("AllDrivers_Harmonized_Average_filtered_%d_years.
   filter(!grepl("^MCM", Stream_ID)) %>% # Remove all Stream_IDs that start with "MCM"
   # filter(GenYield <= 80) %>%  
   # filter(GenYield <= 15) %>% 
-  dplyr::select(-contains("Yield"), -contains("FN"), -contains("major"), 
+  dplyr::select(-contains("Conc"), -contains("FN"), -contains("major"), 
                 -Max_Daylength, -silicate_weathering, -q_5, -q_95, -drainage_area) %>%
   dplyr::mutate_at(vars(15:26), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
   select(GenYield, everything()) %>%

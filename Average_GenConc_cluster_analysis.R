@@ -93,8 +93,8 @@ box_plot <- ggplot(long_data, aes(x = Driver, y = Value, fill = cluster)) +
   theme_classic() +
   theme(
     legend.position = "none",
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),  # Rotate x-axis labels
-    strip.text = element_text(size = 12, face = "bold"),  # Keep facet labels in place
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 14),  # Rotate x-axis labels
+    strip.text = element_text(size = 14, face = "bold"),  # Keep facet labels in place
     plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),  # Center & bold title
     panel.border = element_rect(color = "black", fill = NA, linewidth = 1),  # Add panel borders
     panel.spacing = unit(1, "lines"),  # Ensure spacing between facets
@@ -118,7 +118,7 @@ sil_plot <- fviz_silhouette(sil) +
     axis.text.x = element_blank(),  # Remove x-axis labels
     axis.ticks.x = element_blank(),  # Remove x-axis ticks
     legend.position = "right",
-    strip.text = element_text(size = 12, face = "bold"),  # Enlarge facet labels
+    strip.text = element_text(size = 14, face = "bold"),  # Enlarge facet labels
     plot.title = element_text(hjust = 0.5, size = 14, face = "bold")  # Center & bold title
   )
 
@@ -150,8 +150,8 @@ dist <- ggplot(all_data, aes(x = cluster, y = GenConc, fill = cluster)) +
   theme_classic() +
   theme(
     legend.position = "none",
-    axis.text.x = element_text(size = 10),  # Rotate x-axis labels
-    strip.text = element_text(size = 12, face = "bold"),  # Enlarge facet labels
+    axis.text.x = element_text(size = 14),  # Rotate x-axis labels
+    strip.text = element_text(size = 14, face = "bold"),  # Enlarge facet labels
     plot.title = element_text(hjust = 0.5, size = 14, face = "bold")  # Center & bold title
   )
 
@@ -195,13 +195,20 @@ generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, ou
   # Save the feature importance plot
   output_file <- sprintf("%s/SHAP_GenConc_Ave_Cluster_%s_Variable_Importance.pdf", output_dir, cluster_id)
   
-  pdf(output_file, width = 8, height = 8)
+  pdf(output_file, width = 10, height = 8)
   cluster_importance_plot <- ggplot(overall_feature_importance, aes(x = reorder(feature, importance), y = importance)) +
     geom_bar(stat = "identity", fill = cluster_color) +  # Use a single color for all bars per cluster
     coord_flip() +
     labs(x = "Feature", y = "Mean Absolute SHAP Value",
          title = paste("GenConc Average - Feature Importance for Cluster", cluster_id)) +
-    theme_minimal()
+    theme_classic() +
+    theme(
+      axis.text.x = element_text(size = 14),  # Increase x-axis text size
+      axis.text.y = element_text(size = 14),  # Increase y-axis (feature labels) text size
+      axis.title.x = element_text(size = 16, face = "bold"),  # Increase and bold x-axis title
+      axis.title.y = element_text(size = 16, face = "bold"),  # Increase and bold y-axis title
+      plot.title = element_text(size = 18, face = "bold", hjust = 0.5)  # Make title larger & centered
+    )
   print(cluster_importance_plot)
   dev.off()
   
