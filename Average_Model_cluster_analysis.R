@@ -1,9 +1,5 @@
 # Load necessary libraries
-library(ggplot2)
-library(dplyr)
-library(tidyr)
-library(factoextra)
-library(cluster)
+librarian::shelf(ggplot2, dplyr, tidyr, factoextra, cluster)
 
 # Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
@@ -14,6 +10,7 @@ rm(list = ls())
 # Read in and preprocess the data
 # train <- read.csv("train_data_stream_id.csv")
 load("GenConc_Average_kept_drivers_full.RData")
+load("GenConc_Average_full_stream_ids.RData")
 
 data <- kept_drivers
 
@@ -47,13 +44,8 @@ scaled_data <- scaled_data %>%
 
 # Define a colorblind-friendly palette
 cb_palette <- c(
-  "#E69F00",  
-  "#56B4E9",  
-  "#009E73",  
-  "#D55E00",   
-  "#CC79A7"  
-  
-)
+  "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7"
+  )
 
 # Reshape data to long format for ggplot
 long_data <- scaled_data %>%
@@ -70,19 +62,23 @@ long_data <- scaled_data %>%
     )
   )
 
-# Create box plots with facet_wrap
 box_plot <- ggplot(long_data, aes(x = Driver, y = Value, fill = cluster)) +
   geom_boxplot() +
-  facet_wrap(~cluster, scales = "free") +
+  facet_wrap(~cluster, scales = "fixed") +  # Keep y-axis fixed
   scale_fill_manual(values = cb_palette) +  # Apply colorblind-friendly colors
   labs(title = "Average Model", x = NULL, y = "Scaled Value") +
   theme_classic() +
   theme(
     legend.position = "none",
     axis.text.x = element_text(angle = 45, hjust = 1, size = 10),  # Rotate x-axis labels
-    strip.text = element_text(size = 12, face = "bold"),  # Enlarge facet labels
-    plot.title = element_text(hjust = 0.5, size = 14, face = "bold")  # Center & bold title
-  )
+    strip.text = element_text(size = 12, face = "bold"),  # Keep facet labels in place
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),  # Center & bold title
+    panel.spacing = unit(0, "lines")  # Reduce space between facets to keep alignment
+  ) +
+  guides(x = guide_axis())  # Ensure x-axis labels appear on all facets
+
+
+print(box_plot)
 
 # Compute silhouette scores
 sil <- silhouette(kmeans_result$cluster, dist(scaled_data %>% select(-cluster), method = "euclidean")^2)
@@ -101,21 +97,10 @@ sil_plot <- fviz_silhouette(sil) +
     plot.title = element_text(hjust = 0.5, size = 14, face = "bold")  # Center & bold title
   )
 
-# Display both plots
-print(box_plot)
 print(sil_plot)
 
 # Merge clusters with kept_drivers (ensuring row alignment)
 genconc_clusters <- bind_cols(kept_drivers, final_data)
-
-# Define a colorblind-friendly palette
-cb_palette <- c(
-  "#E69F00",  # Orange
-  "#56B4E9",  # Sky Blue
-  "#009E73",  # Green
-  "#D55E00",  # Red
-  "#CC79A7"   # Pink
-)
 
 # Ensure 'cluster' is a factor
 genconc_clusters$cluster <- as.factor(genconc_clusters$cluster)
@@ -160,9 +145,6 @@ generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, ou
     summarise(across(everything(), ~ mean(abs(.), na.rm = TRUE))) %>%
     pivot_longer(cols = everything(), names_to = "feature", values_to = "importance") %>%
     arrange(desc(importance))
-  
-  # Define a colorblind-friendly palette in order
-  cb_palette <- c("#E69F00", "#56B4E9", "#009E73", "#D55E00", "#CC79A7")
   
   # Ensure clusters are sorted so they are assigned the correct colors
   sorted_clusters <- sort(unique(combined_data$cluster))
