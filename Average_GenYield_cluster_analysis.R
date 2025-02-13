@@ -88,13 +88,13 @@ box_plot <- ggplot(long_data, aes(x = Driver, y = Value, fill = cluster)) +
   geom_boxplot() +
   facet_wrap(~cluster, ncol = 2, scales = "free") +  
   scale_fill_manual(values = cb_palette) +  # Apply colorblind-friendly colors
-  labs(title = "Average Model", x = NULL, y = "Scaled Value") +
+  labs(title = "GenYield Average", x = NULL, y = "Scaled Value") +
   coord_cartesian(ylim = c(-3, 13)) + # Set Y-axis limits without removing data
   theme_classic() +
   theme(
     legend.position = "none",
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),  # Rotate x-axis labels
-    strip.text = element_text(size = 12, face = "bold"),  # Keep facet labels in place
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 14),  # Rotate x-axis labels
+    strip.text = element_text(size = 14, face = "bold"),  # Keep facet labels in place
     plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),  # Center & bold title
     panel.border = element_rect(color = "black", fill = NA, linewidth = 1),  # Add panel borders
     panel.spacing = unit(1, "lines"),  # Ensure spacing between facets
@@ -102,7 +102,14 @@ box_plot <- ggplot(long_data, aes(x = Driver, y = Value, fill = cluster)) +
 
 print(box_plot)
 
-ggsave(filename = "GenYield_Average_Cluster_Drivers_Boxplot.png", plot = box_plot, width = 8, height = 8, dpi = 300)
+ggsave(
+  filename = "GenYield_Average_Cluster_Drivers_Boxplot.png",
+  plot = box_plot,
+  width = 8,
+  height = 8,
+  dpi = 300,
+  path = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/GenYield"
+)
 
 
 # Compute silhouette scores
@@ -110,7 +117,7 @@ sil <- silhouette(kmeans_result$cluster, dist(scaled_data %>% select(-cluster), 
 
 # Create silhouette plot
 sil_plot <- fviz_silhouette(sil) +
-  labs(title = "Average Model", y = "Silhouette Width", x = "Sites") +
+  labs(title = "GenYield Average", y = "Silhouette Width", x = "Sites") +
   theme_classic() +
   scale_fill_manual(values = cb_palette) +  # Ensure consistent colors
   scale_color_manual(values = cb_palette) +  # Apply the same colors to silhouette plot
@@ -118,13 +125,20 @@ sil_plot <- fviz_silhouette(sil) +
     axis.text.x = element_blank(),  # Remove x-axis labels
     axis.ticks.x = element_blank(),  # Remove x-axis ticks
     legend.position = "right",
-    strip.text = element_text(size = 12, face = "bold"),  # Enlarge facet labels
+    strip.text = element_text(size = 14, face = "bold"),  # Enlarge facet labels
     plot.title = element_text(hjust = 0.5, size = 14, face = "bold")  # Center & bold title
   )
 
 print(sil_plot)
 
-ggsave(filename = "GenYield_Average_Cluster_SilPlot.png", plot = sil_plot, width = 6, height = 4, dpi = 300)
+ggsave(
+  filename = "GenYield_Average_Cluster_SilPlot.png",
+  plot = sil_plot,
+  width = 6,
+  height = 4,
+  dpi = 300,
+  path = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/GenYield"
+)
 
 
 # Select only Stream_ID and GenYield from drivers_df
@@ -144,20 +158,27 @@ dist <- ggplot(all_data, aes(x = cluster, y = GenYield, fill = cluster)) +
   geom_boxplot(alpha = 0.7, outlier.shape = NA) +  # Boxplot without outliers
   geom_jitter(alpha = 0.3, width = 0.2) +  # Add individual points
   scale_fill_manual(values = cb_palette) +  # Apply custom color palette
-  labs(title = "Average Model",
+  labs(title = "GenYield Average",
        x = "Cluster",
        y = "GenYield") +
   theme_classic() +
   theme(
     legend.position = "none",
-    axis.text.x = element_text(size = 10),  # Rotate x-axis labels
-    strip.text = element_text(size = 12, face = "bold"),  # Enlarge facet labels
+    axis.text.x = element_text(size = 14),  # Rotate x-axis labels
+    strip.text = element_text(size = 14, face = "bold"),  # Enlarge facet labels
     plot.title = element_text(hjust = 0.5, size = 14, face = "bold")  # Center & bold title
   )
 
 print(dist)
 
-ggsave(filename = "GenYield_Average_Cluster_Boxplot.png", plot = dist, width = 6, height = 6, dpi = 300)
+ggsave(
+  filename = "GenYield_Average_Cluster_Boxplot.png",
+  plot = dist,
+  width = 6,
+  height = 4,
+  dpi = 300,
+  path = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/GenYield"
+)
 
 # Save  so we can look at Stream_ID and distribution later
 write.csv(all_data, file= "Average_GenYield_Cluster_Stream_ID.csv")
@@ -195,7 +216,7 @@ generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, ou
   # Save the feature importance plot
   output_file <- sprintf("%s/SHAP_GenYield_Ave_Cluster_%s_Variable_Importance.pdf", output_dir, cluster_id)
   
-  pdf(output_file, width = 8, height = 8)
+  pdf(output_file, width = 10, height = 8)
   cluster_importance_plot <- ggplot(overall_feature_importance, aes(x = reorder(feature, importance), y = importance)) +
     geom_bar(stat = "identity", fill = cluster_color) +  # Use a single color for all bars per cluster
     coord_flip() +

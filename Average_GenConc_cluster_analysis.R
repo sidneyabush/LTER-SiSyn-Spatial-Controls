@@ -88,21 +88,28 @@ box_plot <- ggplot(long_data, aes(x = Driver, y = Value, fill = cluster)) +
   geom_boxplot() +
   facet_wrap(~cluster, ncol = 2, scales = "free") +  
   scale_fill_manual(values = cb_palette) +  # Apply colorblind-friendly colors
-  labs(title = "Average Model", x = NULL, y = "Scaled Value") +
+  labs(title = "GenConc Average", x = NULL, y = "Scaled Value") +
   coord_cartesian(ylim = c(-3, 13)) + # Set Y-axis limits without removing data
   theme_classic() +
   theme(
     legend.position = "none",
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 14),  # Rotate x-axis labels
-    strip.text = element_text(size = 14, face = "bold"),  # Keep facet labels in place
+    axis.text = element_text(angle = 45, hjust = 1, size = 14),  # Rotate x-axis labels
+    strip.text = element_text(size = 14, face = "bold"), 
     plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),  # Center & bold title
     panel.border = element_rect(color = "black", fill = NA, linewidth = 1),  # Add panel borders
     panel.spacing = unit(1, "lines"),  # Ensure spacing between facets
-    axis.title.x = element_blank())  # Remove x-axis title but keep labels
+    axis.title = element_text(size = 14, face = "bold"))  
   
 print(box_plot)
 
-ggsave(filename = "GenConc_Average_Cluster_Drivers_Boxplot.png", plot = box_plot, width = 8, height = 8, dpi = 300)
+ggsave(
+  filename = "GenConc_Average_Cluster_Drivers_Boxplot.png",
+  plot = box_plot,
+  width = 10,
+  height = 10,
+  dpi = 300,
+  path = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/GenConc"
+)
 
 
 # Compute silhouette scores
@@ -110,7 +117,7 @@ sil <- silhouette(kmeans_result$cluster, dist(scaled_data %>% select(-cluster), 
 
 # Create silhouette plot
 sil_plot <- fviz_silhouette(sil) +
-  labs(title = "Average Model", y = "Silhouette Width", x = "Sites") +
+  labs(title = "GenConc Average", y = "Silhouette Width", x = "Sites") +
   theme_classic() +
   scale_fill_manual(values = cb_palette) +  # Ensure consistent colors
   scale_color_manual(values = cb_palette) +  # Apply the same colors to silhouette plot
@@ -119,12 +126,19 @@ sil_plot <- fviz_silhouette(sil) +
     axis.ticks.x = element_blank(),  # Remove x-axis ticks
     legend.position = "right",
     strip.text = element_text(size = 14, face = "bold"),  # Enlarge facet labels
-    plot.title = element_text(hjust = 0.5, size = 14, face = "bold")  # Center & bold title
-  )
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold") +
+    axis.title = element_text(size = 14, face = "bold"))  
 
 print(sil_plot)
 
-ggsave(filename = "GenConc_Average_Cluster_SilPlot.png", plot = sil_plot, width = 6, height = 4, dpi = 300)
+ggsave(
+  filename = "GenConc_Average_Cluster_SilPlot.png",
+  plot = sil_plot,
+  width = 6,
+  height = 4,
+  dpi = 300,
+  path = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/GenConc"
+)
 
 
 # Select only Stream_ID and GenConc from drivers_df
@@ -144,20 +158,27 @@ dist <- ggplot(all_data, aes(x = cluster, y = GenConc, fill = cluster)) +
   geom_boxplot(alpha = 0.7, outlier.shape = NA) +  # Boxplot without outliers
   geom_jitter(alpha = 0.3, width = 0.2) +  # Add individual points
   scale_fill_manual(values = cb_palette) +  # Apply custom color palette
-  labs(title = "Average Model",
+  labs(title = "GenConc Average",
        x = "Cluster",
        y = "GenConc") +
   theme_classic() +
   theme(
     legend.position = "none",
-    axis.text.x = element_text(size = 14),  # Rotate x-axis labels
+    axis.text = element_text(size = 14),  # Rotate x-axis labels
     strip.text = element_text(size = 14, face = "bold"),  # Enlarge facet labels
-    plot.title = element_text(hjust = 0.5, size = 14, face = "bold")  # Center & bold title
-  )
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold") +
+    axis.title = element_text(size = 14, face = "bold"))  
 
 print(dist)
 
-ggsave(filename = "GenConc_Average_Cluster_Boxplot.png", plot = dist, width = 6, height = 6, dpi = 300)
+ggsave(
+  filename = "GenConc_Average_Cluster_Boxplot.png",
+  plot = dist,
+  width = 6,
+  height = 4,
+  dpi = 300,
+  path = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Average_Model/GenConc"
+)
 
 # Save  so we can look at Stream_ID and distribution later
 write.csv(all_data, file= "Average_GenConc_Cluster_Stream_ID.csv")
