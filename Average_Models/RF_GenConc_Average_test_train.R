@@ -89,7 +89,7 @@ drivers_df <- read.csv(sprintf("AllDrivers_Harmonized_Average_filtered_%d_years.
   # filter(GenYield <= 80) %>%  
   # filter(GenConc <= 15) %>% 
   dplyr::select(-contains("Yield"), -contains("FN"), -contains("major"), 
-                -Max_Daylength, -silicate_weathering, -Q, -q_95, -drainage_area) %>%
+                -Max_Daylength, -silicate_weathering, -q_5, -q_95, -drainage_area) %>%
   dplyr::mutate_at(vars(15:26), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
   select(GenConc, everything()) %>%
   filter(!Stream_ID %in% c("USGS__Dismal River", "KRR__S65E"))  # Remove specific outlier sites
@@ -287,10 +287,10 @@ save_lm_plot(rf_model2, train$GenConc, output_dir)
 
 
 # Save model and required objects for SHAP analysis
-save(rf_model2, file = "GenConc_Average_rf_model2_noWeathering.RData")
+save(rf_model2, file = "GenConc_Average_rf_model2_noWeathering_train.RData")
 kept_drivers <- train[, colnames(train) %in% predictors(result_rfe)]
-save(kept_drivers, file = "GenConc_Average_kept_drivers_noWeathering.RData")
-save(train, file = "GenConc_Average_train_noWeathering.RData")
+save(kept_drivers, file = "GenConc_Average_kept_drivers_noWeathering_train.RData")
+save(train, file = "GenConc_Average_train_noWeathering_train.RData")
 
 # ---- Use Predict Function on Test Data ----
 # Predict on test data using rf_model2

@@ -12,31 +12,35 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 rm(list = ls())
 
 # Read in and preprocess the data
-train <- read.csv("train_data_stream_id.csv")
+# train <- read.csv("train_data_stream_id.csv")
+load("GenConc_Average_kept_drivers_full.RData")
 
-data <- train %>%
-  dplyr::select("Stream_ID", "P", "snow_cover", "precip", "NOx", "rocks_volcanic", "basin_slope")
+data <- kept_drivers
 
-# Scale the selected numerical columns (excluding Stream_ID) and ensure correct column names
+data <- data %>%
+  dplyr::select("P", "snow_cover", "precip", "rocks_volcanic", "basin_slope", "NOx")
+
+# Scale the selected numerical columns 
 scaled_data <- data %>%
-  mutate(across(-Stream_ID, ~ as.numeric(scale(.))))
+  mutate(across(where(is.numeric), ~ as.numeric(scale(.))))
+
 
 # Set seed for reproducibility
 set.seed(123)
 
 # Perform silhouette method to determine optimal clusters
-p2 <- fviz_nbclust(scaled_data %>% select(-Stream_ID), kmeans, method= "silhouette", k.max = 20)
+p2 <- fviz_nbclust(scaled_data, kmeans, method= "silhouette", k.max = 20)
 p2
 
-kmeans_result <- kmeans(scaled_data %>% select(-Stream_ID), iter.max = 50, nstart = 50, centers = 5)
+kmeans_result <- kmeans(scaled_data, iter.max = 50, nstart = 50, centers = 4)
 
 # Add cluster assignments to the reg data
 final_data <- data %>%
   mutate(cluster = as.factor(kmeans_result$cluster)) %>%
-  dplyr::select(Stream_ID, cluster)
+  dplyr::select(cluster)
 
 # Save to CSV file
-write.csv(final_data, "cluster_assignments_AverageModel.csv", row.names = FALSE)
+# write.csv(final_data, "cluster_assignments_AverageModel.csv", row.names = FALSE)
 
 scaled_data <- scaled_data %>%
   mutate(cluster = as.factor(kmeans_result$cluster))
@@ -51,18 +55,9 @@ cb_palette <- c(
   
 )
 
-#E69F00  # Orange
-#56B4E9  # Sky Blue
-#009E73  # Green
-#F0E442  # Yellow
-#0072B2  # Blue
-#D55E00  # Vermilion
-#CC79A7  # Reddish Purple
-
-
 # Reshape data to long format for ggplot
 long_data <- scaled_data %>%
-  pivot_longer(-c(Stream_ID, cluster), names_to = "Driver", values_to = "Value") %>%
+  pivot_longer(-cluster, names_to = "Driver", values_to = "Value") %>%
   mutate(
     Driver = factor(Driver, levels = c("P", "snow_cover", "precip", "NOx", "rocks_volcanic", "basin_slope")),
     Driver = recode(Driver, 
@@ -90,7 +85,7 @@ box_plot <- ggplot(long_data, aes(x = Driver, y = Value, fill = cluster)) +
   )
 
 # Compute silhouette scores
-sil <- silhouette(kmeans_result$cluster, dist(scaled_data %>% select(-Stream_ID, -cluster), method = "euclidean")^2)
+sil <- silhouette(kmeans_result$cluster, dist(scaled_data %>% select(-cluster), method = "euclidean")^2)
 
 # Create silhouette plot
 sil_plot <- fviz_silhouette(sil) +
@@ -109,3 +104,100 @@ sil_plot <- fviz_silhouette(sil) +
 # Display both plots
 print(box_plot)
 print(sil_plot)
+
+# Merge clusters with kept_drivers (ensuring row alignment)
+genconc_clusters <- bind_cols(kept_drivers, final_data)
+
+# Define a colorblind-friendly palette
+cb_palette <- c(
+  "#E69F00",  # Orange
+  "#56B4E9",  # Sky Blue
+  "#009E73",  # Green
+  "#D55E00",  # Red
+  "#CC79A7"   # Pink
+)
+
+# Ensure 'cluster' is a factor
+genconc_clusters$cluster <- as.factor(genconc_clusters$cluster)
+
+# Create a boxplot with the custom color palette
+ggplot(genconc_clusters, aes(x = cluster, y = GenConc, fill = cluster)) +
+  geom_boxplot(alpha = 0.7, outlier.shape = NA) +  # Boxplot without outliers
+  geom_jitter(alpha = 0.3, width = 0.2) +  # Add individual points
+  scale_fill_manual(values = cb_palette) +  # Apply custom color palette
+  labs(title = "Average Model",
+       x = "Cluster",
+       y = "GenConc") +
+  theme_classic() +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(size = 10),  # Rotate x-axis labels
+    strip.text = element_text(size = 12, face = "bold"),  # Enlarge facet labels
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold")  # Center & bold title
+  )
+
+# Merge clusters with kept_drivers (ensuring row alignment)
+combined_data <- bind_cols(kept_drivers, clusters)
+
+# Ensure 'cluster' is a factor
+combined_data$cluster <- as.factor(combined_data$cluster)
+
+generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, output_dir, sample_size = 30) {
+  # Filter data for the specific cluster and exclude non-predictor variables
+  cluster_data <- combined_data %>% filter(cluster == cluster_id) %>% select(-cluster)  
+  
+  if (nrow(cluster_data) == 0) {
+    message(paste("Skipping cluster", cluster_id, "as it has no data"))
+    return(NULL)
+  }
+  
+  # Generate SHAP values
+  shap_values <- generate_shap_values(model, cluster_data, sample_size)
+  
+  # Calculate overall feature importance for the cluster
+  overall_feature_importance <- shap_values %>%
+    as.data.frame() %>%
+    summarise(across(everything(), ~ mean(abs(.), na.rm = TRUE))) %>%
+    pivot_longer(cols = everything(), names_to = "feature", values_to = "importance") %>%
+    arrange(desc(importance))
+  
+  # Define a colorblind-friendly palette in order
+  cb_palette <- c("#E69F00", "#56B4E9", "#009E73", "#D55E00", "#CC79A7")
+  
+  # Ensure clusters are sorted so they are assigned the correct colors
+  sorted_clusters <- sort(unique(combined_data$cluster))
+  
+  # Map cluster ID to the corresponding color in order
+  cluster_index <- match(cluster_id, sorted_clusters)
+  cluster_color <- cb_palette[cluster_index]
+  
+  # Save the feature importance plot
+  output_file <- sprintf("%s/SHAP_GenConc_Ave_Cluster_%s_Variable_Importance.pdf", output_dir, cluster_id)
+  
+  pdf(output_file, width = 8, height = 8)
+  cluster_importance_plot <- ggplot(overall_feature_importance, aes(x = reorder(feature, importance), y = importance)) +
+    geom_bar(stat = "identity", fill = cluster_color) +  # Use a single color for all bars per cluster
+    coord_flip() +
+    labs(x = "Feature", y = "Mean Absolute SHAP Value",
+         title = paste("GenConc Average - Feature Importance for Cluster", cluster_id)) +
+    theme_minimal()
+  print(cluster_importance_plot)
+  dev.off()
+  
+  return(overall_feature_importance)
+}
+
+# Ensure clusters are in correct order before running the function
+unique_clusters <- sort(unique(combined_data$cluster))
+
+# Generate SHAP values and plots for each cluster in correct order
+shap_importance_by_cluster <- lapply(unique_clusters, generate_shap_plots_for_cluster, 
+                                     model = rf_model2, combined_data = combined_data, output_dir = output_dir, sample_size = 30)
+
+# Combine results into a single dataframe
+shap_importance_summary <- bind_rows(shap_importance_by_cluster, .id = "cluster")
+
+# Save the summary as a CSV
+write.csv(shap_importance_summary, file = sprintf("%s/SHAP_GenConc_Ave_Cluster_Importance_Summary.csv", output_dir), row.names = FALSE)
+
+message("SHAP importance analysis per cluster completed and saved.")
