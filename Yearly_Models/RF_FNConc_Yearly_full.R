@@ -89,14 +89,15 @@ drivers_df <- read.csv(sprintf("All_Drivers_Harmonized_Yearly_FNConc_FNYield_%d_
   dplyr::select(-contains("Yield"), -contains("Gen"), -contains("major"), 
                 -Max_Daylength, -silicate_weathering, -Q, -drainage_area)
 
-
-# Plot and save correlation matrix ----
-numeric_drivers <- 2:24 # Change this range to reflect data frame length
-driver_cor <- cor(drivers_df[, numeric_drivers])
-save_correlation_plot(driver_cor, output_dir)
-
 drivers_numeric <- drivers_df %>%
   dplyr::select(-Stream_ID, -Year)
+
+# Plot and save correlation matrix ----
+# numeric_drivers <- 2:24 # Change this range to reflect data frame length
+driver_cor <- cor(drivers_numeric)
+save_correlation_plot(driver_cor, output_dir)
+
+
 
 # ---- Train Initial RF Model ----
 # Test different ntree values for rf_model1
