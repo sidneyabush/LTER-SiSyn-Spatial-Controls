@@ -1,6 +1,3 @@
-dev.off()
-dev.new()
-
 # Load necessary libraries
 librarian::shelf(ggplot2, dplyr, tidyr, factoextra, cluster)
 
@@ -34,6 +31,7 @@ generate_shap_values <- function(model, kept_drivers, sample_size = 30) {
 # Read in and preprocess the data
 # train <- read.csv("train_data_stream_id.csv")
 load("FNConc_Yearly_kept_drivers_full.RData")
+load("FNConc_Yearly_full.RData")
 load("FNConc_Yearly_full_stream_ids.RData")
 load("FNConc_Yearly_rf_model2_full.RData")
 
@@ -189,7 +187,7 @@ write.csv(all_data, file= "Yearly_FNConc_Cluster_Stream_ID.csv")
 
 # Now remove FNConc and Stream_ID columns to put into SHAP analysis
 combined_data <- all_data %>%
-  dplyr::select(-FNConc, -Stream_ID)
+  dplyr::select(-Stream_ID)
 
 generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, output_dir, sample_size = 30) {
   # Filter data for the specific cluster and exclude non-predictor variables
@@ -200,7 +198,7 @@ generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, ou
     return(NULL)
   }
   
-  # Generate SHAP values
+  # Generate SHAP values using the custom prediction function
   shap_values <- generate_shap_values(model, cluster_data, sample_size)
   
   # Calculate overall feature importance for the cluster
@@ -249,8 +247,5 @@ shap_importance_by_cluster <- lapply(unique_clusters, generate_shap_plots_for_cl
 
 # Combine results into a single dataframe
 shap_importance_summary <- bind_rows(shap_importance_by_cluster, .id = "cluster")
-
-# Save the summary as a CSV
-write.csv(shap_importance_summary, file = sprintf("%s/SHAP_FNConc_Ave_Cluster_Importance_Summary.csv", output_dir), row.names = FALSE)
 
 message("SHAP importance analysis per cluster completed and saved.")

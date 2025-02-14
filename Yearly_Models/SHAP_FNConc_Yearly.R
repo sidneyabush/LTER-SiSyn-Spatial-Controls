@@ -11,6 +11,7 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 load("FNConc_Yearly_rf_model2_full.RData")
 load("FNConc_Yearly_kept_drivers_full.RData")
 load("FNConc_Yearly_full.RData")
+load("FNConc_Yearly_full_stream_ids.RData")
 
 # Set global seed and output directory
 set.seed(123)
