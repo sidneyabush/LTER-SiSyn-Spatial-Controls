@@ -1,3 +1,5 @@
+dev.off()
+dev.new() 
 # Load needed packages
 librarian::shelf(remotes, RRF, caret, randomForest, DAAG, party, rpart, rpart.plot, mlbench, pROC, tree, dplyr,
                  plot.matrix, reshape2, rcartocolor, arsenal, googledrive, data.table, ggplot2, corrplot, pdp, 
@@ -27,7 +29,7 @@ save_rf_importance_plot <- function(rf_model, output_dir) {
 
 # Save Linear Model (LM) Plot
 save_lm_plot <- function(rf_model2, observed, output_dir) {
-  pdf(sprintf("%s/RF2_lm_plot_FNConc_Yearly_5_years_drivers_numeric_noWeathering.pdf", output_dir), width = 8, height = 8)
+  pdf(sprintf("%s/RF2_lm_plot_FNConc_Yearly_5_years_drivers_df_noWeathering.pdf", output_dir), width = 8, height = 8)
   plot(rf_model2$predicted, observed, pch = 16, cex = 1.5,
        xlab = "Predicted", ylab = "Observed", main = "RF Model 2 Full Data Ave FNConc",
        cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5)
@@ -83,72 +85,18 @@ record_length <- 5
 # Read in and tidy data ----
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
 
-# Read in and preprocess the data
-drivers_df <- read.csv(sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.csv", record_length)) %>%
-  filter(!grepl("^MCM", Stream_ID)) %>% # Remove all Stream_IDs that start with "MCM"
+drivers_df <- read.csv(sprintf("All_Drivers_Harmonized_Yearly_FNConc_FNYield_%d_years.csv", record_length)) %>%
   dplyr::select(-contains("Yield"), -contains("Gen"), -contains("major"), 
-                -Max_Daylength, -silicate_weathering, -Q, -drainage_area) %>%
-  dplyr::mutate_at(vars(15:26), ~replace(., is.na(.), 0)) %>%  # Replace NAs with 0 for land and rock columns
-  select(FNConc, everything()) 
-  # %>%
-  # filter(!Stream_ID %in% c("USGS__Dismal River"))  # Remove specific outlier sites
+                -Max_Daylength, -silicate_weathering, -Q, -drainage_area)
 
-# ---- Remove Outliers for FNConc (3 SD Rule) ----
-FNConc_mean <- mean(drivers_df$FNConc, na.rm = TRUE)
-SD_val <- 3
-FNConc_sd <- sd(drivers_df$FNConc, na.rm = TRUE)
-FNConc_upper <- FNConc_mean + SD_val * FNConc_sd
-FNConc_lower <- FNConc_mean - SD_val * FNConc_sd
-
-drivers_df_sd <- drivers_df %>%
-  filter(FNConc >= FNConc_lower & FNConc <= FNConc_upper)
-
-# Preserve Stream_ID before removing it
-drivers_df <- drivers_df %>%
-  select(Stream_ID, everything())  # Ensure Stream_ID is the first column
-
-# ---- Proceed with existing NA removal and processing ----
-# Identify Stream_IDs, Years, and Variables with NA values
-na_summary <- drivers_df %>%
-  pivot_longer(cols = -c(Stream_ID), names_to = "Variable", values_to = "Value") %>%
-  filter(is.na(Value)) %>%
-  distinct(Stream_ID, Variable)
-
-# Count the number of unique Stream_IDs before removing it
-unique_stream_id_na_count <- na_summary %>%
-  summarise(na_summary = n_distinct(Stream_ID)) %>%
-  pull(na_summary)
-
-# Export unique NA Stream_IDs with dynamic filename
-write.csv(na_summary, 
-          sprintf("Yearly_NA_stream_ids_%d_years_noWeathering.csv", record_length), 
-          row.names = FALSE)
-
-gc()
-
-# Keep only complete cases
-drivers_df <- drivers_df %>%
-  filter(complete.cases(.))
-
-# Count the number of unique Stream_IDs before removing it
-unique_stream_id_count <- drivers_df %>%
-  summarise(unique_count = n_distinct(Stream_ID)) %>%
-  pull(unique_count)
-
-# Export with dynamic filename
-write.csv(drivers_df, 
-          sprintf("unique_stream_ids_Yearly_%d_years_noWeathering.csv", record_length), 
-          row.names = FALSE)
-
-gc()
 
 # Plot and save correlation matrix ----
-numeric_drivers <- 2:26 # Change this range to reflect data frame length
+numeric_drivers <- 2:24 # Change this range to reflect data frame length
 driver_cor <- cor(drivers_df[, numeric_drivers])
 save_correlation_plot(driver_cor, output_dir)
 
 drivers_numeric <- drivers_df %>%
-  dplyr::select(-Stream_ID)
+  dplyr::select(-Stream_ID, -Year)
 
 # ---- Train Initial RF Model ----
 # Test different ntree values for rf_model1
@@ -179,7 +127,7 @@ manual_ntree_rf1 <- 2000  # Replace with chosen value
 tuneRF(drivers_numeric[, 2:ncol(drivers_numeric)], drivers_numeric[, 1], ntreeTry = manual_ntree_rf1, stepFactor = 1, improve = 0.5, plot = TRUE)
 
 # Manually select mtry for rf_model1 ----
-manual_mtry_rf1 <- 8  # Replace with chosen value
+manual_mtry_rf1 <- 7  # Replace with chosen value
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
@@ -262,7 +210,7 @@ tuneRF(kept_drivers, drivers_numeric[, 1], ntreeTry = 2000, stepFactor = 1, impr
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
 rf_model2 <- randomForest(rf_formula, data = drivers_numeric, 
-                          importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 4)
+                          importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 2)
 
 # Visualize output for rf_model2
 print(rf_model2)
@@ -276,7 +224,7 @@ save_lm_plot(rf_model2, drivers_numeric$FNConc, output_dir)
 save(rf_model2, file = "FNConc_Yearly_rf_model2_full.RData")
 kept_drivers <- drivers_numeric[, colnames(drivers_numeric) %in% predictors(result_rfe)]
 save(kept_drivers, file = "FNConc_Yearly_kept_drivers_full.RData")
-save(drivers_numeric, file = "FNConc_Yearly_full.RData")
-save(drivers_df, file = "FNConc_Yearly_full_stream_ids.RData")
+save(drivers_df, file = "FNConc_Yearly_full.RData")
+save(drivers_numeric, file = "FNConc_Yearly_full_stream_ids.RData")
 
 

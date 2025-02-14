@@ -67,3 +67,4 @@ create_all_shapley_plots <- function(shap_values, output_file) {
 # Output full SHAP plots
 output_file <- sprintf("%s/SHAP_FNConc_Ave_Overall_Variable_Importance.pdf", output_dir)
 create_all_shapley_plots(shap_values, output_file)
+dev.off()

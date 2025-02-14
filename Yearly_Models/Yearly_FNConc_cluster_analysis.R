@@ -1,3 +1,6 @@
+dev.off()
+dev.new()
+
 # Load necessary libraries
 librarian::shelf(ggplot2, dplyr, tidyr, factoextra, cluster)
 
@@ -37,7 +40,7 @@ load("FNConc_Yearly_rf_model2_full.RData")
 data <- kept_drivers
 
 data <- data %>%
-  dplyr::select("basin_slope", "P", "elevation", "rocks_volcanic", "land_shrubland_grassland")
+  dplyr::select("elevation", "basin_slope", "P", "rocks_volcanic", "evapotrans")
 
 # Scale the selected numerical columns 
 scaled_data <- data %>%
@@ -49,9 +52,9 @@ set.seed(123)
 
 # Perform silhouette method to determine optimal clusters
 p2 <- fviz_nbclust(scaled_data, kmeans, method= "silhouette", k.max = 20)
-p2
+print(p2)
 
-kmeans_result <- kmeans(scaled_data, iter.max = 50, nstart = 50, centers = 4)
+kmeans_result <- kmeans(scaled_data, iter.max = 50, nstart = 50, centers = 3)
 
 # Add cluster assignments to the reg data
 final_data <- data %>%
@@ -73,13 +76,13 @@ cb_palette <- c(
 long_data <- scaled_data %>%
   pivot_longer(-cluster, names_to = "Driver", values_to = "Value") %>%
   mutate(
-    Driver = factor(Driver, levels = c("basin_slope", "P", "elevation", "rocks_volcanic", "land_shrubland_grassland")),
+    Driver = factor(Driver, levels = c("elevation", "basin_slope", "P", "rocks_volcanic", "evapotrans")),
     Driver = recode(Driver, 
+                    "elevation" = "Elevation",
                     "basin_slope" = "Basin Slope",
                     "P" = "P",
-                    "elevation" = "Elevation",
                     "rocks_volcanic" = "Volcanic Rock",
-                    "land_shrubland_grassland" = "Land: Shrubland/Grassland"
+                    "evapotrans" = "Evapotrans"
     )
   )
 
@@ -89,7 +92,7 @@ box_plot <- ggplot(long_data, aes(x = Driver, y = Value, fill = cluster)) +
   facet_wrap(~cluster, ncol = 2, scales = "free") +  
   scale_fill_manual(values = cb_palette) +  # Apply colorblind-friendly colors
   labs(title = "FNConc Yearly", x = NULL, y = "Scaled Value") +
-  coord_cartesian(ylim = c(-2, 20)) + # Set Y-axis limits without removing data
+  coord_cartesian(ylim = c(-1, 5)) + # Set Y-axis limits without removing data
   theme_classic() +
   theme(
     legend.position = "none",

@@ -17,7 +17,8 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 # Read and clean WRTDS data this is filtered data
 wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
   rename(LTER = LTER.x) %>%
-  filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc) %>%
+  filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
+  # filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc) %>%
   dplyr::select(-Conc, -Flux, -PeriodLong, -PeriodStart, -LTER.y, -contains("date"),
                  -contains("month"), -min_year, -max_year, -duration) %>%
   dplyr::mutate(
@@ -72,7 +73,6 @@ yields <- wrtds_df %>%
 tot <- wrtds_df %>%
   left_join(yields, by = c("Stream_ID", "Year")) %>%
   distinct(Stream_ID, Year, .keep_all = TRUE) %>%
-  filter(FNYield >= 0.5 * GenYield & FNYield <= 1.5 * GenYield)  %>% 
   # Remove columns with .y
   select(-contains(".y")) %>%
   # Rename columns with .x by removing the suffix
@@ -517,8 +517,8 @@ wrtds_NP <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
     Year = floor(as.numeric(DecYear)) # Convert DecYear to Year
   ) %>%
   filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
-  filter(GenConc <= 60) %>%  # Remove rows where GenConc > 60
-  filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc)  %>%  # Remove rows where FNConc is ±50% of GenConc
+  # filter(GenConc <= 60) %>%  # Remove rows where GenConc > 60
+  # filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc)  %>%  # Remove rows where FNConc is ±50% of GenConc
   dplyr::select(-DecYear, -.groups, -LTER, -contains("FN"), -GenFlux)
 
 wrtds_NP <- wrtds_NP %>%
@@ -846,5 +846,53 @@ print(num_unique_stream_ids)
 write.csv(as.data.frame(tot_average), 
           sprintf("AllDrivers_Harmonized_Average_filtered_%d_years.csv", record_length),
           row.names = FALSE)
+# Define record length (1, 5, 10, 20... years)
+record_length <- 5
+
+# Read in and tidy data ----
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
+
+# Read in and preprocess the data
+drivers_df <- read.csv(sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.csv", record_length)) %>%
+  filter(!grepl("^MCM", Stream_ID)) %>% # Remove all Stream_IDs that start with "MCM", no spatial data
+  filter(!grepl("^Cameroon", Stream_ID)) %>% # Remove all Stream_IDs that start with "Cameroon", no spatial data
+  filter(!grepl("^ARC__", Stream_ID)) %>% # Currently do not have basin slope for this site
+  select(FNConc, everything()) %>%
+  dplyr::mutate_at(vars(22:33), ~replace(., is.na(.), 0)) %>%
+  filter(complete.cases(.)) %>% 
+  filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc)
+
+# ---- Remove Outliers for FNConc (5 SD Rule) ----
+FNConc_mean <- mean(drivers_df$FNConc, na.rm = TRUE)
+SD_val <- 5
+FNConc_sd <- sd(drivers_df$FNConc, na.rm = TRUE)
+FNConc_upper <- FNConc_mean + SD_val * FNConc_sd
+FNConc_lower <- FNConc_mean - SD_val * FNConc_sd
+
+drivers_df <- drivers_df %>%
+  filter(FNConc >= FNConc_lower & FNConc <= FNConc_upper)
+
+# ---- Remove Outliers for FNYield (5 SD Rule) ----
+FNYield_mean <- mean(drivers_df$FNYield, na.rm = TRUE)
+FNYield_sd <- sd(drivers_df$FNYield, na.rm = TRUE)
+FNYield_upper <- FNYield_mean + SD_val * FNYield_sd
+FNYield_lower <- FNYield_mean - SD_val * FNYield_sd
+
+drivers_df <- drivers_df %>%
+  filter(FNYield >= FNYield_lower & FNYield <= FNYield_upper)
+
+# Count the number of unique Stream_IDs before removing it
+unique_stream_id_count <- drivers_df %>%
+  summarise(unique_count = n_distinct(Stream_ID)) %>%
+  pull(unique_count)
+
+print(unique_stream_id_count)
+
+# Export with dynamic filename
+write.csv(drivers_df, 
+          sprintf("All_Drivers_Harmonized_Yearly_FNConc_FNYield_%d_years.csv", record_length), 
+          row.names = FALSE)
+
+gc()
 
 
