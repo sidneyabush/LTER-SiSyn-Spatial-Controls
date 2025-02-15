@@ -197,7 +197,7 @@ ggsave(
 # Save  so we can look at Stream_ID and distribution later
 write.csv(all_data, file= "Yearly_FNConc_Cluster_Stream_ID.csv")
 
-# Now remove FNConc and Stream_ID columns to put into SHAP analysis
+# Now remove Stream_ID columns to put into SHAP analysis
 combined_data <- all_data %>%
   dplyr::select(-Stream_ID)
 
@@ -210,13 +210,13 @@ scale_across_clusters <- function(data) {
 # Function to create and save individual SHAP plots with scaled features across clusters
 generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, output_dir, sample_size = 30) {
   # Ensure FNConc is present in the data for prediction
-  data_with_fnconc <- combined_data %>% filter(cluster == cluster_id) %>% select(-cluster)
+  data_witho_fnconc <- combined_data %>% filter(cluster == cluster_id) %>% select(-cluster, -FNConc)
   
   # Add FNConc back to the data (even if not directly used in SHAP calculations)
-  data_with_fnconc$FNConc <- combined_data$FNConc[combined_data$cluster == cluster_id]
+  data_witho_fnconc$FNConc <- combined_data$FNConc[combined_data$cluster == cluster_id]
   
   # Generate SHAP values for the cluster (keeping FNConc in the data)
-  shap_values <- generate_shap_values(model, data_with_fnconc, sample_size)
+  shap_values <- generate_shap_values(model, data_witho_fnconc, sample_size)
   
   # Compute overall feature importance using mean absolute SHAP values (without scaling)
   overall_feature_importance <- shap_values %>%
