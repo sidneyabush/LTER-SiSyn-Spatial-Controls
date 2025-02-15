@@ -43,7 +43,6 @@ data <- data %>%
 scaled_data <- data %>%
   mutate(across(where(is.numeric), ~ as.numeric(scale(.))))
 
-
 # Set seed for reproducibility
 set.seed(123)
 
@@ -308,8 +307,8 @@ generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, ou
   dev.off()
 }
 
-# Example for Cluster 1 (repeat for other clusters)
-# generate_shap_plots_for_cluster(1, rf_model2_full, combined_data, output_dir)
+# Assuming you have the unique clusters available
+unique_clusters <- unique(combined_data$cluster)
 
 # Generate SHAP plots and save them
 shap_plot_paths <- lapply(unique_clusters, generate_shap_plots_for_cluster, 
