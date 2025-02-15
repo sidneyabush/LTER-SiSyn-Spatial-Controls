@@ -1,5 +1,5 @@
 # Load necessary libraries
-librarian::shelf(ggplot2, dplyr, tidyr, factoextra, cluster, colorspace)
+librarian::shelf(ggplot2, dplyr, tidyr, factoextra, cluster, colorspace, scales)
 
 # Clear environment
 rm(list = ls())
@@ -155,11 +155,25 @@ all_data <- bind_cols(all_data, final_data)
 # Ensure 'cluster' is a factor
 all_data$cluster <- as.factor(all_data$cluster)
 
+# Function to lighten colors
+lighten_color <- function(color, factor = 0.3) {
+  col <- col2rgb(color) / 255
+  col <- col + factor * (1 - col)  # Lighten by a factor
+  rgb(col[1], col[2], col[3])
+}
+
+# Create a lighter version of cb_palette for the jitter points
+light_cb_palette <- sapply(cb_palette, lighten_color)
+
+# Create a named vector mapping clusters to lighter colors
+light_cluster_palette <- setNames(light_cb_palette, levels(all_data$cluster))
+
 # Create a boxplot with the custom color palette
 dist <- ggplot(all_data, aes(x = cluster, y = FNConc, fill = cluster)) +
   geom_boxplot(alpha = 0.7, outlier.shape = NA) +  # Boxplot without outliers
-  geom_jitter(alpha = 0.3, width = 0.2) +  # Add individual points
-  scale_fill_manual(values = cb_palette) +  # Apply custom color palette
+  geom_jitter(aes(color = cluster), alpha = 0.3, width = 0.2) +  # Add individual points with color
+  scale_fill_manual(values = cb_palette) +  # Apply original color palette to boxplot
+  scale_color_manual(values = light_cluster_palette) +  # Apply lighter color palette to jitter points
   labs(title = "FNConc Yearly",
        x = "Cluster",
        y = "FNConc") +
@@ -169,7 +183,7 @@ dist <- ggplot(all_data, aes(x = cluster, y = FNConc, fill = cluster)) +
     axis.text = element_text(size = 14),  # Rotate x-axis labels
     strip.text = element_text(size = 14, face = "bold"),  # Enlarge facet labels
     plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
-    axis.title = element_text(size = 14, face = "bold"))  
+    axis.title = element_text(size = 14, face = "bold"))
 
 print(dist)
 
@@ -189,32 +203,21 @@ write.csv(all_data, file= "Yearly_FNConc_Cluster_Stream_ID.csv")
 combined_data <- all_data %>%
   dplyr::select(-Stream_ID)
 
-# Function to scale each feature individually across all clusters
-scale_individual_features <- function(data) {
+# Function to scale across all clusters for dot plots (keep feature importance as it is)
+scale_across_clusters <- function(data) {
   data %>%
-    mutate(across(where(is.numeric), ~ scale(.)))  # Scale each numeric feature individually
+    mutate(across(where(is.numeric), ~ scale(.), .names = "scaled_{.col}"))  # Scale all numeric columns across the whole dataset
 }
 
 # Function to create and save individual SHAP plots with scaled features across clusters
 generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, output_dir, sample_size = 30) {
-  # Scale features across the entire dataset (scale each feature across clusters)
-  combined_data_scaled <- scale_individual_features(combined_data %>% select(-cluster))  # Scale only numeric columns
-
-  # Retain the 'cluster' column in the scaled dataset
-  combined_data_scaled <- bind_cols(combined_data %>% select(cluster), combined_data_scaled)
-
-  # Filter data for the specific cluster (after scaling across all clusters)
-  cluster_data <- combined_data_scaled %>% filter(cluster == cluster_id) %>% select(-cluster)
+  # Remove FNConc from the data before generating SHAP values
+  combined_data_no_fnconc <- combined_data %>% select(-FNConc)  # Exclude FNConc from the dataset
   
-  if (nrow(cluster_data) == 0) {
-    message(paste("Skipping cluster", cluster_id, "as it has no data"))
-    return(NULL)
-  }
+  # Compute SHAP values for the cluster (no scaling for feature importance plot)
+  shap_values <- generate_shap_values(model, combined_data_no_fnconc %>% filter(cluster == cluster_id) %>% select(-cluster), sample_size)
   
-  # Generate SHAP values for the cluster
-  shap_values <- generate_shap_values(model, cluster_data, sample_size)
-  
-  # Compute overall feature importance
+  # Compute overall feature importance using mean absolute SHAP values (without scaling)
   overall_feature_importance <- shap_values %>%
     as.data.frame() %>%
     summarise(across(everything(), ~ mean(abs(.), na.rm = TRUE))) %>%
@@ -237,7 +240,7 @@ generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, ou
     geom_bar(stat = "identity", fill = cluster_base_color) +  # Use base cluster color
     coord_flip() +
     labs(x = "Feature", y = "Mean Absolute SHAP Value", 
-         title = paste("FNConc Yearly - Feature Importance for Cluster", cluster_id)) +
+         title = paste("Feature Importance for Cluster", cluster_id)) +
     theme_classic() +
     theme(
       axis.text.x = element_text(size = 14),
@@ -249,7 +252,24 @@ generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, ou
   print(cluster_importance_plot)
   dev.off()
   
-  ### **Dot Plot for Cluster SHAP Values**
+  ### **Dot Plot for Cluster SHAP Values (with scaling for cluster data only)**
+  # Scale features across all clusters (not individual clusters) for dot plot
+  combined_data_scaled <- scale_across_clusters(combined_data %>% select(-cluster, -FNConc))  # Scale all numeric columns across clusters excluding FNConc
+  
+  # Retain the 'cluster' column in the scaled dataset
+  combined_data_scaled <- bind_cols(combined_data %>% select(cluster), combined_data_scaled)
+  
+  # Filter data for the specific cluster (after scaling across all clusters)
+  cluster_data <- combined_data_scaled %>% filter(cluster == cluster_id) %>% select(-cluster)
+  
+  if (nrow(cluster_data) == 0) {
+    message(paste("Skipping cluster", cluster_id, "as it has no data"))
+    return(NULL)
+  }
+  
+  # Generate SHAP values for the cluster (after scaling for the dot plot)
+  shap_values <- generate_shap_values(model, cluster_data, sample_size)
+  
   # Convert SHAP values to long format
   shap_values_df <- as.data.frame(shap_values) %>%
     mutate(id = seq_len(nrow(shap_values)))  # Ensure 'id' column is present
@@ -258,10 +278,6 @@ generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, ou
   cluster_data_long <- cluster_data %>%
     mutate(id = seq_len(nrow(.))) %>%
     pivot_longer(cols = everything(), names_to = "feature", values_to = "feature_value")
-  
-  # Check if 'id' is available in both data frames before the join
-  print(head(shap_values_df))  # Debugging: print first few rows of shap_values_df
-  print(head(cluster_data_long))  # Debugging: print first few rows of cluster_data_long
   
   shap_long <- shap_values_df %>%
     pivot_longer(cols = -id, names_to = "feature", values_to = "shap_value") %>%
@@ -276,21 +292,24 @@ generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, ou
                                     color = feature_value)) +
     geom_point(alpha = 0.6) +
     scale_color_gradient(low = cluster_light, high = cluster_dark, name = "Scaled Value") +  # Custom gradient
-    labs(x = "SHAP Value", y = "Feature", 
-         title = paste("SHAP Values - Cluster", cluster_id)) +
-    geom_vline(xintercept = 0, linetype = "dashed", color = "grey1") +
-    theme_minimal() +
+    labs(title = paste("SHAP Dot Plot for Cluster", cluster_id),
+         x = "SHAP Value", y = "Feature") +
+    theme_classic() +
     theme(
+      axis.text.x = element_text(size = 14),
       axis.text.y = element_text(size = 14),
-      axis.title.x = element_text(size = 14),
-      plot.title = element_text(size = 16, face = "bold")
+      axis.title.x = element_text(size = 16, face = "bold"),
+      axis.title.y = element_text(size = 16, face = "bold"),
+      plot.title = element_text(size = 18, face = "bold", hjust = 0.5)
     )
   print(dot_plot)
   dev.off()
-  
-  return(list(importance_plot_path = importance_plot_path, dot_plot_path = dot_plot_path))
 }
+
+# Example for Cluster 1 (repeat for other clusters)
+# generate_shap_plots_for_cluster(1, rf_model2_full, combined_data, output_dir)
 
 # Generate SHAP plots and save them
 shap_plot_paths <- lapply(unique_clusters, generate_shap_plots_for_cluster, 
                           model = rf_model2, combined_data = combined_data, output_dir = output_dir, sample_size = 30)
+
