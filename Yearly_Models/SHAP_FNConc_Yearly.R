@@ -62,11 +62,8 @@ create_shap_plots <- function(shap_values, kept_drivers, output_dir) {
   print(overall_importance_plot)  
   dev.off()
   
-  # Scale kept_drivers: force as matrix and use base scale(), then convert to data frame
+  # Scale kept_drivers using base R's scale() on a numeric matrix
   kept_drivers_scaled <- as.data.frame(scale(as.matrix(kept_drivers)))
-  
-  # Check the range of scaled values (for debugging)
-  print(summary(kept_drivers_scaled))
   
   # Add id and pivot to long format
   kept_drivers_with_id <- kept_drivers_scaled %>%
@@ -80,18 +77,18 @@ create_shap_plots <- function(shap_values, kept_drivers, output_dir) {
   shap_long <- shap_values_df %>%
     pivot_longer(cols = -id, names_to = "feature", values_to = "shap_value") %>%
     left_join(kept_drivers_with_id, by = c("id", "feature")) %>%
-    mutate(feature = factor(feature, levels = overall_feature_importance$feature))
+    mutate(feature = factor(feature, levels = rev(overall_feature_importance$feature)))
   
-  # SHAP Dot Plot
+  # SHAP Dot Plot with a monochromatic gradient from lightsteelblue to steelblue
   pdf(sprintf("%s/SHAP_FNConc_Ave_Dot_Plot.pdf", output_dir), width = 9, height = 8)
   dot_plot <- ggplot(shap_long, aes(x = shap_value, 
                                     y = feature, 
                                     color = feature_value)) +
     geom_point(alpha = 0.6) +
-    scale_color_viridis_c() +
+    scale_color_gradient(low = "lightsteelblue", high = "steelblue4", name = "Scaled Value") +
     labs(x = "SHAP Value", y = "Feature", 
-         title = "SHAP Values - Dot Plot") +
-    geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+         title = "FNConc Yearly - Overall Feature Importance") +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "grey1") +
     theme_minimal() +
     theme(axis.text.y = element_text(size = 14), 
           axis.title.x = element_text(size = 14), 
