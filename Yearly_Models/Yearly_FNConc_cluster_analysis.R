@@ -1,5 +1,5 @@
 # Load necessary libraries
-librarian::shelf(ggplot2, dplyr, tidyr, factoextra, cluster)
+librarian::shelf(ggplot2, dplyr, tidyr, factoextra, cluster, colorspace)
 
 # Clear environment
 rm(list = ls())
@@ -189,63 +189,106 @@ write.csv(all_data, file= "Yearly_FNConc_Cluster_Stream_ID.csv")
 combined_data <- all_data %>%
   dplyr::select(-Stream_ID)
 
-generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, output_dir, sample_size = 30) {
+generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, sample_size = 30) {
   # Filter data for the specific cluster and exclude non-predictor variables
-  cluster_data <- combined_data %>% filter(cluster == cluster_id) %>% select(-cluster)  
+  cluster_data <- combined_data %>% filter(cluster == cluster_id) %>% select(-cluster)
   
   if (nrow(cluster_data) == 0) {
     message(paste("Skipping cluster", cluster_id, "as it has no data"))
     return(NULL)
   }
   
-  # Generate SHAP values using the custom prediction function
+  # Generate SHAP values for the cluster
   shap_values <- generate_shap_values(model, cluster_data, sample_size)
   
-  # Calculate overall feature importance for the cluster
+  # Compute overall feature importance
   overall_feature_importance <- shap_values %>%
     as.data.frame() %>%
     summarise(across(everything(), ~ mean(abs(.), na.rm = TRUE))) %>%
     pivot_longer(cols = everything(), names_to = "feature", values_to = "importance") %>%
-    arrange(desc(importance))
+    arrange(desc(importance))  # Order by absolute mean SHAP value
   
-  # Ensure clusters are sorted so they are assigned the correct colors
+  # Ensure clusters are sorted for color consistency
   sorted_clusters <- sort(unique(combined_data$cluster))
-  
-  # Map cluster ID to the corresponding color in order
   cluster_index <- match(cluster_id, sorted_clusters)
-  cluster_color <- cb_palette[cluster_index]
+  cluster_base_color <- cb_palette[cluster_index]  # Assign base cluster color
   
-  # Save the feature importance plot
-  output_file <- sprintf("%s/SHAP_FNConc_Ave_Cluster_%s_Variable_Importance.pdf", output_dir, cluster_id)
+  # Generate lighter and darker shades of the cluster color
+  cluster_light <- lighten(cluster_base_color, amount = 0.5)  # Lighter version
+  cluster_dark <- darken(cluster_base_color, amount = 0.5)  # Darker version
   
-  pdf(output_file, width = 10, height = 8)
-  cluster_importance_plot <- ggplot(overall_feature_importance, aes(x = reorder(feature, importance), y = importance)) +
-    geom_bar(stat = "identity", fill = cluster_color) +  # Use a single color for all bars per cluster
-    coord_flip() +
-    labs(x = "Feature", y = "Mean Absolute SHAP Value",
-         title = paste("FNConc Yearly - Feature Importance for Cluster", cluster_id)) +
-    theme_classic() +
-    theme(
-      axis.text.x = element_text(size = 14),  # Increase x-axis text size
-      axis.text.y = element_text(size = 14),  # Increase y-axis (feature labels) text size
-      axis.title.x = element_text(size = 16, face = "bold"),  # Increase and bold x-axis title
-      axis.title.y = element_text(size = 16, face = "bold"),  # Increase and bold y-axis title
-      plot.title = element_text(size = 18, face = "bold", hjust = 0.5)  # Make title larger & centered
-    )
-  print(cluster_importance_plot)
-  dev.off()
+  ### **Prepare Data for Faceted Plot**
   
-  return(overall_feature_importance)
+  # Prepare feature importance data for faceting
+  importance_data <- overall_feature_importance %>%
+    mutate(cluster = paste("Cluster", cluster_id),  # Label for faceting
+           plot_type = "Feature Importance",  # Distinguish bar plot in faceting
+           cluster_color = cluster_base_color)  # Store cluster color
+  
+  # Scale feature values within the cluster
+  cluster_data_scaled <- as.data.frame(scale(as.matrix(cluster_data)))  # Per-cluster scaling
+  
+  # Convert to long format
+  cluster_data_long <- cluster_data_scaled %>%
+    mutate(id = seq_len(nrow(.))) %>%
+    pivot_longer(cols = -id, names_to = "feature", values_to = "feature_value")
+  
+  # Convert SHAP values to long format
+  shap_values_df <- as.data.frame(shap_values) %>%
+    mutate(id = seq_len(nrow(.)))
+  
+  shap_long <- shap_values_df %>%
+    pivot_longer(cols = -id, names_to = "feature", values_to = "shap_value") %>%
+    left_join(cluster_data_long, by = c("id", "feature")) %>%
+    mutate(feature = factor(feature, levels = rev(overall_feature_importance$feature)),  # Match importance order
+           cluster = paste("Cluster", cluster_id),  # Label for faceting
+           plot_type = "SHAP Values",  # Distinguish dot plot in faceting
+           cluster_light = cluster_light,  # Store light shade
+           cluster_dark = cluster_dark)  # Store dark shade
+  
+  return(list(importance_data = importance_data, shap_data = shap_long))
 }
 
-# Ensure clusters are in correct order before running the function
 unique_clusters <- sort(unique(combined_data$cluster))
 
-# Generate SHAP values and plots for each cluster in correct order
-shap_importance_by_cluster <- lapply(unique_clusters, generate_shap_plots_for_cluster, 
-                                     model = rf_model2, combined_data = combined_data, output_dir = output_dir, sample_size = 30)
+# Collect importance and dot plot data for all clusters
+shap_plot_data <- lapply(unique_clusters, generate_shap_plots_for_cluster, 
+                         model = rf_model2, combined_data = combined_data, sample_size = 30)
 
-# Combine results into a single dataframe
-shap_importance_summary <- bind_rows(shap_importance_by_cluster, .id = "cluster")
+# Bind all cluster data together for faceting
+importance_df <- bind_rows(lapply(shap_plot_data, function(x) x$importance_data))
+shap_df <- bind_rows(lapply(shap_plot_data, function(x) x$shap_data))
 
-message("SHAP importance analysis per cluster completed and saved.")
+# Combine both datasets for faceting
+final_plot_data <- bind_rows(importance_df, shap_df)
+
+facet_plot <- ggplot(final_plot_data) +
+  # Use different geoms for importance (bar) and SHAP values (dot)
+  geom_bar(data = importance_df, aes(x = reorder(feature, importance), y = importance, fill = cluster_color), 
+           stat = "identity", show.legend = FALSE) +
+  geom_point(data = shap_df, aes(x = shap_value, y = feature, color = feature_value), alpha = 0.6) +
+  facet_wrap(~ cluster + plot_type, ncol = 2, scales = "free") +  # Arrange in 2 columns (bar plot left, dot plot right)
+  labs(x = "Feature", y = "Mean Absolute SHAP Value", title = "FNConc Yearly - Cluster SHAP Importance & Values") +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 12),
+    axis.text.x = element_text(size = 10, angle = 45, hjust = 1),
+    strip.text = element_text(size = 14, face = "bold"),
+    plot.title = element_text(size = 16, face = "bold")
+  ) +
+  # Apply cluster-specific color gradient for SHAP dot plots
+  scale_color_gradientn(colors = c(shap_df$cluster_light[1], shap_df$cluster_dark[1]), name = "Scaled Value")
+
+### **Save the Faceted Plot**
+ggsave(
+  filename = "FNConc_Yearly_Cluster_Faceted_Plot.pdf",
+  plot = facet_plot,
+  width = 12,
+  height = 12,
+  dpi = 300,
+  path = output_dir
+)
+
+print(facet_plot)
+
+message("Faceted SHAP importance and dot plots completed and saved.")
