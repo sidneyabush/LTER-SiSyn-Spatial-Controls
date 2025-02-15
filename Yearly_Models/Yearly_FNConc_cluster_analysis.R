@@ -211,11 +211,9 @@ scale_across_clusters <- function(data) {
 
 # Function to create and save individual SHAP plots with scaled features across clusters
 generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, output_dir, sample_size = 30) {
-  # Remove FNConc from the data before generating SHAP values
-  combined_data_no_fnconc <- combined_data %>% select(-FNConc)  # Exclude FNConc from the dataset
-  
   # Compute SHAP values for the cluster (no scaling for feature importance plot)
-  shap_values <- generate_shap_values(model, combined_data_no_fnconc %>% filter(cluster == cluster_id) %>% select(-cluster), sample_size)
+  # Generate SHAP values for the cluster (keeping FNConc in the data)
+  shap_values <- generate_shap_values(model, combined_data %>% filter(cluster == cluster_id) %>% select(-cluster), sample_size)
   
   # Compute overall feature importance using mean absolute SHAP values (without scaling)
   overall_feature_importance <- shap_values %>%
@@ -240,7 +238,7 @@ generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, ou
     geom_bar(stat = "identity", fill = cluster_base_color) +  # Use base cluster color
     coord_flip() +
     labs(x = "Feature", y = "Mean Absolute SHAP Value", 
-         title = paste("Feature Importance for Cluster", cluster_id)) +
+         title = paste("FNConc Yearly - Feature Importance for Cluster", cluster_id)) +
     theme_classic() +
     theme(
       axis.text.x = element_text(size = 14),
@@ -254,7 +252,7 @@ generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, ou
   
   ### **Dot Plot for Cluster SHAP Values (with scaling for cluster data only)**
   # Scale features across all clusters (not individual clusters) for dot plot
-  combined_data_scaled <- scale_across_clusters(combined_data %>% select(-cluster, -FNConc))  # Scale all numeric columns across clusters excluding FNConc
+  combined_data_scaled <- scale_across_clusters(combined_data %>% select(-cluster))  # Scale all numeric columns across clusters
   
   # Retain the 'cluster' column in the scaled dataset
   combined_data_scaled <- bind_cols(combined_data %>% select(cluster), combined_data_scaled)
@@ -312,4 +310,3 @@ generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, ou
 # Generate SHAP plots and save them
 shap_plot_paths <- lapply(unique_clusters, generate_shap_plots_for_cluster, 
                           model = rf_model2, combined_data = combined_data, output_dir = output_dir, sample_size = 30)
-
