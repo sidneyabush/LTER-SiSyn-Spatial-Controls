@@ -28,12 +28,11 @@ generate_shap_values <- function(model, kept_drivers, sample_size = 30) {
   return(shap_values)
 }
 
-# Read in and preprocess the data
-# train <- read.csv("train_data_stream_id.csv")
+# Load required data and model from the RF script
+load("FNConc_Yearly_rf_model2_full.RData")
 load("FNConc_Yearly_kept_drivers_full.RData")
 load("FNConc_Yearly_full.RData")
 load("FNConc_Yearly_full_stream_ids.RData")
-load("FNConc_Yearly_rf_model2_full.RData")
 
 data <- kept_drivers
 
@@ -211,9 +210,14 @@ scale_across_clusters <- function(data) {
 
 # Function to create and save individual SHAP plots with scaled features across clusters
 generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, output_dir, sample_size = 30) {
-  # Compute SHAP values for the cluster (no scaling for feature importance plot)
+  # Ensure FNConc is present in the data for prediction
+  data_with_fnconc <- combined_data %>% filter(cluster == cluster_id) %>% select(-cluster)
+  
+  # Add FNConc back to the data (even if not directly used in SHAP calculations)
+  data_with_fnconc$FNConc <- combined_data$FNConc[combined_data$cluster == cluster_id]
+  
   # Generate SHAP values for the cluster (keeping FNConc in the data)
-  shap_values <- generate_shap_values(model, combined_data %>% filter(cluster == cluster_id) %>% select(-cluster), sample_size)
+  shap_values <- generate_shap_values(model, data_with_fnconc, sample_size)
   
   # Compute overall feature importance using mean absolute SHAP values (without scaling)
   overall_feature_importance <- shap_values %>%
