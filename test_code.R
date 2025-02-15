@@ -53,24 +53,26 @@ shap_values <- generate_shap_values(rf_model2, kept_drivers, sample_size = 30)
 global_min <- min(scaled_drivers %>% select(-cluster), na.rm = TRUE)
 global_max <- max(scaled_drivers %>% select(-cluster), na.rm = TRUE)
 
-# Define a light-to-dark color palette using colorspace
-# Cluster 1: "#E69F00" (orange), Cluster 2: "#56B4E9" (blue), Cluster 3: "#009E73" (green)
+# Define a light-to-dark color palette using colorspace for each cluster.
+# We'll use these base colors for clusters 1, 2, and 3:
+# Cluster 1: "#E69F00", Cluster 2: "#56B4E9", Cluster 3: "#009E73"
+# For each, we generate a light and dark version.
 cluster_colors <- list(
-  "1" = c(lighten("#E69F00", 0.4), "#E69F00", darken("#E69F00", 0.4)),  # Light to dark orange
-  "2" = c(lighten("#56B4E9", 0.4), "#56B4E9", darken("#56B4E9", 0.4)),  # Light to dark blue
-  "3" = c(lighten("#009E73", 0.4), "#009E73", darken("#009E73", 0.4))   # Light to dark green
+  "1" = c(lighten("#E69F00", 0.4), "#E69F00", darken("#E69F00", 0.4)),
+  "2" = c(lighten("#56B4E9", 0.4), "#56B4E9", darken("#56B4E9", 0.4)),
+  "3" = c(lighten("#009E73", 0.4), "#009E73", darken("#009E73", 0.4))
 )
 
-# Function to create SHAP plots per cluster with a fixed color scale and custom color scheme
+# Function to create SHAP plots per cluster with fixed global color scale, custom gradient, and ordered y-axis
 create_shap_plots_for_cluster <- function(cluster_id, shap_values, scaled_drivers, output_dir, global_min, global_max) {
-  # Subset data for the current cluster
+  # Subset data for the current cluster (remove cluster column)
   cluster_data <- scaled_drivers %>%
     filter(cluster == cluster_id) %>%
-    select(-cluster)  # Remove cluster column
+    select(-cluster)
   
   cluster_data$id <- seq_len(nrow(cluster_data))  # Assign unique IDs
   
-  # Reshape data to long format
+  # Reshape data to long format for feature values
   cluster_long <- cluster_data %>%
     pivot_longer(cols = -id, names_to = "feature", values_to = "feature_value")
   
@@ -86,11 +88,19 @@ create_shap_plots_for_cluster <- function(cluster_id, shap_values, scaled_driver
     pivot_longer(cols = -id, names_to = "feature", values_to = "shap_value") %>%
     left_join(cluster_long, by = c("id", "feature"))
   
-  # Get the light, base, and dark color for this cluster
+  # Calculate overall feature importance (mean absolute SHAP value) for ordering
+  overall_feature_importance <- shap_long %>%
+    group_by(feature) %>%
+    summarize(mean_abs_shap = mean(abs(shap_value), na.rm = TRUE)) %>%
+    arrange(desc(mean_abs_shap))
+  
+  # Reorder the feature factor so that the highest absolute mean SHAP is at the top
+  shap_long$feature <- factor(shap_long$feature, levels = rev(overall_feature_importance$feature))
+  
+  # Get the light, base, and dark color for this cluster from the palette
   cluster_palette <- cluster_colors[[as.character(cluster_id)]]
-  cluster_light <- cluster_palette[1]  # Light version
-  cluster_base <- cluster_palette[2]   # Base color
-  cluster_dark  <- cluster_palette[3]  # Dark version
+  cluster_light <- cluster_palette[1]  # Light version (low end)
+  cluster_dark  <- cluster_palette[3]  # Dark version (high end)
   
   # Generate SHAP dot plot for the cluster with fixed global color scale and custom gradient
   pdf(sprintf("%s/SHAP_Cluster_%s_Dot_Plot.pdf", output_dir, cluster_id), width = 9, height = 8)
@@ -101,8 +111,8 @@ create_shap_plots_for_cluster <- function(cluster_id, shap_values, scaled_driver
     labs(x = "SHAP Value", y = "Feature", title = paste("SHAP Dot Plot for Cluster", cluster_id)) +
     geom_vline(xintercept = 0, linetype = "dashed", color = "grey1") +
     theme_minimal() +
-    theme(axis.text.y = element_text(size = 14), 
-          axis.title.x = element_text(size = 14), 
+    theme(axis.text.y = element_text(size = 14),
+          axis.title.x = element_text(size = 14),
           plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
   print(dot_plot)
   dev.off()
