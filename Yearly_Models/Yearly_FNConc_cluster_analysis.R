@@ -199,10 +199,10 @@ scale_individual_features <- function(data) {
 generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, output_dir, sample_size = 30) {
   # Scale features across the entire dataset (scale each feature across clusters)
   combined_data_scaled <- scale_individual_features(combined_data %>% select(-cluster))  # Scale only numeric columns
-  
+
   # Retain the 'cluster' column in the scaled dataset
   combined_data_scaled <- bind_cols(combined_data %>% select(cluster), combined_data_scaled)
-  
+
   # Filter data for the specific cluster (after scaling across all clusters)
   cluster_data <- combined_data_scaled %>% filter(cluster == cluster_id) %>% select(-cluster)
   
@@ -252,12 +252,16 @@ generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, ou
   ### **Dot Plot for Cluster SHAP Values**
   # Convert SHAP values to long format
   shap_values_df <- as.data.frame(shap_values) %>%
-    mutate(id = seq_len(nrow(shap_values)))
+    mutate(id = seq_len(nrow(shap_values)))  # Ensure 'id' column is present
   
   # Convert to long format
   cluster_data_long <- cluster_data %>%
     mutate(id = seq_len(nrow(.))) %>%
     pivot_longer(cols = everything(), names_to = "feature", values_to = "feature_value")
+  
+  # Check if 'id' is available in both data frames before the join
+  print(head(shap_values_df))  # Debugging: print first few rows of shap_values_df
+  print(head(cluster_data_long))  # Debugging: print first few rows of cluster_data_long
   
   shap_long <- shap_values_df %>%
     pivot_longer(cols = -id, names_to = "feature", values_to = "shap_value") %>%
