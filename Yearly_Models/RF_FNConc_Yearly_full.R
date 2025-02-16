@@ -86,6 +86,7 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 drivers_df <- read.csv(sprintf("All_Drivers_Harmonized_Yearly_FNConc_FNYield_%d_years.csv", record_length)) %>%
   dplyr::select(-contains("Yield"), -contains("Gen"), -contains("major"), 
                 -Max_Daylength, -silicate_weathering, -Q, -drainage_area) %>%
+  mutate(greenup_day = as.numeric(greenup_day)) %>%
   filter(!Stream_ID %in% c("NWT__SADDLE STREAM 007"))  # Remove specific outlier site
 
 

@@ -20,7 +20,7 @@ generate_shap_values <- function(model, kept_drivers, sample_size = 30) {
   # Compute SHAP values using fastshap
   shap_values <- fastshap::explain(
     object = model,
-    X = kept_drivers,
+    X = kept_drivers %>% select(-cluster),  # Exclude cluster column
     pred_wrapper = custom_predict,
     nsim = sample_size
   )
@@ -312,4 +312,5 @@ unique_clusters <- unique(combined_data$cluster)
 
 # Generate SHAP plots and save them
 shap_plot_paths <- lapply(unique_clusters, generate_shap_plots_for_cluster, 
-                          model = rf_model2, combined_data = combined_data, output_dir = output_dir, sample_size = 30)
+                          model = rf_model2, combined_data = combined_data, 
+                          output_dir = output_dir, sample_size = 30)
