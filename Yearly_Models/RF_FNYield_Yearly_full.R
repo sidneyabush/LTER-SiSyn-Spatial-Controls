@@ -98,7 +98,6 @@ drivers_numeric <- drivers_df %>%
 driver_cor <- cor(drivers_numeric)
 save_correlation_plot(driver_cor, output_dir)
 
-
 # ---- Train Initial RF Model ----
 # Test different ntree values for rf_model1
 ntree_values <- seq(100, 2000, by = 100)  # Define ntree values

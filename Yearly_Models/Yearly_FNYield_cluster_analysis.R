@@ -24,7 +24,7 @@ load("FNYield_Yearly_full_stream_ids.RData")
 data <- kept_drivers
 
 data <- data %>%
-  dplyr::select("elevation", "basin_slope", "P", "rocks_volcanic", "evapotrans")
+  dplyr::select("rocks_volcanic", "basin_slope", "land_urban_and_built_up_land", "temp", "land_shrubland_grassland")
 
 # Scale the selected numerical columns 
 scaled_data <- data %>%
@@ -52,20 +52,21 @@ scaled_data <- scaled_data %>%
 
 # Define a colorblind-friendly palette
 cb_palette <- c(
-  "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7"
+  "#0072B2", "#CC79A7", "#D55E00"
 )
 
 # Reshape data to long format for ggplot
 long_data <- scaled_data %>%
   pivot_longer(-cluster, names_to = "Driver", values_to = "Value") %>%
   mutate(
-    Driver = factor(Driver, levels = c("elevation", "basin_slope", "P", "rocks_volcanic", "evapotrans")),
-    Driver = recode(Driver, 
-                    "elevation" = "Elevation",
-                    "basin_slope" = "Basin Slope",
-                    "P" = "P",
+    Driver = factor(Driver, levels = c("rocks_volcanic", "basin_slope", "land_urban_and_built_up_land", "temp", "land_shrubland_grassland")),
+    Driver = recode(Driver,
                     "rocks_volcanic" = "Volcanic Rock",
-                    "evapotrans" = "Evapotrans"
+                    "basin_slope" = "Basin Slope",
+                    "land_urban_and_built_up_land" = "Land: Urban/ Built-up",
+                    "temp" = "Temperature",
+                    "land_shrubland_grassland" = "Land: Shrubland/ Grassland"
+                    
     )
   )
 
@@ -75,7 +76,7 @@ box_plot <- ggplot(long_data, aes(x = Driver, y = Value, fill = cluster)) +
   facet_wrap(~cluster, ncol = 2, scales = "free") +  
   scale_fill_manual(values = cb_palette) +  # Apply colorblind-friendly colors
   labs(title = "FNYield Yearly", x = NULL, y = "Scaled Value") +
-  coord_cartesian(ylim = c(-1, 5)) + # Set Y-axis limits without removing data
+  coord_cartesian(ylim = c(-3, 10)) + # Set Y-axis limits without removing data
   theme_classic() +
   theme(
     legend.position = "none",
@@ -250,7 +251,7 @@ global_max <- max(full_scaled %>% select(-cluster), na.rm = TRUE)
 # -------------------------------
 # 6. Define Color Palette for Clusters
 # -------------------------------
-base_colors <- c("1" = "#E69F00", "2" = "#56B4E9", "3" = "#009E73")
+base_colors <- c("1" = "#0072B2", "2" = "#CC79A7", "3" = "#D55E00")
 cluster_colors <- lapply(base_colors, function(col) {
   c(lighten(col, 0.4), col, darken(col, 0.4))
 })
