@@ -12,24 +12,24 @@ set.seed(123)
 # Load Functions ----
 # Function to save correlation matrix as PDF
 save_correlation_plot <- function(driver_cor, output_dir) {
-  pdf(sprintf("%s/correlation_plot_FNConc_Yearly_5_years.pdf", output_dir), width = 10, height = 10)
+  pdf(sprintf("%s/correlation_plot_FNYield_Yearly_5_years.pdf", output_dir), width = 10, height = 10)
   corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = FALSE)
-  title("All Data Yearly FNConc")
+  title("All Data Yearly FNYield")
   dev.off()
 }
 
 # Save RF Variable Importance Plot
 save_rf_importance_plot <- function(rf_model, output_dir) {
-  pdf(sprintf("%s/RF_variable_importance_FNConc_Yearly_5_years.pdf", output_dir), width = 8, height = 6)
-  randomForest::varImpPlot(rf_model, main = "rf_model2 - Ave FNConc", col = "darkblue")
+  pdf(sprintf("%s/RF_variable_importance_FNYield_Yearly_5_years.pdf", output_dir), width = 8, height = 6)
+  randomForest::varImpPlot(rf_model, main = "rf_model2 - Ave FNYield", col = "darkblue")
   dev.off()
 }
 
 # Save Linear Model (LM) Plot
 save_lm_plot <- function(rf_model2, observed, output_dir) {
-  pdf(sprintf("%s/RF2_lm_plot_FNConc_Yearly_5_years_drivers_df.pdf", output_dir), width = 8, height = 8)
+  pdf(sprintf("%s/RF2_lm_plot_FNYield_Yearly_5_years_drivers_df.pdf", output_dir), width = 8, height = 8)
   plot(rf_model2$predicted, observed, pch = 16, cex = 1.5,
-       xlab = "Predicted", ylab = "Observed", main = "RF Model 2 Full Data Ave FNConc",
+       xlab = "Predicted", ylab = "Observed", main = "RF Model 2 Full Data Ave FNYield",
        cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5)
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2)
   legend("topleft", bty = "n", cex = 1.5, legend = paste("R² =", format(mean(rf_model2$rsq), digits = 3)))
@@ -75,7 +75,7 @@ test_numtree_parallel_optimized <- function(ntree_list, formula, data) {
 }
 
 # Set the output directory path for saving PDFs
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model/FNConc"
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model/FNYield"
 
 # Define record length (1, 5, 10, 20... years)
 record_length <- 5
@@ -103,7 +103,7 @@ save_correlation_plot(driver_cor, output_dir)
 # Test different ntree values for rf_model1
 ntree_values <- seq(100, 2000, by = 100)  # Define ntree values
 set.seed(123)
-MSE_list_rf1 <- test_numtree_parallel(ntree_values, FNConc ~ ., drivers_df)
+MSE_list_rf1 <- test_numtree_parallel(ntree_values, FNYield ~ ., drivers_numeric)
 
 # Visualize MSE results for rf_model1 ----
 MSE_df_rf1 <- data.frame(
@@ -125,22 +125,23 @@ print(p)
 manual_ntree_rf1 <- 2000  # Replace with chosen value
 
 # Tune mtry for rf_model1 ----
-tuneRF(drivers_df[, 2:ncol(drivers_df)], drivers_df[, 1], ntreeTry = manual_ntree_rf1, stepFactor = 1, improve = 0.5, plot = TRUE)
+tuneRF(drivers_numeric[, 2:ncol(drivers_numeric)], drivers_numeric[, 1], 
+       ntreeTry = manual_ntree_rf1, stepFactor = 1, improve = 0.5, plot = TRUE)
 
 # Manually select mtry for rf_model1 ----
 manual_mtry_rf1 <- 7  # Replace with chosen value
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
-rf_model1 <- randomForest(FNConc ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = manual_ntree_rf1, mtry = manual_mtry_rf1)
+rf_model1 <- randomForest(FNYield ~ ., data = drivers_numeric, importance = TRUE, proximity = TRUE, ntree = manual_ntree_rf1, mtry = manual_mtry_rf1)
 
 # Visualize output for rf_model1
 print(rf_model1)
 randomForest::varImpPlot(rf_model1)
 
 # Generate plots comparing predicted vs observed ----
-lm_plot <- plot(rf_model1$predicted, drivers_numeric$FNConc, pch = 16, cex = 1.5,
-                xlab = "Predicted", ylab = "Observed", main = "RF Model 1 Full Data - Ave FNConc",
+lm_plot <- plot(rf_model1$predicted, drivers_numeric$FNYield, pch = 16, cex = 1.5,
+                xlab = "Predicted", ylab = "Observed", main = "RF Model 1 Full Data - Ave FNYield",
                 cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, cex.sub = 1.5) +
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2) +
   theme(text = element_text(size = 40), face = "bold")
@@ -164,8 +165,8 @@ control <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = cv_r
                       number = cv_number, verbose = TRUE, allowParallel = FALSE)
 
 # Divide data into predictor variables (x) and response variable (y)
-x <- drivers_numeric[, !(colnames(drivers_numeric) == "FNConc")]
-y <- drivers_numeric$FNConc
+x <- drivers_numeric[, !(colnames(drivers_numeric) == "FNYield")]
+y <- drivers_numeric$FNYield
 
 sink(NULL)  # Reset output sink
 closeAllConnections()  # Close all connections
@@ -182,7 +183,7 @@ print(result_rfe)
 new_rf_input <- paste(predictors(result_rfe), collapse = "+")
 
 # Format those features into a formula for the optimized random forest model
-rf_formula <- formula(paste("FNConc ~", new_rf_input))
+rf_formula <- formula(paste("FNYield ~", new_rf_input))
 
 # Test different ntree values 
 ntree_values <- seq(100, 2000, by = 100)  
@@ -219,13 +220,13 @@ randomForest::varImpPlot(rf_model2)
 
 # Save RF variable importance plot and LM plot for rf_model2
 save_rf_importance_plot(rf_model2, output_dir)
-save_lm_plot(rf_model2, drivers_numeric$FNConc, output_dir)
+save_lm_plot(rf_model2, drivers_numeric$FNYield, output_dir)
 
 # Save model and required objects for SHAP analysis
-save(rf_model2, file = "FNConc_Yearly_rf_model2_full.RData")
+save(rf_model2, file = "FNYield_Yearly_rf_model2_full.RData")
 kept_drivers <- drivers_numeric[, colnames(drivers_numeric) %in% predictors(result_rfe)]
-save(kept_drivers, file = "FNConc_Yearly_kept_drivers_full.RData")
-save(drivers_df, file = "FNConc_Yearly_full__stream_ids.RData")
-save(drivers_numeric, file = "FNConc_Yearly_full.RData")
+save(kept_drivers, file = "FNYield_Yearly_kept_drivers_full.RData")
+save(drivers_df, file = "FNYield_Yearly_full_stream_ids.RData")
+save(drivers_numeric, file = "FNYield_Yearly_full.RData")
 
 

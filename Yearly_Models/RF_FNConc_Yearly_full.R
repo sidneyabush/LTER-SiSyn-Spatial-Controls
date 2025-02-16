@@ -103,7 +103,7 @@ save_correlation_plot(driver_cor, output_dir)
 # Test different ntree values for rf_model1
 ntree_values <- seq(100, 2000, by = 100)  # Define ntree values
 set.seed(123)
-MSE_list_rf1 <- test_numtree_parallel(ntree_values, FNConc ~ ., drivers_df)
+MSE_list_rf1 <- test_numtree_parallel(ntree_values, FNConc ~ ., drivers_numeric)
 
 # Visualize MSE results for rf_model1 ----
 MSE_df_rf1 <- data.frame(
@@ -125,14 +125,14 @@ print(p)
 manual_ntree_rf1 <- 2000  # Replace with chosen value
 
 # Tune mtry for rf_model1 ----
-tuneRF(drivers_df[, 2:ncol(drivers_df)], drivers_df[, 1], ntreeTry = manual_ntree_rf1, stepFactor = 1, improve = 0.5, plot = TRUE)
+tuneRF(drivers_numeric[, 2:ncol(drivers_numeric)], drivers_numeric[, 1], ntreeTry = manual_ntree_rf1, stepFactor = 1, improve = 0.5, plot = TRUE)
 
 # Manually select mtry for rf_model1 ----
 manual_mtry_rf1 <- 7  # Replace with chosen value
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
-rf_model1 <- randomForest(FNConc ~ ., data = drivers_df, importance = TRUE, proximity = TRUE, ntree = manual_ntree_rf1, mtry = manual_mtry_rf1)
+rf_model1 <- randomForest(FNConc ~ ., data = drivers_numeric, importance = TRUE, proximity = TRUE, ntree = manual_ntree_rf1, mtry = manual_mtry_rf1)
 
 # Visualize output for rf_model1
 print(rf_model1)
@@ -225,7 +225,7 @@ save_lm_plot(rf_model2, drivers_numeric$FNConc, output_dir)
 save(rf_model2, file = "FNConc_Yearly_rf_model2_full.RData")
 kept_drivers <- drivers_numeric[, colnames(drivers_numeric) %in% predictors(result_rfe)]
 save(kept_drivers, file = "FNConc_Yearly_kept_drivers_full.RData")
-save(drivers_df, file = "FNConc_Yearly_full__stream_ids.RData")
+save(drivers_df, file = "FNConc_Yearly_full_stream_ids.RData")
 save(drivers_numeric, file = "FNConc_Yearly_full.RData")
 
 
