@@ -44,9 +44,6 @@ final_data <- data %>%
   mutate(cluster = as.factor(kmeans_result$cluster)) %>%
   dplyr::select(cluster)
 
-# Save to CSV file
-# write.csv(final_data, "cluster_assignments_YearlyModel.csv", row.names = FALSE)
-
 scaled_data <- scaled_data %>%
   mutate(cluster = as.factor(kmeans_result$cluster))
 
@@ -133,7 +130,7 @@ ggsave(
 drivers_subset <- drivers_df %>% select(Stream_ID, FNYield)
 
 # Merge clusters with kept_drivers (ensuring row alignment)
-all_data <- bind_cols(kept_drivers, drivers_subset)
+all_data <- bind_cols(final_data, drivers_subset)
 
 # Ensure 'cluster' is a factor
 all_data$cluster <- as.factor(all_data$cluster)
