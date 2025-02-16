@@ -1,38 +1,25 @@
-# Load necessary libraries
-librarian::shelf(ggplot2, dplyr, tidyr, factoextra, cluster, colorspace, scales)
+# -------------------------------
+# 1. Load Packages & Set Up Environment
+# -------------------------------
+librarian::shelf(iml, ggplot2, dplyr, tidyr, factoextra, cluster, colorspace, scales, fastshap)
 
-# Clear environment
-rm(list = ls())
+rm(list = ls())  # Clear environment
 
-# Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
-
 output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model/FNConc"
 
-# Function to create SHAP values
-generate_shap_values <- function(model, kept_drivers, sample_size = 30) {
-  # Define a custom prediction function
-  custom_predict <- function(object, newdata) {
-    newdata <- as.data.frame(newdata)
-    predict(object, newdata = newdata)
-  }
-  
-  # Compute SHAP values using fastshap
-  shap_values <- fastshap::explain(
-    object = model,
-    X = kept_drivers %>% select(-cluster),  # Exclude cluster column
-    pred_wrapper = custom_predict,
-    nsim = sample_size
-  )
-  
-  return(shap_values)
-}
-
-# Load required data and model from the RF script
+# -------------------------------
+# 2. Load Data & Model
+# -------------------------------
 load("FNConc_Yearly_rf_model2_full.RData")
 load("FNConc_Yearly_kept_drivers_full.RData")
 load("FNConc_Yearly_full.RData")
 load("FNConc_Yearly_full_stream_ids.RData")
+
+
+# -------------------------------
+# 2a. Create additional informative plots
+# -------------------------------
 
 data <- kept_drivers
 
@@ -147,9 +134,6 @@ drivers_subset <- drivers_df %>% select(Stream_ID, FNConc)
 # Merge clusters with kept_drivers (ensuring row alignment)
 all_data <- bind_cols(kept_drivers, drivers_subset)
 
-# Merge with final_data
-all_data <- bind_cols(all_data, final_data)
-
 # Ensure 'cluster' is a factor
 all_data$cluster <- as.factor(all_data$cluster)
 
@@ -194,123 +178,178 @@ ggsave(
   path = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model/FNConc"
 )
 
-# Save  so we can look at Stream_ID and distribution later
-write.csv(all_data, file= "Yearly_FNConc_Cluster_Stream_ID.csv")
-
-# Now remove Stream_ID columns to put into SHAP analysis
-combined_data <- all_data %>%
-  dplyr::select(-Stream_ID)
-
-# Function to scale across all clusters for dot plots (keep feature importance as it is)
-scale_across_clusters <- function(data) {
-  data %>%
-    mutate(across(where(is.numeric), ~ scale(.), .names = "scaled_{.col}"))  # Scale all numeric columns across the whole dataset
-}
-
-# Function to create and save individual SHAP plots with scaled features across clusters
-generate_shap_plots_for_cluster <- function(cluster_id, model, combined_data, output_dir, sample_size = 30) {
-  # Ensure FNConc is present in the data for prediction
-  data_witho_fnconc <- combined_data %>% filter(cluster == cluster_id) %>% select(-cluster, -FNConc)
+# -------------------------------
+# 3. SHAP Value Generation (Before Clustering!)
+# -------------------------------
+generate_shap_values <- function(model, kept_drivers, sample_size = 30) {
+  # Extract only predictor variables (remove cluster)
+  predictors <- all.vars(model$terms)[-1]  # Extract predictor names
+  X_input <- kept_drivers %>% select(all_of(predictors))  # Keep only predictors
   
-  # Add FNConc back to the data (even if not directly used in SHAP calculations)
-  data_witho_fnconc$FNConc <- combined_data$FNConc[combined_data$cluster == cluster_id]
-  
-  # Generate SHAP values for the cluster (keeping FNConc in the data)
-  shap_values <- generate_shap_values(model, data_witho_fnconc, sample_size)
-  
-  # Compute overall feature importance using mean absolute SHAP values (without scaling)
-  overall_feature_importance <- shap_values %>%
-    as.data.frame() %>%
-    summarise(across(everything(), ~ mean(abs(.), na.rm = TRUE))) %>%
-    pivot_longer(cols = everything(), names_to = "feature", values_to = "importance") %>%
-    arrange(desc(importance))  # Order by absolute mean SHAP value
-  
-  # Ensure clusters are sorted for color consistency
-  sorted_clusters <- sort(unique(combined_data$cluster))
-  cluster_index <- match(cluster_id, sorted_clusters)
-  cluster_base_color <- cb_palette[cluster_index]  # Assign base cluster color
-  
-  # Generate lighter and darker shades of the cluster color
-  cluster_light <- lighten(cluster_base_color, amount = 0.5)  # Lighter version
-  cluster_dark <- darken(cluster_base_color, amount = 0.5)  # Darker version
-  
-  ### **Feature Importance Bar Plot (Cluster-Level)**
-  importance_plot_path <- sprintf("%s/SHAP_FNConc_Ave_Cluster_%s_Variable_Importance.pdf", output_dir, cluster_id)
-  pdf(importance_plot_path, width = 10, height = 8)
-  cluster_importance_plot <- ggplot(overall_feature_importance, aes(x = reorder(feature, importance), y = importance)) +
-    geom_bar(stat = "identity", fill = cluster_base_color) +  # Use base cluster color
-    coord_flip() +
-    labs(x = "Feature", y = "Mean Absolute SHAP Value", 
-         title = paste("FNConc Yearly - Feature Importance for Cluster", cluster_id)) +
-    theme_classic() +
-    theme(
-      axis.text.x = element_text(size = 14),
-      axis.text.y = element_text(size = 14),
-      axis.title.x = element_text(size = 16, face = "bold"),
-      axis.title.y = element_text(size = 16, face = "bold"),
-      plot.title = element_text(size = 18, face = "bold", hjust = 0.5)
-    )
-  print(cluster_importance_plot)
-  dev.off()
-  
-  ### **Dot Plot for Cluster SHAP Values (with scaling for cluster data only)**
-  # Scale features across all clusters (not individual clusters) for dot plot
-  combined_data_scaled <- scale_across_clusters(combined_data %>% select(-cluster))  # Scale all numeric columns across clusters
-  
-  # Retain the 'cluster' column in the scaled dataset
-  combined_data_scaled <- bind_cols(combined_data %>% select(cluster), combined_data_scaled)
-  
-  # Filter data for the specific cluster (after scaling across all clusters)
-  cluster_data <- combined_data_scaled %>% filter(cluster == cluster_id) %>% select(-cluster)
-  
-  if (nrow(cluster_data) == 0) {
-    message(paste("Skipping cluster", cluster_id, "as it has no data"))
-    return(NULL)
+  # Custom predict function for formula-based models
+  custom_predict <- function(object, newdata) {
+    newdata <- as.data.frame(newdata)  # Ensure data frame format
+    colnames(newdata) <- predictors  # Match column names exactly
+    predict(object, newdata = newdata, type = "response")  # Ensure numeric output
   }
   
-  # Generate SHAP values for the cluster (after scaling for the dot plot)
-  shap_values <- generate_shap_values(model, cluster_data, sample_size)
+  # Compute SHAP values
+  shap_values <- fastshap::explain(
+    object = model,
+    X = X_input,  # Ensure only predictor variables are used
+    pred_wrapper = custom_predict,
+    nsim = sample_size
+  )
   
-  # Convert SHAP values to long format
-  shap_values_df <- as.data.frame(shap_values) %>%
-    mutate(id = seq_len(nrow(shap_values)))  # Ensure 'id' column is present
+  return(shap_values)
+}
+
+# Generate global SHAP values BEFORE adding cluster assignments
+shap_values <- generate_shap_values(rf_model2, kept_drivers, sample_size = 30)
+
+# -------------------------------
+# 4. Clustering (AFTER SHAP)
+# -------------------------------
+# Define variables to use for clustering
+cluster_vars <- c("elevation", "basin_slope", "P", "rocks_volcanic", "evapotrans")
+
+# Create a dataset for clustering from kept_drivers
+cluster_data <- kept_drivers %>% select(all_of(cluster_vars))
+
+# Scale clustering variables
+scaled_cluster_data <- cluster_data %>%
+  mutate(across(where(is.numeric), ~ as.numeric(scale(.))))
+
+set.seed(123)  # Ensure reproducibility
+
+# Determine optimal clusters (optional)
+p2 <- fviz_nbclust(scaled_cluster_data, kmeans, method = "silhouette", k.max = 20)
+print(p2)
+
+# Perform k-means clustering
+kmeans_result <- kmeans(scaled_cluster_data, iter.max = 50, nstart = 50, centers = 3)
+
+# NOW attach cluster assignments to kept_drivers (AFTER SHAP)
+kept_drivers$cluster <- as.factor(kmeans_result$cluster)
+
+# -------------------------------
+# 5. Prepare Data for Visualization (Scaled for Display)
+# -------------------------------
+full_scaled <- kept_drivers %>%
+  select(-cluster) %>%
+  mutate(across(where(is.numeric), ~ as.numeric(scale(.)))) %>%
+  as.data.frame()
+
+# Reattach cluster for visualization (but NOT for SHAP!)
+full_scaled$cluster <- kept_drivers$cluster
+
+# Determine global min/max for SHAP dot plot scaling
+global_min <- min(full_scaled %>% select(-cluster), na.rm = TRUE)
+global_max <- max(full_scaled %>% select(-cluster), na.rm = TRUE)
+
+# -------------------------------
+# 6. Define Color Palette for Clusters
+# -------------------------------
+base_colors <- c("1" = "#E69F00", "2" = "#56B4E9", "3" = "#009E73")
+cluster_colors <- lapply(base_colors, function(col) {
+  c(lighten(col, 0.4), col, darken(col, 0.4))
+})
+
+# -------------------------------
+# 7. SHAP Feature Importance Plot per Cluster
+# -------------------------------
+generate_feature_importance_plot <- function(cluster_id, shap_values, full_scaled, output_dir) {
+  cluster_indices <- which(full_scaled$cluster == cluster_id)
+  shap_cluster <- as.data.frame(shap_values)[cluster_indices, , drop = FALSE]
   
-  # Convert to long format
-  cluster_data_long <- cluster_data %>%
-    mutate(id = seq_len(nrow(.))) %>%
-    pivot_longer(cols = everything(), names_to = "feature", values_to = "feature_value")
+  overall_feature_importance <- shap_cluster %>%
+    summarise(across(everything(), ~ mean(abs(.), na.rm = TRUE))) %>%
+    pivot_longer(cols = everything(), names_to = "feature", values_to = "importance") %>%
+    arrange(desc(importance))
+  
+  cluster_base_color <- base_colors[[as.character(cluster_id)]]
+  
+  importance_plot_path <- sprintf("%s/SHAP_FNConc_Ave_Cluster_%s_Variable_Importance.pdf", output_dir, cluster_id)
+  
+  # Open PDF device
+  pdf(importance_plot_path, width = 10, height = 8)
+  
+  # Explicitly create and print ggplot
+  importance_plot <- ggplot(overall_feature_importance, aes(x = reorder(feature, importance), y = importance)) +
+    geom_bar(stat = "identity", fill = cluster_base_color) +
+    coord_flip() +
+    labs(title = paste("Feature Importance for Cluster", cluster_id), 
+         y = "Mean Absolute SHAP Value",
+         x = NULL) +
+    theme_classic()+
+    theme(axis.title = element_text(size = 16, face = "bold"),
+          axis.text = element_text(size = 14))
+  
+  print(importance_plot)  # Ensure ggplot is printed
+  
+  # Close PDF device
+  dev.off()
+}
+
+# -------------------------------
+# 8. SHAP Dot Plot per Cluster
+# -------------------------------
+generate_shap_dot_plot <- function(cluster_id, shap_values, full_scaled, output_dir, global_min, global_max) {
+  cluster_data <- full_scaled %>% filter(cluster == cluster_id) %>% select(-cluster)
+  cluster_data$id <- seq_len(nrow(cluster_data))
+  
+  cluster_long <- cluster_data %>%
+    pivot_longer(cols = -id, names_to = "feature", values_to = "feature_value")
+  
+  cluster_indices <- which(full_scaled$cluster == cluster_id)
+  shap_values_df <- as.data.frame(shap_values)[cluster_indices, , drop = FALSE] %>%
+    mutate(id = seq_len(nrow(.)))
   
   shap_long <- shap_values_df %>%
     pivot_longer(cols = -id, names_to = "feature", values_to = "shap_value") %>%
-    left_join(cluster_data_long, by = c("id", "feature")) %>%
-    mutate(feature = factor(feature, levels = rev(overall_feature_importance$feature)))  # Match importance order
+    left_join(cluster_long, by = c("id", "feature"))
   
-  # Save dot plot to PDF
+  overall_feature_importance <- shap_long %>%
+    group_by(feature) %>%
+    summarize(mean_abs_shap = mean(abs(shap_value), na.rm = TRUE)) %>%
+    arrange(desc(mean_abs_shap))
+  shap_long$feature <- factor(shap_long$feature, levels = rev(overall_feature_importance$feature))
+  
+  cluster_palette <- cluster_colors[[as.character(cluster_id)]]
+  cluster_light <- cluster_palette[1]
+  cluster_dark  <- cluster_palette[3]
+  
   dot_plot_path <- sprintf("%s/SHAP_FNConc_Ave_Cluster_%s_Dot_Plot.pdf", output_dir, cluster_id)
-  pdf(dot_plot_path, width = 10, height = 8)
-  dot_plot <- ggplot(shap_long, aes(x = shap_value, 
-                                    y = feature, 
-                                    color = feature_value)) +
+  
+  # Open PDF device
+  pdf(dot_plot_path, width = 9, height = 8)
+  
+  # Explicitly create and print ggplot
+  dot_plot <- ggplot(shap_long, aes(x = shap_value, y = feature, color = feature_value)) +
     geom_point(alpha = 0.6) +
-    scale_color_gradient(low = cluster_light, high = cluster_dark, name = "Scaled Value") +  # Custom gradient
+    scale_color_gradient(low = cluster_light, high = cluster_dark, name = "Scaled Value",
+                         limits = c(global_min, global_max)) +
     labs(title = paste("SHAP Dot Plot for Cluster", cluster_id),
-         x = "SHAP Value", y = "Feature") +
-    theme_classic() +
-    theme(
-      axis.text.x = element_text(size = 14),
-      axis.text.y = element_text(size = 14),
-      axis.title.x = element_text(size = 16, face = "bold"),
-      axis.title.y = element_text(size = 16, face = "bold"),
-      plot.title = element_text(size = 18, face = "bold", hjust = 0.5)
-    )
-  print(dot_plot)
+         x = "SHAP Value",
+         y = NULL) +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "grey1") +
+    theme_minimal() +
+    theme_classic()+
+    theme(axis.title = element_text(size = 16, face = "bold"),
+          axis.text = element_text(size = 14))
+  
+  print(dot_plot)  # Ensure ggplot is printed
+  
+  # Close PDF device
   dev.off()
 }
 
-# Assuming you have the unique clusters available
-unique_clusters <- unique(combined_data$cluster)
+# -------------------------------
+# 9. Generate Plots for Each Cluster
+# -------------------------------
+unique_clusters <- unique(full_scaled$cluster)
 
-# Generate SHAP plots and save them
-shap_plot_paths <- lapply(unique_clusters, generate_shap_plots_for_cluster, 
-                          model = rf_model2, combined_data = combined_data, 
-                          output_dir = output_dir, sample_size = 30)
+lapply(unique_clusters, generate_feature_importance_plot, shap_values, full_scaled, output_dir)
+lapply(unique_clusters, generate_shap_dot_plot, shap_values, full_scaled, output_dir, global_min, global_max)
+
+
