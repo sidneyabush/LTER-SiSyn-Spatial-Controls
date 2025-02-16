@@ -11,6 +11,7 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 load("FNYield_Yearly_rf_model2_full.RData")
 load("FNYield_Yearly_kept_drivers_full.RData")
 load("FNYield_Yearly_full.RData")
+load("FNYield_Yearly_full_stream_ids.RData")
 
 # Set global seed and output directory
 set.seed(123)
@@ -38,32 +39,63 @@ generate_shap_values <- function(model, kept_drivers, sample_size = 30) {
 # Generate SHAP values
 shap_values <- generate_shap_values(rf_model2, kept_drivers, sample_size = 30)
 
-# Function to create overall SHAP plots for the full model
-create_all_shapley_plots <- function(shap_values, output_file) {
-  # Calculate overall feature importance
+create_shap_plots <- function(shap_values, kept_drivers, output_dir) {
+  # Compute overall feature importance (mean absolute SHAP value)
   overall_feature_importance <- shap_values %>%
     as.data.frame() %>%
     summarise(across(everything(), ~ mean(abs(.)))) %>%
     pivot_longer(cols = everything(), names_to = "feature", values_to = "importance") %>%
     arrange(desc(importance))
   
-  # Create the feature importance plot
-  pdf(output_file, width = 9, height = 8)
-  overall_importance_plot <- ggplot(overall_feature_importance, aes(x = reorder(feature, importance), y = importance)) +
+  # Feature importance bar plot
+  pdf(sprintf("%s/SHAP_FNYield_Ave_Overall_Variable_Importance.pdf", output_dir), width = 9, height = 8)
+  overall_importance_plot <- ggplot(overall_feature_importance, 
+                                    aes(x = reorder(feature, importance), y = importance)) +
     geom_bar(stat = "identity", fill = "steelblue") +
     coord_flip() +
-    labs(x = "Feature", y = "Mean Absolute SHAP Value", title = "FNYield Yearly - Overall Feature Importance") +
+    labs(x = "Feature", y = "Mean Absolute SHAP Value", 
+         title = "FNYield Yearly - Overall Feature Importance") +
     theme_minimal() +
-    theme(
-      axis.text.y = element_text(size = 14),  # Increase Y-axis (drivers) text size
-      axis.title.x = element_text(size = 14),  # Increase X-axis title size
-      plot.title = element_text(size = 16, face = "bold")  # Increase title size
-    )
-  print(overall_importance_plot)
+    theme(axis.text.y = element_text(size = 14), 
+          axis.title.x = element_text(size = 14), 
+          plot.title = element_text(size = 16, face = "bold"))
+  print(overall_importance_plot)  
+  dev.off()
+  
+  # Scale kept_drivers using base R's scale() on a numeric matrix
+  kept_drivers_scaled <- as.data.frame(scale(as.matrix(kept_drivers)))
+  
+  # Add id and pivot to long format
+  kept_drivers_with_id <- kept_drivers_scaled %>%
+    mutate(id = seq_len(nrow(.))) %>%
+    pivot_longer(cols = -id, names_to = "feature", values_to = "feature_value")
+  
+  # Prepare SHAP values (without scaling them)
+  shap_values_df <- as.data.frame(shap_values) %>%
+    mutate(id = seq_len(nrow(shap_values)))
+  
+  shap_long <- shap_values_df %>%
+    pivot_longer(cols = -id, names_to = "feature", values_to = "shap_value") %>%
+    left_join(kept_drivers_with_id, by = c("id", "feature")) %>%
+    mutate(feature = factor(feature, levels = rev(overall_feature_importance$feature)))
+  
+  # SHAP Dot Plot with a monochromatic gradient from lightsteelblue to steelblue
+  pdf(sprintf("%s/SHAP_FNYield_Ave_Dot_Plot.pdf", output_dir), width = 9, height = 8)
+  dot_plot <- ggplot(shap_long, aes(x = shap_value, 
+                                    y = feature, 
+                                    color = feature_value)) +
+    geom_point(alpha = 0.6) +
+    scale_color_gradient(low = "lightsteelblue", high = "steelblue4", name = "Scaled Value") +
+    labs(x = "SHAP Value", y = "Feature", 
+         title = "FNYield Yearly - Overall Feature Importance") +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "grey1") +
+    theme_minimal() +
+    theme(axis.text.y = element_text(size = 14), 
+          axis.title.x = element_text(size = 14), 
+          plot.title = element_text(size = 16, face = "bold"))
+  print(dot_plot)  
   dev.off()
 }
 
-
-# Output full SHAP plots
-output_file <- sprintf("%s/SHAP_FNYield_Ave_Overall_Variable_Importance.pdf", output_dir)
-create_all_shapley_plots(shap_values, output_file)
+# Create SHAP plots
+create_shap_plots(shap_values, kept_drivers, output_dir)
