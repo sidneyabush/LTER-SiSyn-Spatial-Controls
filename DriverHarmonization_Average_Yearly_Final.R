@@ -872,11 +872,29 @@ FNConc_lower <- FNConc_mean - SD_val * FNConc_sd
 drivers_df <- drivers_df %>%
   filter(FNConc >= FNConc_lower & FNConc <= FNConc_upper)
 
+# Count occurrences of each stream_id and filter those with less than 5 entries
+filtered_streams_FNConc <- drivers_df %>%
+  group_by(Stream_ID) %>%
+  filter(n() < 5) %>%
+  ungroup()
+
+# Display unique stream_IDs with less than 5 entries
+unique(filtered_streams_FNConc$Stream_ID)
+
 # ---- Remove Outliers for FNYield (5 SD Rule) ----
 FNYield_mean <- mean(drivers_df$FNYield, na.rm = TRUE)
 FNYield_sd <- sd(drivers_df$FNYield, na.rm = TRUE)
 FNYield_upper <- FNYield_mean + SD_val * FNYield_sd
 FNYield_lower <- FNYield_mean - SD_val * FNYield_sd
+
+# Count occurrences of each stream_id and filter those with less than 5 entries
+filtered_streams_FNYield <- drivers_df %>%
+  group_by(Stream_ID) %>%
+  filter(n() < 5) %>%
+  ungroup()
+
+# Display unique stream_IDs with less than 5 entries
+unique(filtered_streams_FNYield$Stream_ID)
 
 drivers_df <- drivers_df %>%
   filter(FNYield >= FNYield_lower & FNYield <= FNYield_upper)
@@ -888,7 +906,20 @@ unique_stream_id_count <- drivers_df %>%
 
 print(unique_stream_id_count)
 
-# Export with dynamic filename
+# Remove sites (Stream_IDs) that have fewer than 5 unique years of data
+drivers_df <- drivers_df %>%
+  group_by(Stream_ID) %>%
+  filter(n_distinct(Year) >= 5) %>%
+  ungroup()
+
+# Count the number of unique Stream_IDs after filtering
+unique_stream_id_count <- drivers_df %>%
+  summarise(unique_count = n_distinct(Stream_ID)) %>%
+  pull(unique_count)
+
+print(unique_stream_id_count)
+
+# Export with dynamic filename based on record length
 write.csv(drivers_df, 
           sprintf("All_Drivers_Harmonized_Yearly_FNConc_FNYield_%d_years.csv", record_length), 
           row.names = FALSE)
