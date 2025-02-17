@@ -208,27 +208,27 @@ shap_values <- generate_shap_values(rf_model2, kept_drivers, sample_size = 30)
 # -------------------------------
 # 4. Clustering (AFTER SHAP)
 # -------------------------------
-# Define variables to use for clustering
-cluster_vars <- c("elevation", "basin_slope", "P", "rocks_volcanic", "evapotrans")
-
-# Create a dataset for clustering from kept_drivers
-cluster_data <- kept_drivers %>% select(all_of(cluster_vars))
-
-# Scale clustering variables
-scaled_cluster_data <- cluster_data %>%
-  mutate(across(where(is.numeric), ~ as.numeric(scale(.))))
-
-set.seed(123)  # Ensure reproducibility
-
-# Determine optimal clusters (optional)
-p2 <- fviz_nbclust(scaled_cluster_data, kmeans, method = "silhouette", k.max = 20)
-print(p2)
-
-# Perform k-means clustering
-kmeans_result <- kmeans(scaled_cluster_data, iter.max = 50, nstart = 50, centers = 3)
-
-# NOW attach cluster assignments to kept_drivers (AFTER SHAP)
-kept_drivers$cluster <- as.factor(kmeans_result$cluster)
+# # Define variables to use for clustering
+# cluster_vars <- c("elevation", "basin_slope", "P", "rocks_volcanic", "evapotrans")
+# 
+# # Create a dataset for clustering from kept_drivers
+# cluster_data <- kept_drivers %>% select(all_of(cluster_vars))
+# 
+# # Scale clustering variables
+# scaled_cluster_data <- cluster_data %>%
+#   mutate(across(where(is.numeric), ~ as.numeric(scale(.))))
+# 
+# set.seed(123)  # Ensure reproducibility
+# 
+# # Determine optimal clusters (optional)
+# p2 <- fviz_nbclust(scaled_cluster_data, kmeans, method = "silhouette", k.max = 20)
+# print(p2)
+# 
+# # Perform k-means clustering
+# kmeans_result <- kmeans(scaled_cluster_data, iter.max = 50, nstart = 50, centers = 3)
+# 
+# # NOW attach cluster assignments to kept_drivers (AFTER SHAP)
+# kept_drivers$cluster <- as.factor(kmeans_result$cluster)
 
 # -------------------------------
 # 5. Prepare Data for Visualization (Scaled for Display)

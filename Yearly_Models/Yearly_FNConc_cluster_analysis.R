@@ -16,7 +16,6 @@ load("FNConc_Yearly_kept_drivers_full.RData")
 load("FNConc_Yearly_full.RData")
 load("FNConc_Yearly_full_stream_ids.RData")
 
-
 # -------------------------------
 # 2a. Create additional informative plots
 # -------------------------------
@@ -37,7 +36,7 @@ set.seed(123)
 p2 <- fviz_nbclust(scaled_data, kmeans, method= "silhouette", k.max = 20)
 print(p2)
 
-kmeans_result <- kmeans(scaled_data, iter.max = 50, nstart = 50, centers = 3)
+kmeans_result <- kmeans(scaled_data, iter.max = 50, nstart = 50, centers = 5)
 
 # Add cluster assignments to the reg data
 final_data <- data %>%
@@ -51,9 +50,7 @@ scaled_data <- scaled_data %>%
   mutate(cluster = as.factor(kmeans_result$cluster))
 
 # Define a colorblind-friendly palette
-cb_palette <- c(
-  "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7"
-)
+cb_palette <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#648FFF")
 
 # Reshape data to long format for ggplot
 long_data <- scaled_data %>%
@@ -75,7 +72,7 @@ box_plot <- ggplot(long_data, aes(x = Driver, y = Value, fill = cluster)) +
   facet_wrap(~cluster, ncol = 2, scales = "free") +  
   scale_fill_manual(values = cb_palette) +  # Apply colorblind-friendly colors
   labs(title = "FNConc Yearly", x = NULL, y = "Scaled Value") +
-  coord_cartesian(ylim = c(-1, 5)) + # Set Y-axis limits without removing data
+  # coord_cartesian(ylim = c(-1, 5)) + # Set Y-axis limits without removing data
   theme_classic() +
   theme(
     legend.position = "none",
@@ -132,7 +129,7 @@ ggsave(
 drivers_subset <- drivers_df %>% select(Stream_ID, FNConc)
 
 # Merge clusters with kept_drivers (ensuring row alignment)
-all_data <- bind_cols(kept_drivers, drivers_subset)
+all_data <- bind_cols(final_data, drivers_subset)
 
 # Ensure 'cluster' is a factor
 all_data$cluster <- as.factor(all_data$cluster)
@@ -207,27 +204,27 @@ generate_shap_values <- function(model, kept_drivers, sample_size = 30) {
 # Generate global SHAP values BEFORE adding cluster assignments
 shap_values <- generate_shap_values(rf_model2, kept_drivers, sample_size = 30)
 
-# -------------------------------
-# 4. Clustering (AFTER SHAP)
-# -------------------------------
-# Define variables to use for clustering
-cluster_vars <- c("elevation", "basin_slope", "P", "rocks_volcanic", "evapotrans")
-
-# Create a dataset for clustering from kept_drivers
-cluster_data <- kept_drivers %>% select(all_of(cluster_vars))
-
-# Scale clustering variables
-scaled_cluster_data <- cluster_data %>%
-  mutate(across(where(is.numeric), ~ as.numeric(scale(.))))
-
-set.seed(123)  # Ensure reproducibility
-
-# Determine optimal clusters (optional)
-p2 <- fviz_nbclust(scaled_cluster_data, kmeans, method = "silhouette", k.max = 20)
-print(p2)
-
-# Perform k-means clustering
-kmeans_result <- kmeans(scaled_cluster_data, iter.max = 50, nstart = 50, centers = 3)
+# # -------------------------------
+# # 4. Clustering (AFTER SHAP)
+# # -------------------------------
+# # Define variables to use for clustering
+# cluster_vars <- c("elevation", "basin_slope", "P", "rocks_volcanic", "evapotrans")
+# 
+# # Create a dataset for clustering from kept_drivers
+# cluster_data <- kept_drivers %>% select(all_of(cluster_vars))
+# 
+# # Scale clustering variables
+# scaled_cluster_data <- cluster_data %>%
+#   mutate(across(where(is.numeric), ~ as.numeric(scale(.))))
+# 
+# set.seed(123)  # Ensure reproducibility
+# 
+# # Determine optimal clusters (optional)
+# p2 <- fviz_nbclust(scaled_cluster_data, kmeans, method = "silhouette", k.max = 20)
+# print(p2)
+# 
+# # Perform k-means clustering
+# kmeans_result <- kmeans(scaled_cluster_data, iter.max = 50, nstart = 50, centers = 3)
 
 # NOW attach cluster assignments to kept_drivers (AFTER SHAP)
 kept_drivers$cluster <- as.factor(kmeans_result$cluster)
@@ -250,7 +247,9 @@ global_max <- max(full_scaled %>% select(-cluster), na.rm = TRUE)
 # -------------------------------
 # 6. Define Color Palette for Clusters
 # -------------------------------
-base_colors <- c("1" = "#E69F00", "2" = "#56B4E9", "3" = "#009E73")
+# cb_palette <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#648FFF")
+
+base_colors <- c("1" = "#E69F00", "2" = "#56B4E9", "3" = "#009E73", "4" = "#F0E442", "5" = "#648FFF" )
 cluster_colors <- lapply(base_colors, function(col) {
   c(lighten(col, 0.4), col, darken(col, 0.4))
 })
