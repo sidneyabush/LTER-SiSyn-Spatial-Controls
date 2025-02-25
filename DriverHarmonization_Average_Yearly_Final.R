@@ -754,6 +754,11 @@ tot <- tot %>%
   ungroup() %>%
   select(-contains("forest"), land_forest_all)  # Remove old "forest" columns but keep the new one
 
+# Export at this step to keep lat/long: 
+write.csv(as.data.frame(tot), 
+          sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years_uncleaned.csv", record_length),
+          row.names = FALSE)
+
 # Tidy data for export: 
 tot_si <- tot %>%
   dplyr::select(Stream_ID, Year, drainSqKm, NOx, P, precip, Q,
