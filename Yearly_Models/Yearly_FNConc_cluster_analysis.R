@@ -6,7 +6,7 @@ librarian::shelf(iml, ggplot2, dplyr, tidyr, factoextra, cluster, colorspace, sc
 rm(list = ls())  # Clear environment
 
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model/FNConc"
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/TESTING"
 
 # -------------------------------
 # 2. Load Data & Model

@@ -15,7 +15,7 @@ load("FNConc_Yearly_full_stream_ids.RData")
 
 # Set global seed and output directory
 set.seed(123)
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model/FNConc"
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/TESTING"
 
 # Function to create SHAP values
 generate_shap_values <- function(model, kept_drivers, sample_size = 30) {

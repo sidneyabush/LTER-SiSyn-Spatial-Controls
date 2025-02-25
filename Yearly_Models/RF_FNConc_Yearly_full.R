@@ -75,7 +75,7 @@ test_numtree_parallel_optimized <- function(ntree_list, formula, data) {
 }
 
 # Set the output directory path for saving PDFs
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model/FNConc"
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/TESTING"
 
 # Define record length (1, 5, 10, 20... years)
 record_length <- 5
@@ -85,7 +85,7 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 drivers_df <- read.csv(sprintf("All_Drivers_Harmonized_Yearly_FNConc_FNYield_%d_years.csv", record_length)) %>%
   dplyr::select(-contains("Yield"), -contains("Gen"), -contains("major"), 
-                -Max_Daylength, -silicate_weathering, -Q, -drainage_area) %>%
+                -Max_Daylength, -silicate_weathering, -drainage_area) %>%
   mutate(greenup_day = as.numeric(greenup_day)) 
 
 drivers_numeric <- drivers_df %>%
