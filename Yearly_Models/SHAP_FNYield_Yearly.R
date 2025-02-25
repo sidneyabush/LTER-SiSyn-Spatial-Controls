@@ -1,5 +1,5 @@
 # Load needed packages
-librarian::shelf(iml, ggplot2, dplyr, tidyr, reshape2, parallel, foreach, randomForest, tibble, viridis)
+librarian::shelf(iml, ggplot2, dplyr, tidyr, reshape2, parallel, foreach, randomForest, tibble, viridis, RColorBrewer)
 
 # Clear environment
 rm(list = ls())
@@ -13,31 +13,37 @@ load("FNYield_Yearly_kept_drivers_full.RData")
 load("FNYield_Yearly_full.RData")
 load("FNYield_Yearly_full_stream_ids.RData")
 
+# Already ran SHAP values:
+load("FNYield_Yearly_shap_values.RData")
+
 # Set global seed and output directory
 set.seed(123)
 output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model/FNYield"
 
-# Function to create SHAP values
-generate_shap_values <- function(model, kept_drivers, sample_size = 30) {
-  # Define a custom prediction function
-  custom_predict <- function(object, newdata) {
-    newdata <- as.data.frame(newdata)
-    predict(object, newdata = newdata)
-  }
-  
-  # Compute SHAP values using fastshap
-  shap_values <- fastshap::explain(
-    object = model,
-    X = kept_drivers,
-    pred_wrapper = custom_predict,
-    nsim = sample_size
-  )
-  
-  return(shap_values)
-}
+# # Function to create SHAP values, uncomment to run new data
+# generate_shap_values <- function(model, kept_drivers, sample_size = 30) {
+#   # Define a custom prediction function
+#   custom_predict <- function(object, newdata) {
+#     newdata <- as.data.frame(newdata)
+#     predict(object, newdata = newdata)
+#   }
+#   
+#   # Compute SHAP values using fastshap
+#   shap_values <- fastshap::explain(
+#     object = model,
+#     X = kept_drivers,
+#     pred_wrapper = custom_predict,
+#     nsim = sample_size
+#   )
+#   
+#   return(shap_values)
+# }
+# 
+# # Generate SHAP values
+# shap_values <- generate_shap_values(rf_model2, kept_drivers, sample_size = 30)
 
-# Generate SHAP values
-shap_values <- generate_shap_values(rf_model2, kept_drivers, sample_size = 30)
+# Save SHAP values for future use
+save(shap_values, file = "FNYield_Yearly_shap_values.RData")
 
 create_shap_plots <- function(shap_values, kept_drivers, output_dir) {
   # Compute overall feature importance (mean absolute SHAP value)
@@ -63,7 +69,8 @@ create_shap_plots <- function(shap_values, kept_drivers, output_dir) {
   dev.off()
   
   # Scale kept_drivers using base R's scale() on a numeric matrix
-  kept_drivers_scaled <- as.data.frame(scale(as.matrix(kept_drivers)))
+  kept_drivers_scaled <- kept_drivers %>%
+    mutate(across(everything(), ~ rescale(., to = c(0,1))))
   
   # Add id and pivot to long format
   kept_drivers_with_id <- kept_drivers_scaled %>%
@@ -85,7 +92,9 @@ create_shap_plots <- function(shap_values, kept_drivers, output_dir) {
                                     y = feature, 
                                     color = feature_value)) +
     geom_point(alpha = 0.6) +
-    scale_color_gradient(low = "lightsteelblue", high = "steelblue4", name = "Scaled Value") +
+    scale_color_gradientn(
+      colors = rev(brewer.pal(5, "RdYlBu")),  # Reverse to go Red → Yellow → Blue
+      name = NULL) +
     labs(x = "SHAP Value", y = "Feature", 
          title = "FNYield Yearly - Overall Feature Importance") +
     geom_vline(xintercept = 0, linetype = "dashed", color = "grey1") +
