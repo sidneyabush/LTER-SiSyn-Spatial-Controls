@@ -20,30 +20,30 @@ load("FNConc_Yearly_shap_values.RData")
 set.seed(123)
 output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model/FNConc"
 
-# Function to create SHAP values
-generate_shap_values <- function(model, kept_drivers, sample_size = 30) {
-  # Define a custom prediction function
-  custom_predict <- function(object, newdata) {
-    newdata <- as.data.frame(newdata)
-    predict(object, newdata = newdata)
-  }
-  
-  # Compute SHAP values using fastshap
-  shap_values <- fastshap::explain(
-    object = model,
-    X = kept_drivers,
-    pred_wrapper = custom_predict,
-    nsim = sample_size
-  )
-  
-  return(shap_values)
-}
-
-# Generate SHAP values
-shap_values <- generate_shap_values(rf_model2, kept_drivers, sample_size = 30)
-
-# Save SHAP values for future use
-save(shap_values, file = "FNConc_Yearly_shap_values.RData")
+# # Function to create SHAP values
+# generate_shap_values <- function(model, kept_drivers, sample_size = 30) {
+#   # Define a custom prediction function
+#   custom_predict <- function(object, newdata) {
+#     newdata <- as.data.frame(newdata)
+#     predict(object, newdata = newdata)
+#   }
+#   
+#   # Compute SHAP values using fastshap
+#   shap_values <- fastshap::explain(
+#     object = model,
+#     X = kept_drivers,
+#     pred_wrapper = custom_predict,
+#     nsim = sample_size
+#   )
+#   
+#   return(shap_values)
+# }
+# 
+# # Generate SHAP values
+# shap_values <- generate_shap_values(rf_model2, kept_drivers, sample_size = 30)
+# 
+# # Save SHAP values for future use
+# save(shap_values, file = "FNConc_Yearly_shap_values.RData")
 
 create_shap_plots <- function(shap_values, kept_drivers, output_dir) {
   # Compute overall feature importance (mean absolute SHAP value)
@@ -94,7 +94,7 @@ create_shap_plots <- function(shap_values, kept_drivers, output_dir) {
     geom_point(alpha = 0.6) +
     # Use the "RdYlBu" palette (flip order to match your preference)
     scale_color_gradientn(
-      colors = rev(brewer.pal(7, "RdYlBu")),  # Reverse to go Red → Yellow → Blue
+      colors = rev(brewer.pal(9, "RdYlBu")),  # Reverse to go Red → Yellow → Blue
       name = NULL) +
   labs(x = "SHAP Value", y = "Feature", 
          title = "FNConc Yearly - Overall Feature Importance") +
