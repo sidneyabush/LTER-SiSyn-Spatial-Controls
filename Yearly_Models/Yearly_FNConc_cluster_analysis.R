@@ -2,7 +2,6 @@
 # COMPLETE WORKFLOW: FNConc Cluster Plotting
 ###############################################################################
 
-
 ## 1. Load Packages & Clear Environment
 rm(list = ls())  
 library(ggplot2)
@@ -81,9 +80,12 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
     geom_boxplot() +
     scale_fill_manual(values = my_cluster_colors_lighter, guide = "none") +
     scale_y_continuous(limits = c(0, 1)) +
-    labs(x = NULL, y = NULL) +
+    labs(x = NULL, y = NULL,
+             title = paste("Cluster", cl)
+) +
     theme_classic() +
     theme(
+      plot.title   = element_text(size = 14, hjust = 0.5),
       axis.text.x = element_text(angle = 45, hjust = 1, size = 14),
       axis.text.y = element_text(size = 14)
     )
@@ -271,3 +273,140 @@ p <- ggplot(df, aes(x = factor(cluster), y = FNConc, fill = factor(cluster))) +
 print(p)
 
 ggsave("FNConc_Yearly_Clusters.png", p, width = 8, height = 5, dpi = 300, path = output_dir)
+
+###############################################################################
+# CREATE SILHOUETTE PLOT FOR FNConc CLUSTERS
+###############################################################################
+
+# 1. Compute silhouette widths from your k-means result
+sil_obj <- silhouette(kmeans_result$cluster, dist(scaled_data))
+mean_sil_value <- mean(sil_obj[, "sil_width"])
+
+# 2. Create a silhouette plot with factoextra
+#    - 'palette = unname(my_cluster_colors)' uses your custom cluster colors
+#    - 'label = FALSE' hides individual silhouette labels
+p_sil <- fviz_silhouette(
+  sil_obj, 
+  label   = FALSE,
+  palette = unname(my_cluster_colors)  # Remove names; just pass the color values
+) +
+  # 3. Add a red dashed line at the average silhouette width
+  geom_hline(
+    yintercept = mean(sil_obj[, "sil_width"]), 
+    linetype   = "dashed", 
+    color      = "gray4"
+  ) +
+  annotate(
+    "text",
+    x     = nrow(sil_obj) * 0.9,  # Position text near the right side of the plot
+    y     = mean_sil_value,
+    label = paste("Mean =", round(mean_sil_value, 2)),
+    color = "gray4",
+    vjust = -0.5
+  ) +
+  # 4. Tweak labels & theme
+  labs(
+    title = NULL,
+    x     = "Sites",
+    y     = "Silhouette Width"
+  ) +
+  theme_classic(base_size = 16) +
+  theme(
+    legend.title = element_blank(),
+    axis.text.x = element_blank(),  # Remove x-axis text
+    axis.ticks.x = element_blank()  # Remove x-axis ticks
+  )
+# 5. Print and/or save the plot
+print(p_sil)
+ggsave(
+  filename = "FNConc_Yearly_Silhouette.png",
+  plot     = p_sil,
+  width    = 8,
+  height   = 5,
+  dpi      = 300,
+  path     = output_dir
+)
+
+###############################################################################
+# MEAN ABSOLUTE SHAP BAR PLOTS 
+###############################################################################
+
+# Define a function to compute & plot mean absolute SHAP for one cluster
+plot_mean_abs_shap <- function(cluster_id, shap_values, full_scaled) {
+cluster_indices <- which(full_scaled$cluster == cluster_id)
+shap_cluster    <- shap_values[cluster_indices, , drop = FALSE]
+
+mean_abs_shap <- colMeans(abs(shap_cluster), na.rm = TRUE)
+df_shap <- data.frame(
+  feature          = names(mean_abs_shap),
+  mean_abs_shapval = as.numeric(mean_abs_shap)
+) %>%
+  arrange(desc(mean_abs_shapval))
+
+# Recode feature names for the y-axis
+df_shap$feature <- recode(
+  df_shap$feature,
+  "elevation"                      = "Elevation",
+  "basin_slope"                    = "Basin Slope",
+  "P"                              = "P",
+  "rocks_volcanic"                 = "Volcanic Rock",
+  "evapotrans"                     = "ET",
+  "land_urban_and_built_up_land"   = "Land: Urban & Built-up"
+)
+
+ggplot(df_shap, aes(x = reorder(feature, mean_abs_shapval), y = mean_abs_shapval)) +
+  geom_bar(
+    stat  = "identity",
+    fill  = my_cluster_colors[[as.character(cluster_id)]],
+    alpha = 0.8
+  ) +
+  coord_flip() +
+  scale_y_continuous(limits = c(0, 3.5)) +
+  labs(
+    x = NULL,
+    y = "Mean Absolute SHAP Value",  # We will selectively remove this later
+    title = paste("Cluster", cluster_id)
+  ) +
+  theme_classic(base_size = 14) +
+  theme(
+    plot.title   = element_text(size = 14, hjust = 0.5),
+    axis.text.y  = element_text(size = 12),
+    axis.text.x  = element_text(size = 12)
+  )
+}
+
+# 2. Generate a plot for each of your 5 clusters
+unique_clusters <- c("1", "2", "3", "4", "5")  # Adjust as needed
+plot_list <- lapply(seq_along(unique_clusters), function(i) {
+cl <- unique_clusters[i]
+plot_mean_abs_shap(cl, shap_values, full_scaled)
+})
+
+# 3. Arrange them in a 3×2 grid
+ncol <- 2
+nrow <- 3  # 5 plots => 3 rows × 2 columns (the last cell is empty)
+
+# 4. Remove the x-axis label for all but:
+#    - The bottom row (row == nrow)
+#    - The 4th plot (i == 4, which is cluster 4 in row 2 col 2)
+for (i in seq_along(plot_list)) {
+row_number <- ceiling(i / ncol)
+# Keep the x-axis label only if this is row 3 or plot index == 4
+if (!(row_number == nrow || i == 4)) {
+  plot_list[[i]] <- plot_list[[i]] + theme(axis.title.x = element_blank())
+}
+}
+
+final_shap_grid <- wrap_plots(plot_list, ncol = ncol, nrow = nrow)
+print(final_shap_grid)
+
+# 5. Optionally save
+ggsave(
+  filename = "MeanAbsSHAP_Grid_3x2.png",
+  plot     = final_shap_grid,
+  width    = 9,
+  height   = 9,
+  dpi      = 300,
+  path     = output_dir
+)
+

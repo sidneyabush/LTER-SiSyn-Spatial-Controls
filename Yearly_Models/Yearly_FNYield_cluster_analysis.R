@@ -287,3 +287,63 @@ print(p)
 
 ggsave("FNYield_Yearly_Clusters.png", p, width = 8, height = 5, dpi = 300, path = output_dir)
 
+###############################################################################
+# CREATE SILHOUETTE PLOT FOR FNYield CLUSTERS
+###############################################################################
+
+library(cluster)    # for silhouette()
+library(factoextra) # for fviz_silhouette()
+
+# 1. Compute silhouette widths from your k-means result
+sil_obj <- silhouette(kmeans_result$cluster, dist(scaled_data))
+mean_sil_value <- mean(sil_obj[, "sil_width"])
+
+# 2. Create a silhouette plot with factoextra
+#    - 'palette = unname(my_cluster_colors)' uses your custom cluster colors
+#    - 'label = FALSE' hides individual silhouette labels
+p_sil <- fviz_silhouette(
+  sil_obj, 
+  label   = FALSE,
+  palette = unname(my_cluster_colors)  # Remove names; just pass the color values
+) +
+  # 3. Add a red dashed line at the average silhouette width
+  geom_hline(
+    yintercept = mean(sil_obj[, "sil_width"]), 
+    linetype   = "dashed", 
+    color      = "gray4"
+  ) +
+  annotate(
+    "text",
+    x     = nrow(sil_obj) * 0.85,  # Position text near the right side of the plot
+    y     = mean_sil_value,
+    label = paste("Mean =", round(mean_sil_value, 2)),
+    color = "gray4",
+    vjust = -0.5
+  ) +
+  # 4. Tweak labels & theme
+  labs(
+    title = NULL,
+    x     = "Sites",
+    y     = "Silhouette Width"
+  ) +
+  theme_classic(base_size = 16) +
+  theme(
+    legend.title = element_blank(),
+    axis.text.x = element_blank(),  # Remove x-axis text
+    axis.ticks.x = element_blank()  # Remove x-axis ticks
+  )
+# 5. Print and/or save the plot
+print(p_sil)
+ggsave(
+  filename = "FNYield_Yearly_Silhouette.png",
+  plot     = p_sil,
+  width    = 8,
+  height   = 5,
+  dpi      = 300,
+  path     = output_dir
+)
+
+
+
+
+
