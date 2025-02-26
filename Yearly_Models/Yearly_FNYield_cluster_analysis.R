@@ -83,9 +83,11 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
     geom_boxplot() +
     scale_fill_manual(values = my_cluster_colors_lighter, guide = "none") +
     scale_y_continuous(limits = c(0, 1)) +
-    labs(x = NULL, y = NULL) +
+    labs(x = NULL, y = NULL,
+         title = paste("Cluster", cl)) +
     theme_classic() +
     theme(
+      plot.title   = element_text(size = 14, hjust = 0.5),
       axis.text.x = element_text(angle = 45, hjust = 1, size = 14),
       axis.text.y = element_text(size = 14)
     )
@@ -339,6 +341,101 @@ ggsave(
   plot     = p_sil,
   width    = 8,
   height   = 5,
+  dpi      = 300,
+  path     = output_dir
+)
+
+###############################################################################
+# MEAN ABSOLUTE SHAP BAR PLOTS 
+###############################################################################
+
+# Define a function to compute & plot mean absolute SHAP for one cluster
+plot_mean_abs_shap <- function(cluster_id, shap_values, full_scaled) {
+  cluster_indices <- which(full_scaled$cluster == cluster_id)
+  shap_cluster    <- shap_values[cluster_indices, , drop = FALSE]
+  
+  mean_abs_shap <- colMeans(abs(shap_cluster), na.rm = TRUE)
+  df_shap <- data.frame(
+    feature          = names(mean_abs_shap),
+    mean_abs_shapval = as.numeric(mean_abs_shap)
+  ) %>%
+    arrange(desc(mean_abs_shapval))
+  
+  # Recode feature names for the y-axis
+  df_shap$feature <- recode(
+    df_shap$feature,
+    "rocks_volcanic" = "Volcanic Rock",
+    "basin_slope" = "Basin Slope",
+    "land_urban_and_built_up_land" = "Land: Urban & Built Up",
+    "temp" = "Temperature",
+    "land_shrubland_grassland" = "Land: Shrubland & Grassland", 
+    "land_cropland" = "Land: Cropland",
+    "rocks_sedimentary" = "Sedimentary Rock",
+    "npp" = "NPP",
+    "precip" = "Precipitation",
+    "land_forest_all" = "Land: Forest",
+    "rocks_plutonic" = "Plutonic Rock",
+    "elevation" = "Elevation",
+    "permafrost" = "Permafrost",
+    "temp" = "Temperature",
+    "rocks_metamorphic" = "Metamorphic Rock",
+    "NOx" = "NOx",
+    "evapotrans" = "ET",
+    "rocks_carbonate_evaporite" = "Carbonite & Evaporite Rock",
+    "P"="P")
+  
+  ggplot(df_shap, aes(x = reorder(feature, mean_abs_shapval), y = mean_abs_shapval)) +
+    geom_bar(
+      stat  = "identity",
+      fill  = my_cluster_colors[[as.character(cluster_id)]],
+      alpha = 0.8
+    ) +
+    coord_flip() +
+    scale_y_continuous(limits = c(0, 9)) +
+    labs(
+      x = NULL,
+      y = "Mean Absolute SHAP Value",  # We will selectively remove this later
+      title = paste("Cluster", cluster_id)
+    ) +
+    theme_classic(base_size = 14) +
+    theme(
+      plot.title   = element_text(size = 14, hjust = 0.5),
+      axis.text.y  = element_text(size = 12),
+      axis.text.x  = element_text(size = 12)
+    )
+}
+
+# 2. Generate a plot for each of your 5 clusters
+unique_clusters <- c("1", "2", "3")  # Adjust as needed
+plot_list <- lapply(seq_along(unique_clusters), function(i) {
+  cl <- unique_clusters[i]
+  plot_mean_abs_shap(cl, shap_values, full_scaled)
+})
+
+# 3. Arrange them in a 3×2 grid
+ncol <- 2
+nrow <- 2  # 5 plots => 3 rows × 2 columns (the last cell is empty)
+
+# 4. Remove the x-axis label for all but:
+#    - The bottom row (row == nrow)
+#    - The 4th plot (i == 4, which is cluster 4 in row 2 col 2)
+for (i in seq_along(plot_list)) {
+  row_number <- ceiling(i / ncol)
+  # Keep the x-axis label only if this is row 3 or plot index == 4
+  if (!(row_number == nrow || i == 4)) {
+    plot_list[[i]] <- plot_list[[i]] + theme(axis.title.x = element_blank())
+  }
+}
+
+final_shap_grid <- wrap_plots(plot_list, ncol = ncol, nrow = nrow)
+print(final_shap_grid)
+
+# 5. Optionally save
+ggsave(
+  filename = "MeanAbsSHAP_Grid_2x1.png",
+  plot     = final_shap_grid,
+  width    = 9,
+  height   = 9,
   dpi      = 300,
   path     = output_dir
 )
