@@ -274,7 +274,7 @@ df_lter$Name <- factor(
 
 
 # Create Plot C: Precipitation vs. Temperature, one point per LTER
-p_temp_precip <- ggplot(df_lter, aes(x = Temperature, y = Precipitation,
+p_temp_precip <- ggplot(df_lter, aes(x = Temperature, y = Precipitation*365,
                                      fill = Name, label = LTER_extracted)) +
   # Add dashed reference lines at Temperature = 0 and Precipitation = 0
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray2", linewidth = 0.6) +
@@ -289,7 +289,7 @@ p_temp_precip <- ggplot(df_lter, aes(x = Temperature, y = Precipitation,
   scale_fill_manual(values = cbPalette_lighter) +  # using your original palette
   labs(
     x = expression("Temperature ("*degree*C*")"),
-    y = expression("Precipitation (mm day"^-1*")"),
+    y = expression("Precipitation (mm)"),
     color = NULL
   ) +
   theme_classic(base_size = 18) +
