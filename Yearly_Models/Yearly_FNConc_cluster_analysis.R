@@ -2,8 +2,9 @@
 # 1. Load Packages & Set Up Environment
 # -------------------------------
 librarian::shelf(
-  iml, ggplot2, dplyr, tidyr, factoextra, cluster, colorspace, scales,
-  fastshap, patchwork, RColorBrewer, grid
+  cowplot, ggplot2, dplyr, tidyr, factoextra, cluster, colorspace, scales,
+  fastshap, RColorBrewer, grid, patchwork
+
 )
 
 rm(list = ls())  # Clear environment
@@ -27,10 +28,10 @@ data <- kept_drivers %>%
   dplyr::select("elevation", "basin_slope", "P", "rocks_volcanic", "evapotrans")
 
 scaled_data <- data %>% 
-  mutate(across(where(is.numeric), ~ rescale(.)))
+  mutate(across(where(is.numeric), ~ scales::rescale(.)))
 
 set.seed(123)
-p2 <- fviz_nbclust(scaled_data, kmeans, method = "silhouette", k.max = 20)
+p2 <- factoextra::fviz_nbclust(scaled_data, kmeans, method = "silhouette", k.max = 20)
 print(p2)
 
 kmeans_result <- kmeans(scaled_data, iter.max = 50, nstart = 50, centers = 5)
@@ -65,40 +66,42 @@ my_cluster_colors <- c(
 )
 
 # -------------------------------
-# 6. Generate Box Plots (Left Panels; Hide Legend & X-axis labels except last)
+# 6. Generate Box Plots (Left Panels; Hide Legend & Remove X-axis labels except last)
 # -------------------------------
-cluster_boxplots <- lapply(sort(unique(long_data$cluster)), function(cl) {
-  long_data %>%
+letters_vec <- LETTERS[1:length(unique(long_data$cluster))]  # Generate letters for each cluster
+
+cluster_boxplots <- lapply(seq_along(sort(unique(long_data$cluster))), function(i) {
+  cl <- sort(unique(long_data$cluster))[i]
+  letter <- letters_vec[i]  # Assign corresponding letter
+  
+  p <- long_data %>%
     filter(cluster == cl) %>%
     ggplot(aes(x = Driver, y = Value, fill = cluster)) +
     geom_boxplot() +
     scale_fill_manual(values = my_cluster_colors, guide = "none") +
     scale_y_continuous(limits = c(0, 1)) +
-    labs(title = NULL, x = NULL, y = NULL) +
+    labs(x = NULL, y = NULL) +
+    annotate("text", x = 0.5, y = 1, label = letter, size = 8, fontface = "bold", hjust = 0, vjust = 1.5) + 
     theme_classic() +
     theme(
       axis.text.x = element_text(angle = 45, hjust = 1, size = 20),
       axis.text.y = element_text(size = 20)
     )
+  
+  # Remove x-axis labels for all but the last plot
+  if (cl != tail(sort(unique(long_data$cluster)), 1)) {
+    p <- p + theme(axis.title.x = element_blank(), axis.text.x = element_blank())
+  }
+  
+  return(p)
 })
 
-# Remove x-axis labels from all but the last box plot
-for(i in seq_along(cluster_boxplots)){
-  if(i < length(cluster_boxplots)){
-    cluster_boxplots[[i]] <- cluster_boxplots[[i]] +
-      theme(
-        axis.title.x = element_blank(),
-        axis.text.x = element_blank()
-      )
-  }
-}
 
 # -------------------------------
 # 7. Prepare Data for SHAP Dot Plots (Right Panels)
 # -------------------------------
-# Include all kept drivers (or add additional if desired)
 full_scaled <- kept_drivers %>%
-  mutate(across(where(is.numeric), ~ rescale(.))) %>%
+  mutate(across(where(is.numeric), ~ scales::rescale(.))) %>%
   as.data.frame()
 full_scaled$cluster <- factor(kmeans_result$cluster, levels = c("1","2","3","4","5"))
 
@@ -139,14 +142,14 @@ generate_shap_dot_plot_obj <- function(cluster_id, shap_values, full_scaled, glo
                               "evapotrans" = "ET",
                               "land_urban_and_built_up_land" = "Land: Urban & Built-up")
   
-  dot_plot <- ggplot(shap_long, aes(x = shap_value, y = feature, color = feature_value)) +
-    geom_point(alpha = 0.6, size = 3) +
-    scale_color_gradientn(
-      colors = c("#2b8cbe", "#f0f0f0", "#e6550d"),  # Blue - Gray - Orange gradient
+  dot_plot <- ggplot(shap_long, aes(x = shap_value, y = feature, fill = feature_value)) +
+    geom_point(alpha = 0.6, size = 3, shape = 21, stroke = 0.1, color = "lightgray") +  # Use fill for color mapping
+    scale_fill_gradientn(
+      colors = c("lightgray", "gray", "gray4"),  
       name = NULL,
       limits = c(global_min, global_max)
     ) +
-    labs(title = NULL, x = "SHAP Value", y = NULL, color = NULL) +
+    labs(x = "SHAP Value", y = NULL, color = NULL, title = NULL) +
     geom_vline(xintercept = 0, linetype = "dashed", color = "grey30") +
     scale_x_continuous(limits = c(global_shap_min, global_shap_max)) +
     theme_classic() +
@@ -203,7 +206,7 @@ dot_plots <- lapply(unique_clusters, function(cl) {
 # Remove x-axis labels (title and tick labels) from all but the last dot plot
 for(i in seq_along(dot_plots)){
   if(i < length(dot_plots)){
-    dot_plots[[i]] <- dot_plots[[i]] +
+    dot_plots[[i]] <- dot_plots[[i]] + 
       theme(
         axis.title.x = element_blank(),
         axis.text.x = element_blank()
@@ -212,50 +215,72 @@ for(i in seq_along(dot_plots)){
 }
 
 # -------------------------------
-# 11. Assign Letters to Box Plots and Remove X-axis Labels from all but the Last Box Plot
+# 11. Create a Column of Letter Grobs for the Box Plots
 # -------------------------------
 letters_vec <- LETTERS[1:length(cluster_boxplots)]
-for (i in seq_along(cluster_boxplots)) {
-  cluster_boxplots[[i]] <- cluster_boxplots[[i]] +
-    labs(tag = letters_vec[i]) +
-    theme(
-      plot.tag.position = c(-0.25, 1),  # Move letter far left
-      plot.tag = element_text(face = "bold", size = 24),
-      plot.clip = "off",               # Turn off clipping
-      plot.margin = margin(0, 0, 0, 80, "pt")  # Add left margin so letters aren't cut off
-    )
-}
+letter_grobs <- lapply(letters_vec, function(letter) {
+  grid::textGrob(letter, gp = grid::gpar(fontsize = 24, fontface = "bold"))
+})
+letter_col <- wrap_plots(letter_grobs, ncol = 1)
 
 # -------------------------------
-# 12. Combine Box Plots into a Single Column with Shared Y-axis Label
+# 12. Create the Shared Y-axis Label Grob
+# -------------------------------
+y_label_grob <- grid::textGrob("Scaled Value", rot = 90, gp = grid::gpar(fontsize = 20), x = unit(0.4, "npc"))
+y_label_plot <- wrap_elements(full = y_label_grob, clip = FALSE)
+
+# -------------------------------
+# 13. Combine the Letter Column and Shared Y-axis Label into a Left Header Column
+# -------------------------------
+left_header <- letter_col | y_label_plot + 
+  plot_layout(widths = c(0.01, 0.01))  # Adjust widths to reduce whitespace
+
+# -------------------------------
+# 14. Combine the Box Plots into a Single Column
 # -------------------------------
 left_col <- wrap_plots(cluster_boxplots, ncol = 1)
 
-# Create a text grob for the shared y-axis label, rotated 90 degrees
-y_label_grob <- grid::textGrob("Scaled Value", rot = 90, gp = grid::gpar(fontsize = 20))
-
-# Wrap the text grob as a patchwork element
-y_label_plot <- wrap_elements(full = y_label_grob)
-
-# Combine the y-axis label with the box plots column (label on left)
-left_col_labeled <- y_label_plot | left_col
+# -------------------------------
+# 15. Combine the Left Header (Letters + Shared Y-axis Label) with the Box Plots
+# -------------------------------
+final_left <- left_header | left_col + 
+  plot_layout(widths = c(0.05, 0.95))  # Adjust to control left column width
 
 # -------------------------------
-# 13. Combine Dot Plots into a Single Column
+# 16. Combine Dot Plots into a Single Column
 # -------------------------------
 right_col <- wrap_plots(dot_plots, ncol = 1)
 
 # -------------------------------
-# 14. Combine the Labeled Box Plot Column and Dot Plot Column Side-by-Side
+# 17. Combine the Left Column and Right Column Side-by-Side, Collecting the Dot Plot Legend
 # -------------------------------
-final_combined_plot <- left_col_labeled | right_col +
-  plot_layout(guides = "collect")  # Collect dot plot legends into one
+# Apply margin to each plot correctly
+cluster_boxplots <- lapply(cluster_boxplots, function(p) {
+  p + theme(plot.margin = margin(20, 20, 20, 20))  # Ensure ggplot2 is handling this
+})
 
-# Display the final layout
-print(final_combined_plot)
+dot_plots <- lapply(dot_plots, function(p) {
+  p + theme(plot.margin = margin(20, 20, 20, 20))  # Same here
+})
+
+# Combine the plots
+final_combined_plot <- (wrap_plots(cluster_boxplots, ncol = 1) | wrap_plots(dot_plots, ncol = 1)) +
+  plot_layout(guides = "collect") +
+  plot_annotation(
+    title = NULL,
+    caption = NULL,
+    tag_levels = "A",
+    theme = theme(
+      plot.tag = element_text(size = 24, face = "bold"),
+      plot.tag.position = "topleft"
+    )
+  )
+
+# Add y-axis label separately
+final_combined_plot <- final_combined_plot + labs(y = "Scaled Value")
 
 # -------------------------------
-# 15. Save the Final Figure
+# 18. Save the Final Figure
 # -------------------------------
 ggsave(
   filename = "Combined_Cluster_Boxplot_and_SHAP_DotPlots_5x2.png",
