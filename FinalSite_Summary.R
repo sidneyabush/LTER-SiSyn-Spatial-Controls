@@ -199,11 +199,12 @@ plot(inset_grob)
 # --------------------------------------------------
 # 5) Correctly Position Inset Over Egypt & Saudi Arabia
 # --------------------------------------------------
-# Define exact bounding box for inset & black outline
-inset_xmin <- -40    # Move to center over Egypt/Saudi Arabia
-inset_xmax <- 40    # Make it bigger
-inset_ymin <- -50     # Lower bound
-inset_ymax <- 20    # Upper bound
+# Define a larger bounding box for the inset
+inset_xmin <- 20    # Move box more to the east
+inset_xmax <- 60   # Make it wider
+inset_ymin <- 15    # Move lower
+inset_ymax <- 40    # Increase height
+
 
 # Ensure the inset map is exactly this size
 inset_grob <- ggplotGrob(inset_map)  # Convert inset to grob
