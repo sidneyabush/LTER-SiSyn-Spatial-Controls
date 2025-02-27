@@ -114,7 +114,6 @@ MSE_df_rf1 <- data.frame(
   mean_MSE = sapply(MSE_list_rf1, mean)
 )
 
-
 p <- ggplot(MSE_df_rf1, aes(ntree, mean_MSE)) + 
   geom_point() + 
   geom_line() + 
@@ -124,9 +123,11 @@ p <- ggplot(MSE_df_rf1, aes(ntree, mean_MSE)) +
 
 print(p)
 
+set.seed(123)
 # Manually select ntree for rf_model1 ----
-manual_ntree_rf1 <- 2000  # Replace with chosen value
+manual_ntree_rf1 <- 1100  # Replace with chosen value
 
+set.seed(123)
 # Tune mtry for rf_model1 ----
 tuneRF(drivers_numeric[, 2:ncol(drivers_numeric)], drivers_numeric[, 1], 
        ntreeTry = manual_ntree_rf1, stepFactor = 1, improve = 0.5, plot = TRUE)
@@ -191,7 +192,8 @@ rf_formula <- formula(paste("FNYield ~", new_rf_input))
 # Test different ntree values 
 ntree_values <- seq(100, 2000, by = 100)  
 set.seed(123)
-MSE_list_parallel <- test_numtree_parallel_optimized(ntree_values, rf_formula, drivers_numeric)
+MSE_list_parallel <- test_numtree_parallel_optimized(ntree_values, 
+                                                     rf_formula, drivers_numeric)
 
 # Create a data frame for visualization
 MSE_df_parallel <- data.frame(
@@ -210,12 +212,12 @@ ggplot(MSE_df_parallel, aes(x = ntree, y = mean_MSE)) +
 # Global seed before re-tuning mtry
 set.seed(123)
 kept_drivers <- drivers_numeric[, colnames(drivers_numeric) %in% predictors(result_rfe)]
-tuneRF(kept_drivers, drivers_numeric[, 1], ntreeTry = 2000, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(kept_drivers, drivers_numeric[, 1], ntreeTry = 1900, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
 rf_model2 <- randomForest(rf_formula, data = drivers_numeric, 
-                          importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 2)
+                          importance = TRUE, proximity = TRUE, ntree = 1900, mtry = 6)
 
 # Visualize output for rf_model2
 print(rf_model2)
@@ -226,10 +228,10 @@ save_rf_importance_plot(rf_model2, output_dir)
 save_lm_plot(rf_model2, drivers_numeric$FNYield, output_dir)
 
 # Save model and required objects for SHAP analysis
-save(rf_model2, file = "FNYield_Yearly_rf_model2_full.RData")
+save(rf_model2, file = "FNYield_Yearly_rf_model2_full_new.RData")
 kept_drivers <- drivers_numeric[, colnames(drivers_numeric) %in% predictors(result_rfe)]
-save(kept_drivers, file = "FNYield_Yearly_kept_drivers_full.RData")
-save(drivers_df, file = "FNYield_Yearly_full_stream_ids.RData")
-save(drivers_numeric, file = "FNYield_Yearly_full.RData")
+save(kept_drivers, file = "FNYield_Yearly_kept_drivers_full_new.RData")
+save(drivers_df, file = "FNYield_Yearly_full_stream_ids_new.RData")
+save(drivers_numeric, file = "FNYield_Yearly_full_new.RData")
 
 
