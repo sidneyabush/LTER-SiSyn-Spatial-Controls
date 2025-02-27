@@ -1,14 +1,6 @@
-library(dplyr)
-library(stringr)
-library(ggplot2)
-library(maps)
-library(patchwork)
-library(scales)
-library(colorspace)
-library(ggrepel)
-library(ggspatial)
-library(sf)
-library(ggpubr)
+
+librarian::shelf(dplyr, stringr, ggplot2, maps, patchwork, scales, 
+                 colorspace, ggrepel, ggspatial, sf, ggpubr)
 
 # --------------------------------------------------
 # 1) Data preparation (same as your script)
@@ -24,6 +16,9 @@ drivers_df_uncleaned <- read.csv(sprintf("AllDrivers_Harmonized_Yearly_filtered_
 drivers_df_final_sites <- read.csv(sprintf("All_Drivers_Harmonized_Yearly_FNConc_FNYield_%d_years.csv", record_length)) %>%
   distinct(Stream_ID, .keep_all = TRUE)
 
+FNConc_clusters <- read.csv("FNConc_Stream_ID_Year_Cluster.csv")
+# FNYield_clusters <- read.csv("FNYield_Stream_ID_Year_Cluster.csv")
+  
 drivers_df_filtered <- drivers_df_final_sites %>%
   left_join(drivers_df_uncleaned, by = "Stream_ID") %>%
   select(-ends_with(".y"), -contains("Gen"), -contains("Flux")) %>%
@@ -42,22 +37,32 @@ drivers_df_filtered$Name <- factor(
   )
 )
 
+# # Define WGS84 CRS for drivers_df_filtered
+# drivers_df_filtered <- st_as_sf(drivers_df_filtered, 
+#                                 coords = c("Longitude", "Latitude"), crs = 4326)
+# 
+# drivers_df_filtered <- st_transform(drivers_df_filtered, crs = 3857)
+
+
+
 cbPalette_named <- c(
-  "Tropical"           = "#009E73",
-  "Humid Subtropical"  = "#F0E442",
-  "Humid Temperate"    = "#56B4E9",
-  "Humid Continental"  = "#0072B2",
-  "Mediterranean"      = "#E69F00",
-  "Semi-Arid"          = "#D55E00",
-  "Arid"               = "#CC79A7",
-  "Subarctic"          = "#882255"
+  "Tropical"         = "#145A32",  # Deep Forest Green (Strongest, Darkest Green)
+  "Humid Subtropical" = "#3F7E5B",  # Rich Leaf Green (More Vibrant but Earthy)
+  "Humid Temperate"  = "#A2BFA1",  # Muted Sage Green (Softer, More Neutral)
+  "Humid Continental" = "#1F78B4",  # Medium Blue (Dfb)
+  "Mediterranean"    = "#35878F",  # Rich Teal/Blue-Green (Still Cool & Wet)
+  "Semi-Arid"        = "#D4A017",  # Deeper Golden Yellow (Earthy, Less Pastel)
+  "Arid"            = "#C55A11",  # Burnt Orange (More Natural)
+  "Subarctic"       = "#A75078"   # Deepened Pinkish Purple (Colder but Stronger)
 )
+
+
 
 cbPalette_lighter <- lighten(cbPalette_named, amount = 0.3)
 cbPalette_lighter2 <- lighten(cbPalette_named, amount = 0.4)
 
 # --------------------------------------------------
-# 2) MAP (Panel A)
+# 2) MAIN WORLD PANEL (Panel A)
 # --------------------------------------------------
 world <- map_data("world")
 
@@ -73,6 +78,7 @@ p <- ggplot() +
     aes(x = Longitude, y = Latitude, fill = Name),
     shape = 21,
     size = 2,
+    alpha = 0.8,
     stroke = 0.1,
     color = "gray2"
   ) +
@@ -114,8 +120,7 @@ p <- ggplot() +
     axis.ticks = element_blank(),
     legend.text = element_text(size = 10),
     legend.position = c(0.05, 0.65),
-    legend.justification = c("left", "top"),
-    plot.margin = margin(0, 0, 0, 0)
+    legend.justification = c("left", "top")
   )
 
 # Label as Panel A
@@ -127,42 +132,95 @@ p_labeled <- p +
 
 print(p_labeled)
 
-# # Define the bounding box for the inset map (UK/Europe region)
-# inset_xlim <- c(-15, 30)  # Longitude range for Europe
-# inset_ylim <- c(35, 70)   # Latitude range for Europe
-# 
-# # Create an inset map (zoom into UK/Europe)
-# inset_map <- ggplot() +
-#   geom_polygon(
-#     data = world,
-#     aes(x = long, y = lat, group = group),
-#     fill = "gray90", color = "white"
-#   ) +
-#   geom_point(
-#     data = drivers_df_filtered %>% filter(Longitude > inset_xlim[1] & Longitude < inset_xlim[2],
-#                                           Latitude > inset_ylim[1] & Latitude < inset_ylim[2]),
-#     aes(x = Longitude, y = Latitude, fill = Name),
-#     shape = 21, size = 2, stroke = 0.2, color = "black"
-#   ) +
-#   scale_fill_manual(values = cbPalette_lighter) +
-#   coord_sf(
-#     xlim = inset_xlim,
-#     ylim = inset_ylim,
-#     expand = FALSE
-#   ) +
-#   theme(legend.position = "none")+
-#   theme_void()  # Remove all background elements for a clean look
-# 
-# # Add the inset map as an annotation to the main map
-# p_labeled_inset <- p_labeled +
-#   annotation_custom(
-#     grob = ggplotGrob(inset_map),
-#     xmin = 50, xmax = -40,  # Positioning in the blank space
-#     ymin = -10, ymax = 50
-#   )
-# 
-# print(p_labeled_inset)
+# --------------------------------------------------
+# 4) Inset Map for UK/Europe (Black & White, Positioned Over Northern Africa)
+# --------------------------------------------------
+# Define the bounding box for inset (UK/Europe)
+inset_xlim <- c(-10, 30)  
+inset_ylim <- c(49, 72)   # More focused on the UK/Europe region
 
+# Create inset map with **black-and-white styling & closer zoom**
+inset_map <- ggplot() +
+  geom_polygon(
+    data = world,
+    aes(x = long, y = lat, group = group),
+    fill = "lightgray",
+    color = "white", linewidth = 0.4
+  ) +
+  geom_point(
+    data = drivers_df_filtered %>%
+      filter(Longitude > inset_xlim[1] & Longitude < inset_xlim[2],
+             Latitude > inset_ylim[1] & Latitude < inset_ylim[2]),
+    aes(x = Longitude, y = Latitude, fill = Name),
+    shape = 21, size = 3, stroke = 0.3, color = "black"
+  ) +
+  scale_fill_manual(values = cbPalette_lighter) +
+  
+  # Transform to Web Mercator (Meters) for Correct Scaling
+  coord_sf(xlim = inset_xlim, ylim = inset_ylim, expand = FALSE, crs = st_crs(3857)) +
+  
+  # Now annotation_scale() will work in km
+  annotation_scale(
+    location = "br",
+    width_hint = 0.3,  
+    height = unit(0.3, "cm"),
+    text_cex = 0.7,
+    pad_x = unit(0.4, "cm"),
+    pad_y = unit(0.2, "cm"),
+    style = "bar"
+  ) +
+  
+  # Ensure a solid white background
+  theme_void() +
+  theme(
+    legend.position = "none",
+    panel.background = element_rect(fill = "white", color = "white"),
+    plot.background = element_rect(fill = "white", color = "white"),
+    panel.border = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank()
+  )
+
+# Convert inset to a grob
+inset_grob <- ggplotGrob(inset_map)
+
+plot(inset_grob)
+# --------------------------------------------------
+# 5) Correctly Position Inset Over Egypt & Saudi Arabia
+# --------------------------------------------------
+# Define exact bounding box for inset & black outline
+inset_xmin <- -20    # Move to center over Egypt/Saudi Arabia
+inset_xmax <- 100    # Make it bigger
+inset_ymin <- -50     # Lower bound
+inset_ymax <- 20    # Upper bound
+
+# Ensure the inset map is exactly this size
+inset_grob <- ggplotGrob(inset_map)  # Convert inset to grob
+
+p_labeled_inset <- p_labeled +
+  # Place inset map with exact dimensions
+  annotation_custom(
+    grob = inset_grob,
+    xmin = inset_xmin, xmax = inset_xmax,
+    ymin = inset_ymin, ymax = inset_ymax
+  ) +
+  
+  # Callout lines from inset to UK/Europe region
+  geom_segment(aes(x = 10, y = 55, xend = inset_xmin + 5, yend = inset_ymax), linewidth = 0.5) +  
+  geom_segment(aes(x = 35, y = 65, xend = inset_xmax - 5, yend = inset_ymax), linewidth = 0.5) +  
+  
+  # Make the black outline EXACTLY match the inset
+  annotate(
+    "rect", xmin = inset_xmin, xmax = inset_xmax, ymin = inset_ymin, ymax = inset_ymax,
+    color = "black", fill = NA, linewidth = 1  # Keep a strong border
+  )
+
+# Print the corrected map
+print(p_labeled_inset)
+
+# Save the final map
+ggsave("world_map_with_corrected_inset_egypt_saudi.png", p_labeled_inset, width = 10, height = 7, dpi = 300)
 
 # --------------------------------------------------
 # 3) Boxplots (Panel B)

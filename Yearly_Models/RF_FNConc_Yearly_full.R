@@ -109,7 +109,6 @@ MSE_df_rf1 <- data.frame(
   mean_MSE = sapply(MSE_list_rf1, mean)
 )
 
-
 p <- ggplot(MSE_df_rf1, aes(ntree, mean_MSE)) + 
   geom_point() + 
   geom_line() + 
@@ -119,18 +118,24 @@ p <- ggplot(MSE_df_rf1, aes(ntree, mean_MSE)) +
 
 print(p)
 
+set.seed(123)
 # Manually select ntree for rf_model1 ----
-manual_ntree_rf1 <- 2000  # Replace with chosen value
+manual_ntree_rf1 <- 1800  # Replace with chosen value
 
+set.seed(123)
 # Tune mtry for rf_model1 ----
-tuneRF(drivers_numeric[, 2:ncol(drivers_numeric)], drivers_numeric[, 1], ntreeTry = manual_ntree_rf1, stepFactor = 1, improve = 0.5, plot = TRUE)
+tuneRF(drivers_numeric[, 2:ncol(drivers_numeric)], 
+       drivers_numeric[, 1], ntreeTry = manual_ntree_rf1, 
+       stepFactor = 1, improve = 0.5, plot = TRUE)
 
 # Manually select mtry for rf_model1 ----
 manual_mtry_rf1 <- 7  # Replace with chosen value
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
-rf_model1 <- randomForest(FNConc ~ ., data = drivers_numeric, importance = TRUE, proximity = TRUE, ntree = manual_ntree_rf1, mtry = manual_mtry_rf1)
+rf_model1 <- randomForest(FNConc ~ ., data = drivers_numeric, 
+                          importance = TRUE, proximity = TRUE,
+                          ntree = manual_ntree_rf1, mtry = manual_mtry_rf1)
 
 # Visualize output for rf_model1
 print(rf_model1)
@@ -204,12 +209,12 @@ ggplot(MSE_df_parallel, aes(x = ntree, y = mean_MSE)) +
 # Global seed before re-tuning mtry
 set.seed(123)
 kept_drivers <- drivers_numeric[, colnames(drivers_numeric) %in% predictors(result_rfe)]
-tuneRF(kept_drivers, drivers_numeric[, 1], ntreeTry = 2000, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(kept_drivers, drivers_numeric[, 1], ntreeTry = 1600, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
 rf_model2 <- randomForest(rf_formula, data = drivers_numeric, 
-                          importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 2)
+                          importance = TRUE, proximity = TRUE, ntree = 1600, mtry = 2)
 
 # Visualize output for rf_model2
 print(rf_model2)
@@ -220,10 +225,10 @@ save_rf_importance_plot(rf_model2, output_dir)
 save_lm_plot(rf_model2, drivers_numeric$FNConc, output_dir)
 
 # Save model and required objects for SHAP analysis
-save(rf_model2, file = "FNConc_Yearly_rf_model2_full.RData")
+save(rf_model2, file = "FNConc_Yearly_rf_model2_full_new.RData")
 kept_drivers <- drivers_numeric[, colnames(drivers_numeric) %in% predictors(result_rfe)]
-save(kept_drivers, file = "FNConc_Yearly_kept_drivers_full.RData")
-save(drivers_df, file = "FNConc_Yearly_full_stream_ids.RData")
-save(drivers_numeric, file = "FNConc_Yearly_full.RData")
+save(kept_drivers, file = "FNConc_Yearly_kept_drivers__full_new.RData")
+save(drivers_df, file = "FNConc_Yearly_full_stream_ids_full_new.RData")
+save(drivers_numeric, file = "FNConc_Yearly_full_new.RData")
 
 

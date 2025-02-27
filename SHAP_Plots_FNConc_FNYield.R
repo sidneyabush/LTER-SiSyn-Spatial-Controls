@@ -5,7 +5,7 @@
 
 # Load needed packages
 librarian::shelf(iml, ggplot2, dplyr, tidyr, reshape2, parallel, foreach, 
-                 randomForest, tibble, viridis, RColorBrewer, patchwork)
+                 randomForest, tibble, viridis, RColorBrewer, patchwork, scales)
 
 # Clear environment
 rm(list = ls())
@@ -15,15 +15,15 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 # ------------------------- FNConc Data (Concentration) -------------------------
 # Load required FNConc data and model
-load("FNConc_Yearly_rf_model2_full.RData")
+load("FNConc_Yearly_rf_model2_full_new.RData")
 rf_model2_FNConc <- rf_model2
-load("FNConc_Yearly_kept_drivers_full.RData")
+load("FNConc_Yearly_kept_drivers__full_new.RData")
 kept_drivers_FNConc <- kept_drivers
-load("FNConc_Yearly_full.RData")
+load("FNConc_Yearly_full_new.RData")
 drivers_numeric_FNConc <- drivers_numeric
-load("FNConc_Yearly_full_stream_ids.RData")  # if needed
-load("FNConc_Yearly_shap_values.RData")
-shap_values_FNConc <- shap_values
+load("FNConc_Yearly_full_stream_ids_full_new.RData")  # if needed
+load("FNConc_Yearly_shap_values_new.RData")
+shap_values_FNConc <- shap_values_FNConc
 
 # ------------------------- FNYield Data (Yield) -------------------------
 # Load required FNYield data and model
@@ -34,8 +34,8 @@ kept_drivers_FNYield <- kept_drivers
 load("FNYield_Yearly_full.RData")
 drivers_numeric_FNYield <- drivers_numeric
 load("FNYield_Yearly_full_stream_ids.RData")  # if needed
-load("FNYield_Yearly_shap_values.RData")
-shap_values_FNYield <- shap_values
+load("FNYield_Yearly_shap_values_new.RData")
+shap_values_FNYield <- shap_values_FNYield
 
 # Set global seed and output directory
 set.seed(123)
@@ -121,7 +121,7 @@ create_shap_plots <- function(shap_values, kept_drivers, output_dir) {
   
   overall_importance_plot <- ggplot(overall_feature_importance, 
                                     aes(x = reorder(feature, importance), y = importance)) +
-    geom_bar(stat = "identity", fill = "steelblue") +
+    geom_bar(stat = "identity", fill = "#5F7F94") +
     coord_flip() +
     labs(x = NULL, y = "Mean Absolute SHAP Value") +
     theme_minimal(base_size = 14) +

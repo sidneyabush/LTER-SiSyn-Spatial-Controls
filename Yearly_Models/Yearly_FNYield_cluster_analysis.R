@@ -40,10 +40,10 @@ set.seed(123)
 p2 <- fviz_nbclust(scaled_data, kmeans, method = "silhouette", k.max = 20)
 print(p2)
 
-kmeans_result <- kmeans(scaled_data, iter.max = 50, nstart = 50, centers = 3)
+kmeans_result <- kmeans(scaled_data, iter.max = 50, nstart = 50, centers = 5)
 
 scaled_data <- scaled_data %>%
-  mutate(cluster = factor(kmeans_result$cluster, levels = c("1","2","3")))
+  mutate(cluster = factor(kmeans_result$cluster, levels = c("1","2","3","4","5")))
 
 # -------------------------------
 # 4. Create Long-format Data for Box Plots
@@ -65,10 +65,14 @@ long_data <- scaled_data %>%
 # 5. Define a Named Color Vector
 # -------------------------------
 my_cluster_colors <- c(
-  "1" = "#0072B2",
-  "2" = "#CC79A7",
-  "3" = "#D55E00"
+  "1" = "#AC7B32",  # Rich Ochre (Warm Earthy Brown-Gold)  
+  "2" = "#579C8E",  # Muted Teal (Cool & fresh)  
+  "3" = "#C26F86",  # Dusty Rose (Soft but warm)  
+  "4" = "#8F7E4F",  # Olive-Taupe (Neutral & grounding)  
+  "5" = "#5E88B0"   # Soft Steel Blue (Cool contrast)  
 )
+
+
 
 # Create a lighter version of your cluster colors (adjust the 'amount' as needed)
 my_cluster_colors_lighter <- sapply(my_cluster_colors, function(x) lighten(x, amount = 0.1))
@@ -103,7 +107,7 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
 full_scaled <- kept_drivers %>%
   mutate(across(where(is.numeric), ~ scales::rescale(.))) %>%
   as.data.frame()
-full_scaled$cluster <- factor(kmeans_result$cluster, levels = c("1","2","3"))
+full_scaled$cluster <- factor(kmeans_result$cluster, levels = c("1","2","3","4","5"))
 
 global_min <- min(full_scaled %>% dplyr::select(-cluster), na.rm = TRUE)
 global_max <- max(full_scaled %>% dplyr::select(-cluster), na.rm = TRUE)
@@ -248,8 +252,8 @@ final_combined_plot <- final_combined_plot +
 ggsave(
   filename = "Combined_Cluster_Boxplot_and_SHAP_DotPlots_5x2.png",
   plot = final_combined_plot,
-  width = 11,
-  height = 13,
+  width = 12,
+  height = 18,
   dpi = 300,
   path = output_dir
 )
@@ -406,7 +410,7 @@ plot_mean_abs_shap <- function(cluster_id, shap_values, full_scaled) {
 }
 
 # 2. Generate a plot for each of your 5 clusters
-unique_clusters <- c("1", "2", "3")  # Adjust as needed
+unique_clusters <- c("1","2","3","4","5")  # Adjust as needed
 plot_list <- lapply(seq_along(unique_clusters), function(i) {
   cl <- unique_clusters[i]
   plot_mean_abs_shap(cl, shap_values, full_scaled)
@@ -414,7 +418,7 @@ plot_list <- lapply(seq_along(unique_clusters), function(i) {
 
 # 3. Arrange them in a 3×2 grid
 ncol <- 2
-nrow <- 2  # 5 plots => 3 rows × 2 columns (the last cell is empty)
+nrow <- 3  # 5 plots => 3 rows × 2 columns (the last cell is empty)
 
 # 4. Remove the x-axis label for all but:
 #    - The bottom row (row == nrow)
@@ -432,10 +436,10 @@ print(final_shap_grid)
 
 # 5. Optionally save
 ggsave(
-  filename = "MeanAbsSHAP_Grid_2x1.png",
+  filename = "MeanAbsSHAP_Grid_3x2.png",
   plot     = final_shap_grid,
-  width    = 9,
-  height   = 9,
+  width    = 10,
+  height   = 11,
   dpi      = 300,
   path     = output_dir
 )

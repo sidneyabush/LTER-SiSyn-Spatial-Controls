@@ -81,10 +81,10 @@ output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/
 record_length <- 5
 
 # Read in and tidy data ----
-setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/TEST") 
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
 
 drivers_df <- read.csv(sprintf("All_Drivers_Harmonized_Yearly_FNConc_FNYield_%d_years.csv", record_length)) %>%
-  dplyr::select(-contains("Conc"), -contains("Gen"), -contains("major"), 
+  dplyr::select(-contains("Conc"), -contains("Gen"), -Q, -contains("major"), 
                 -Max_Daylength, -silicate_weathering, -drainage_area) %>%
   mutate(greenup_day = as.numeric(greenup_day))
 

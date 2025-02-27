@@ -21,10 +21,13 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model/FNConc"
 
 ## 2. Load Data & Model
-load("FNConc_Yearly_rf_model2_full.RData")
-load("FNConc_Yearly_kept_drivers_full.RData")
-load("FNConc_Yearly_full.RData")
-load("FNConc_Yearly_full_stream_ids.RData")
+load("FNConc_Yearly_rf_model2_full_new.RData")
+load("FNConc_Yearly_kept_drivers__full_new.RData")
+load("FNConc_Yearly_full_new.RData")
+load("FNConc_Yearly_full_stream_ids_full_new.RData")
+
+# Load precomputed SHAP values
+load("FNConc_Yearly_shap_values_new.RData")
 
 ## 3. Prepare Data & Perform Clustering
 # Select driver variables
@@ -36,14 +39,14 @@ scaled_data <- data %>%
   mutate(across(where(is.numeric), ~ scales::rescale(.)))
 
 # Optional: check silhouette to pick k
-# p2 <- factoextra::fviz_nbclust(scaled_data, kmeans, method = "silhouette", k.max = 20)
-# print(p2)
+p2 <- factoextra::fviz_nbclust(scaled_data, kmeans, method = "silhouette", k.max = 20)
+print(p2)
 
 set.seed(123)
-kmeans_result <- kmeans(scaled_data, iter.max = 50, nstart = 50, centers = 5)
+kmeans_result <- kmeans(scaled_data, iter.max = 50, nstart = 50, centers = 6)
 
 scaled_data <- scaled_data %>%
-  mutate(cluster = factor(kmeans_result$cluster, levels = c("1","2","3","4","5")))
+  mutate(cluster = factor(kmeans_result$cluster, levels = c("1","2","3","4","5","6")))
 
 ## 4. Create Long-format Data for Box Plots
 long_data <- scaled_data %>%
@@ -59,12 +62,14 @@ long_data <- scaled_data %>%
   )
 
 ## 5. Define Cluster Colors
+
 my_cluster_colors <- c(
-  "1" = "#E69F00",  # orange
-  "2" = "#56B4E9",  # blue
-  "3" = "#009E73",  # green
-  "4" = "#F0E442",  # yellow
-  "5" = "#648FFF"   # purple
+  "1" = "#88A2DC",  # Muted Blue (instead of bold primary blue)
+  "2" = "#E69F00",  # Warm Muted Orange
+  "3" = "#E2C744",  # Softer Yellow-Gold
+  "4" = "#6BAE75",  # Desaturated Green (instead of bright primary green)
+  "5" = "#A3A3A3",  # Muted Neutral Gray (lighter than before)
+  "6" = "#B07AA1"   # Muted Purple-Pink
 )
 
 # Create a lighter version of your cluster colors (adjust the 'amount' as needed)
@@ -101,13 +106,13 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
 full_scaled <- kept_drivers %>%
   mutate(across(where(is.numeric), ~ scales::rescale(.))) %>%
   as.data.frame()
-full_scaled$cluster <- factor(kmeans_result$cluster, levels = c("1","2","3","4","5"))
+full_scaled$cluster <- factor(kmeans_result$cluster, levels = c("1","2","3","4","5","6"))
 
 global_min <- min(full_scaled %>% dplyr::select(-cluster), na.rm = TRUE)
 global_max <- max(full_scaled %>% dplyr::select(-cluster), na.rm = TRUE)
 
 ## 8. Define SHAP Dot Plot Function
-generate_shap_dot_plot_obj <- function(cluster_id, shap_values, full_scaled, global_shap_min, global_shap_max) {
+generate_shap_dot_plot_obj <- function(cluster_id, shap_values_FNConc, full_scaled, global_shap_min, global_shap_max) {
   cluster_indices <- which(full_scaled$cluster == cluster_id)
   
   cluster_data <- full_scaled[cluster_indices, , drop = FALSE] %>% dplyr::select(-cluster)
@@ -116,10 +121,10 @@ generate_shap_dot_plot_obj <- function(cluster_id, shap_values, full_scaled, glo
   cluster_long <- cluster_data %>%
     pivot_longer(cols = -id, names_to = "feature", values_to = "feature_value")
   
-  shap_values_df <- as.data.frame(shap_values)[cluster_indices, , drop = FALSE] %>%
+  shap_values_FNConc_df <- as.data.frame(shap_values_FNConc)[cluster_indices, , drop = FALSE] %>%
     mutate(id = seq_len(nrow(.)))
   
-  shap_long <- shap_values_df %>%
+  shap_long <- shap_values_FNConc_df %>%
     pivot_longer(cols = -id, names_to = "feature", values_to = "shap_value") %>%
     left_join(cluster_long, by = c("id", "feature"))
   
@@ -162,38 +167,13 @@ generate_shap_dot_plot_obj <- function(cluster_id, shap_values, full_scaled, glo
   return(dot_plot)
 }
 
-## 9. Generate or Load SHAP Values, Set Global SHAP Limits
-shap_file <- "shap_values_FNConc.rds"
-if (file.exists(shap_file)) {
-  shap_values <- readRDS(shap_file)
-  message("Loaded cached SHAP values from ", shap_file)
-} else {
-  generate_shap_values <- function(model, kept_drivers, sample_size = 30) {
-    predictors <- all.vars(model$terms)[-1]
-    X_input <- kept_drivers %>% dplyr::select(all_of(predictors))
-    custom_predict <- function(object, newdata) {
-      newdata <- as.data.frame(newdata)
-      colnames(newdata) <- predictors
-      predict(object, newdata = newdata, type = "response")
-    }
-    fastshap::explain(
-      object = model,
-      X = X_input,
-      pred_wrapper = custom_predict,
-      nsim = sample_size
-    )
-  }
-  shap_values <- generate_shap_values(rf_model2, kept_drivers, sample_size = 30)
-  saveRDS(shap_values, shap_file)
-  message("Saved SHAP values to ", shap_file)
-}
-
-global_shap_min <- min(shap_values, na.rm = TRUE)
-global_shap_max <- max(shap_values, na.rm = TRUE)
+## 9. Set Global SHAP Limits
+global_shap_min <- min(shap_values_FNConc, na.rm = TRUE)
+global_shap_max <- max(shap_values_FNConc, na.rm = TRUE)
 
 ## 10. Generate Dot Plots for Each Cluster
 dot_plots <- lapply(unique_clusters, function(cl) {
-  generate_shap_dot_plot_obj(cl, shap_values, full_scaled, global_shap_min, global_shap_max)
+  generate_shap_dot_plot_obj(cl, shap_values_FNConc, full_scaled, global_shap_min, global_shap_max)
 })
 
 # Remove x-axis labels for all but the last dot plot
@@ -231,7 +211,7 @@ final_combined_plot <- final_combined_plot +
 
 ## 12. Save the Final Figure
 ggsave(
-  filename = "Combined_Cluster_Boxplot_and_SHAP_DotPlots_5x2.png",
+  filename = "Combined_Cluster_Boxplot_and_SHAP_DotPlots_6x2.png",
   plot = final_combined_plot,
   width = 11,
   height = 13,
@@ -248,8 +228,17 @@ print(final_combined_plot)
 
 # -- STEP 1: Build a data frame with FNConc and cluster for each site --
 df <- data.frame(
+  Stream_ID  = drivers_df$Stream_ID,
+  Year = drivers_df$Year, 
   FNConc  = drivers_df$FNConc,     # Adjust if your column name is different
-  cluster = scaled_data$cluster    # cluster assignment from k-means
+  cluster = scaled_data$cluster
+  
+)
+# Export df to upload to the map making script
+write.csv(
+  df, 
+  file = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Stream_ID_Cluster.csv",
+  row.names = FALSE
 )
 
 # -- STEP 2: Make a box plot + jitter of FNConc across 5 clusters --
@@ -332,9 +321,9 @@ ggsave(
 ###############################################################################
 
 # Define a function to compute & plot mean absolute SHAP for one cluster
-plot_mean_abs_shap <- function(cluster_id, shap_values, full_scaled) {
+plot_mean_abs_shap <- function(cluster_id, shap_values_FNConc, full_scaled) {
 cluster_indices <- which(full_scaled$cluster == cluster_id)
-shap_cluster    <- shap_values[cluster_indices, , drop = FALSE]
+shap_cluster    <- shap_values_FNConc[cluster_indices, , drop = FALSE]
 
 mean_abs_shap <- colMeans(abs(shap_cluster), na.rm = TRUE)
 df_shap <- data.frame(
@@ -376,26 +365,26 @@ ggplot(df_shap, aes(x = reorder(feature, mean_abs_shapval), y = mean_abs_shapval
 }
 
 # 2. Generate a plot for each of your 5 clusters
-unique_clusters <- c("1", "2", "3", "4", "5")  # Adjust as needed
+unique_clusters <- c("1", "2", "3", "4", "5", "6")  # Adjust as needed
 plot_list <- lapply(seq_along(unique_clusters), function(i) {
 cl <- unique_clusters[i]
-plot_mean_abs_shap(cl, shap_values, full_scaled)
+plot_mean_abs_shap(cl, shap_values_FNConc, full_scaled)
 })
 
 # 3. Arrange them in a 3×2 grid
 ncol <- 2
-nrow <- 3  # 5 plots => 3 rows × 2 columns (the last cell is empty)
+nrow <- 3  # 3 rows, 2 columns
 
-# 4. Remove the x-axis label for all but:
-#    - The bottom row (row == nrow)
-#    - The 4th plot (i == 4, which is cluster 4 in row 2 col 2)
+# 4. Remove the x-axis label for all but the bottom row (row == nrow)
 for (i in seq_along(plot_list)) {
-row_number <- ceiling(i / ncol)
-# Keep the x-axis label only if this is row 3 or plot index == 4
-if (!(row_number == nrow || i == 4)) {
-  plot_list[[i]] <- plot_list[[i]] + theme(axis.title.x = element_blank())
+  row_number <- ceiling(i / ncol)
+  
+  # Keep the x-axis label only if this is the bottom row
+  if (row_number != nrow) {
+    plot_list[[i]] <- plot_list[[i]] + theme(axis.title.x = element_blank(), axis.text.x = element_blank())
+  }
 }
-}
+
 
 final_shap_grid <- wrap_plots(plot_list, ncol = ncol, nrow = nrow)
 print(final_shap_grid)

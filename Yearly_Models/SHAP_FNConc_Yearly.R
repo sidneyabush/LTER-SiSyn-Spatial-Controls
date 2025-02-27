@@ -19,7 +19,7 @@ load("FNConc_Yearly_full.RData")
 load("FNConc_Yearly_full_stream_ids.RData")
 
 # Load precomputed SHAP values
-load("FNConc_Yearly_shap_values.RData")
+load("FNConc_Yearly_shap_values_new.RData")
 
 # Set global seed and output directory
 set.seed(123)
@@ -36,9 +36,9 @@ legend("topleft", bty = "n", cex = 1.5, legend = paste("R2 =", format(mean(rf_mo
 legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(rf_model2$mse), digits = 3)))
 
 
-create_shap_plots <- function(shap_values, kept_drivers, output_dir) {
+create_shap_plots <- function(shap_values_FNConc, kept_drivers, output_dir) {
   # Compute overall feature importance (mean absolute SHAP value)
-  overall_feature_importance <- shap_values %>%
+  overall_feature_importance <- shap_values_FNConc %>%
     as.data.frame() %>%
     summarise(across(everything(), ~ mean(abs(.), na.rm = TRUE))) %>%
     pivot_longer(cols = everything(), names_to = "feature", values_to = "importance") %>%
@@ -88,10 +88,10 @@ create_shap_plots <- function(shap_values, kept_drivers, output_dir) {
     pivot_longer(cols = -id, names_to = "feature", values_to = "feature_value")
   
   # Prepare SHAP values (without scaling them)
-  shap_values_df <- as.data.frame(shap_values) %>%
-    mutate(id = seq_len(nrow(shap_values)))
+  shap_values_FNConc_df <- as.data.frame(shap_values_FNConc) %>%
+    mutate(id = seq_len(nrow(shap_values_FNConc)))
   
-  shap_long <- shap_values_df %>%
+  shap_long <- shap_values_FNConc_df %>%
     pivot_longer(cols = -id, names_to = "feature", values_to = "shap_value") %>%
     left_join(kept_drivers_with_id, by = c("id", "feature"))
   
@@ -139,4 +139,4 @@ create_shap_plots <- function(shap_values, kept_drivers, output_dir) {
 }
 
 # Create SHAP plots
-create_shap_plots(shap_values, kept_drivers, output_dir)
+create_shap_plots(shap_values_FNConc, kept_drivers, output_dir)
