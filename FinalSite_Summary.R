@@ -37,11 +37,13 @@ drivers_df_filtered$Name <- factor(
   )
 )
 
-# # Define WGS84 CRS for drivers_df_filtered
-# drivers_df_filtered <- st_as_sf(drivers_df_filtered, 
-#                                 coords = c("Longitude", "Latitude"), crs = 4326)
-# 
-# drivers_df_filtered <- st_transform(drivers_df_filtered, crs = 3857)
+# Ensure dataset remains in WGS84 (for lat/lon compatibility)
+drivers_df_filtered <- st_as_sf(drivers_df_filtered, 
+                                coords = c("Longitude", "Latitude"), crs = 4326)
+
+drivers_df_filtered <- drivers_df_filtered %>%
+  mutate(Longitude = st_coordinates(.)[,1],
+         Latitude = st_coordinates(.)[,2])
 
 
 
@@ -135,42 +137,45 @@ print(p_labeled)
 # --------------------------------------------------
 # 4) Inset Map for UK/Europe (Black & White, Positioned Over Northern Africa)
 # --------------------------------------------------
-# Define the bounding box for inset (UK/Europe)
+# Define bounding box for inset map (UK/Europe)
 inset_xlim <- c(-10, 30)  
-inset_ylim <- c(49, 72)   # More focused on the UK/Europe region
+inset_ylim <- c(49, 72)
 
-# Create inset map with **black-and-white styling & closer zoom**
+# Extract coordinates BEFORE filtering
+drivers_df_inset <- drivers_df_filtered %>%
+  mutate(Longitude = st_coordinates(.)[,1], Latitude = st_coordinates(.)[,2]) %>%
+  filter(Longitude > inset_xlim[1] & Longitude < inset_xlim[2],
+         Latitude > inset_ylim[1] & Latitude < inset_ylim[2]) 
+
+# Create inset map with proper projection
 inset_map <- ggplot() +
   geom_polygon(
-    data = world,
-    aes(x = long, y = lat, group = group),
-    fill = "lightgray",
-    color = "white", linewidth = 0.4
+    data = world, aes(x = long, y = lat, group = group),
+    fill = "lightgray", color = "white", linewidth = 0.4
   ) +
   geom_point(
-    data = drivers_df_filtered %>%
-      filter(Longitude > inset_xlim[1] & Longitude < inset_xlim[2],
-             Latitude > inset_ylim[1] & Latitude < inset_ylim[2]),
+    data = drivers_df_inset,
     aes(x = Longitude, y = Latitude, fill = Name),
     shape = 21, size = 3, stroke = 0.3, color = "black"
   ) +
   scale_fill_manual(values = cbPalette_lighter) +
   
-  # Transform to Web Mercator (Meters) for Correct Scaling
-  coord_sf(xlim = inset_xlim, ylim = inset_ylim, expand = FALSE, crs = st_crs(3857)) +
+  # ✅ Keep the inset map in EPSG:4326 (same as world map)
+  coord_sf(expand = FALSE) +
   
-  # Now annotation_scale() will work in km
+  # ✅ Scale bar in km
   annotation_scale(
     location = "br",
-    width_hint = 0.3,  
+    width_hint = 0.3,
     height = unit(0.3, "cm"),
     text_cex = 0.7,
     pad_x = unit(0.4, "cm"),
     pad_y = unit(0.2, "cm"),
-    style = "bar"
+    style = "bar",
+    unit_category = "metric"  # ✅ Force km instead of meters
   ) +
   
-  # Ensure a solid white background
+  # Solid white background
   theme_void() +
   theme(
     legend.position = "none",
@@ -186,6 +191,7 @@ inset_map <- ggplot() +
 inset_grob <- ggplotGrob(inset_map)
 
 plot(inset_grob)
+
 # --------------------------------------------------
 # 5) Correctly Position Inset Over Egypt & Saudi Arabia
 # --------------------------------------------------
