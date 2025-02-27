@@ -139,7 +139,7 @@ print(p_labeled)
 # --------------------------------------------------
 # Define bounding box for inset map (UK/Europe)
 inset_xlim <- c(-10, 30)  
-inset_ylim <- c(49, 72)
+inset_ylim <- c(49.5, 72)
 
 # Extract coordinates BEFORE filtering
 drivers_df_inset <- drivers_df_filtered %>%
@@ -160,10 +160,14 @@ inset_map <- ggplot() +
   ) +
   scale_fill_manual(values = cbPalette_lighter) +
   
-  # ✅ Keep the inset map in EPSG:4326 (same as world map)
-  coord_sf(expand = FALSE) +
-  
-  # ✅ Scale bar in km
+  # Keep the inset map in EPSG:4326 (same as world map)
+  coord_sf(
+    xlim = inset_xlim,  # Explicit zoom for longitude
+    ylim = inset_ylim,  # Explicit zoom for latitude
+    expand = FALSE
+  ) +
+
+  # Scale bar in km
   annotation_scale(
     location = "br",
     width_hint = 0.3,
@@ -172,7 +176,7 @@ inset_map <- ggplot() +
     pad_x = unit(0.4, "cm"),
     pad_y = unit(0.2, "cm"),
     style = "bar",
-    unit_category = "metric"  # ✅ Force km instead of meters
+    unit_category = "metric"  # Force km instead of meters
   ) +
   
   # Solid white background
@@ -196,8 +200,8 @@ plot(inset_grob)
 # 5) Correctly Position Inset Over Egypt & Saudi Arabia
 # --------------------------------------------------
 # Define exact bounding box for inset & black outline
-inset_xmin <- -20    # Move to center over Egypt/Saudi Arabia
-inset_xmax <- 100    # Make it bigger
+inset_xmin <- -40    # Move to center over Egypt/Saudi Arabia
+inset_xmax <- 40    # Make it bigger
 inset_ymin <- -50     # Lower bound
 inset_ymax <- 20    # Upper bound
 
