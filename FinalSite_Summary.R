@@ -41,8 +41,6 @@ drivers_df_filtered <- drivers_df_filtered %>%
   mutate(Longitude = st_coordinates(.)[,1],
          Latitude = st_coordinates(.)[,2])
 
-
-
 cbPalette_named <- c(
   "Tropical"         = "#145A32",  # Deep Forest Green (Strongest, Darkest Green)
   "Humid Subtropical" = "#3F7E5B",  # Rich Leaf Green (More Vibrant but Earthy)
@@ -513,7 +511,7 @@ my_conc_cluster_colors <- c(
   "2" = "#E69F00",  # Warm Muted Orange
   "3" = "#E2C744",  # Softer Yellow-Gold
   "4" = "#6BAE75",  # Desaturated Green
-  "5" = "#A3A3A3",  # Muted Neutral Gray
+  "5" = "gray40",  # Muted Neutral Gray
   "6" = "#B07AA1"   # Muted Purple-Pink
 )
 
@@ -526,20 +524,19 @@ my_yield_cluster_colors <- c(
 
 # 4. Create Panel A: Global map for FNConc modal clusters
 p_FNConc_map <- world_map_base +
-  # Optionally, overlay a slightly different polygon to mimic your original settings:
-  geom_polygon(
-    data = world_data,
-    aes(x = long, y = lat, group = group),
-    fill = "lightgray",
-    color = "white",
-    inherit.aes = FALSE
-  ) +
   geom_point(
     data = df_FNConc,
-    aes(x = long, y = lat, color = modal_cluster),
-    size = 3, alpha = 0.8
+    aes(x = long, y = lat, fill = modal_cluster),
+    shape = 21,
+    size = 2,
+    alpha = 0.8,
+    stroke = 0.1,
+    color = "gray2"
   ) +
-  scale_color_manual(values = my_conc_cluster_colors) +
+  scale_fill_manual(
+    values = my_conc_cluster_colors,
+    guide = guide_legend(override.aes = list(size = 5))  # Increase legend point size
+  ) +
   labs(title = NULL,
        x = "Longitude", y = "Latitude",
        tag = "A") +
@@ -549,21 +546,23 @@ p_FNConc_map <- world_map_base +
     legend.justification = c("left", "top"), 
     legend.title = element_blank())
 
+p_FNConc_map
+
 # 5. Create Panel B: Global map for FNYield modal clusters
 p_FNYield_map <- world_map_base +
-  geom_polygon(
-    data = world_data,
-    aes(x = long, y = lat, group = group),
-    fill = "lightgray",
-    color = "white",
-    inherit.aes = FALSE
-  ) +
   geom_point(
     data = df_FNYield,
-    aes(x = long, y = lat, color = modal_cluster),
-    size = 3, alpha = 0.8
+    aes(x = long, y = lat, fill = modal_cluster),
+    shape = 21,
+    size = 2,
+    alpha = 0.8,
+    stroke = 0.1,
+    color = "gray2"
   ) +
-  scale_color_manual(values = my_yield_cluster_colors) +
+  scale_fill_manual(
+    values = my_yield_cluster_colors,
+    guide = guide_legend(override.aes = list(size = 5))  # Increase legend point size
+  ) +
   labs(title = NULL,
        x = "Longitude", y = "Latitude",
        tag = "B") +
@@ -580,3 +579,7 @@ combined_map <- ggarrange(p_FNConc_map, p_FNYield_map,
 
 # Display the combined map
 print(combined_map)
+
+ggsave("global_map_clusters.png", 
+       combined_map, width = 8, height = 8.5, dpi = 300)
+
