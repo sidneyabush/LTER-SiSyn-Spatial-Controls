@@ -42,6 +42,11 @@ scaled_data <- data %>%
 p2 <- factoextra::fviz_nbclust(scaled_data, kmeans, method = "silhouette", k.max = 20)
 print(p2)
 
+# Evaluate optimal number of clusters using the WSS (elbow) method
+wss_plot <- fviz_nbclust(scaled_data, kmeans, method = "wss", k.max = 20) +
+  geom_vline(xintercept = 4, linetype = 2)  # Optional: add a vertical line to highlight potential optimal cluster count
+print(wss_plot)
+
 set.seed(123)
 kmeans_result <- kmeans(scaled_data, iter.max = 50, nstart = 50, centers = 6)
 

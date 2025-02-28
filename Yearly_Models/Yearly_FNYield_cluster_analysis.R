@@ -22,16 +22,18 @@ output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/
 # -------------------------------
 # 2. Load Data & Model
 # -------------------------------
-load("FNYield_Yearly_rf_model2_full.RData")
-load("FNYield_Yearly_kept_drivers_full.RData")
-load("FNYield_Yearly_full.RData")
-load("FNYield_Yearly_full_stream_ids.RData")
+load("FNYield_Yearly_rf_model2_full_new.RData")
+load("FNYield_Yearly_kept_drivers_full_new.RData")
+load("FNYield_Yearly_full_new.RData")
+load("FNYield_Yearly_full_stream_ids_new.RData")
+# Load precomputed SHAP values
+load("FNYield_Yearly_shap_values_new.RData")
 
 # -------------------------------
 # 3. Prepare Data & Perform Clustering
 # -------------------------------
 data <- kept_drivers %>%
-  dplyr::select("rocks_volcanic", "basin_slope", "land_urban_and_built_up_land", "temp", "land_shrubland_grassland")
+  dplyr::select("rocks_volcanic", "basin_slope", "land_shrubland_grassland", "temp", "rocks_plutonic")
 
 scaled_data <- data %>% 
   mutate(across(where(is.numeric), ~ rescale(.)))
@@ -40,10 +42,15 @@ set.seed(123)
 p2 <- fviz_nbclust(scaled_data, kmeans, method = "silhouette", k.max = 20)
 print(p2)
 
-kmeans_result <- kmeans(scaled_data, iter.max = 50, nstart = 50, centers = 5)
+# Evaluate optimal number of clusters using the WSS (elbow) method
+wss_plot <- fviz_nbclust(scaled_data, kmeans, method = "wss", k.max = 20) +
+  geom_vline(xintercept = 4, linetype = 2)  # Optional: add a vertical line to highlight potential optimal cluster count
+print(wss_plot)
+
+kmeans_result <- kmeans(scaled_data, iter.max = 50, nstart = 50, centers = 4)
 
 scaled_data <- scaled_data %>%
-  mutate(cluster = factor(kmeans_result$cluster, levels = c("1","2","3","4","5")))
+  mutate(cluster = factor(kmeans_result$cluster, levels = c("1","2","3","4")))
 
 # -------------------------------
 # 4. Create Long-format Data for Box Plots
@@ -51,14 +58,15 @@ scaled_data <- scaled_data %>%
 long_data <- scaled_data %>%
   pivot_longer(-cluster, names_to = "Driver", values_to = "Value") %>%
   mutate(
-    Driver = factor(Driver, levels = c("rocks_volcanic", "basin_slope", 
-                                       "land_urban_and_built_up_land", "temp", "land_shrubland_grassland")),
+    Driver = factor(Driver, levels = c("rocks_volcanic", "temp", 
+                                       "land_shrubland_grassland", "basin_slope", 
+                                       "rocks_plutonic")),
     Driver = recode(Driver, 
                     "rocks_volcanic" = "Volcanic Rock",
-                    "basin_slope" = "Basin Slope",
-                    "land_urban_and_built_up_land" = "Land: Urban & Built Up",
                     "temp" = "Temperature",
-                    "land_shrubland_grassland" = "Land: Shrubland & Grassland")
+                    "land_shrubland_grassland" = "Land: Shrubland & Grassland",
+                    "basin_slope" = "Basin Slope",
+                    "rocks_plutonic" = "Plutonic Rock")
   )
 
 # -------------------------------
@@ -70,8 +78,14 @@ my_cluster_colors <- c(
   "3" = "#C26F86",  # Dusty Rose (Soft but warm)  
   "4" = "#8F7E4F",  # Olive-Taupe (Neutral & grounding)  
   "5" = "#5E88B0"   # Soft Steel Blue (Cool contrast)  
-)
+  )
 
+my_cluster_colors <- c(
+  "1" = "#AC7B32",  # Rich Ochre (Warm Earthy Brown-Gold)
+  "2" = "#579C8E",  # Muted Teal (Cool & fresh)
+  "3" = "#C26F86",  # Dusty Rose (Soft but warm)
+  "4" = "#5E88B0"   # Soft Steel Blue (Cool contrast)
+)
 
 
 # Create a lighter version of your cluster colors (adjust the 'amount' as needed)
@@ -107,13 +121,13 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
 full_scaled <- kept_drivers %>%
   mutate(across(where(is.numeric), ~ scales::rescale(.))) %>%
   as.data.frame()
-full_scaled$cluster <- factor(kmeans_result$cluster, levels = c("1","2","3","4","5"))
+full_scaled$cluster <- factor(kmeans_result$cluster, levels = c("1","2","3","4"))
 
 global_min <- min(full_scaled %>% dplyr::select(-cluster), na.rm = TRUE)
 global_max <- max(full_scaled %>% dplyr::select(-cluster), na.rm = TRUE)
 
 ## 8. Define SHAP Dot Plot Function
-generate_shap_dot_plot_obj <- function(cluster_id, shap_values, full_scaled, global_shap_min, global_shap_max) {
+generate_shap_dot_plot_obj <- function(cluster_id, shap_values_FNYield, full_scaled, global_shap_min, global_shap_max) {
   cluster_indices <- which(full_scaled$cluster == cluster_id)
   
   cluster_data <- full_scaled[cluster_indices, , drop = FALSE] %>% dplyr::select(-cluster)
@@ -122,10 +136,10 @@ generate_shap_dot_plot_obj <- function(cluster_id, shap_values, full_scaled, glo
   cluster_long <- cluster_data %>%
     pivot_longer(cols = -id, names_to = "feature", values_to = "feature_value")
   
-  shap_values_df <- as.data.frame(shap_values)[cluster_indices, , drop = FALSE] %>%
+  shap_values_FNYield_df <- as.data.frame(shap_values_FNYield)[cluster_indices, , drop = FALSE] %>%
     mutate(id = seq_len(nrow(.)))
   
-  shap_long <- shap_values_df %>%
+  shap_long <- shap_values_FNYield_df %>%
     pivot_longer(cols = -id, names_to = "feature", values_to = "shap_value") %>%
     left_join(cluster_long, by = c("id", "feature"))
   
@@ -151,7 +165,6 @@ generate_shap_dot_plot_obj <- function(cluster_id, shap_values, full_scaled, glo
                               "rocks_plutonic" = "Plutonic Rock",
                               "elevation" = "Elevation",
                               "permafrost" = "Permafrost",
-                              "temp" = "Temperature",
                               "rocks_metamorphic" = "Metamorphic Rock",
                               "NOx" = "NOx",
                               "evapotrans" = "ET",
@@ -182,37 +195,12 @@ generate_shap_dot_plot_obj <- function(cluster_id, shap_values, full_scaled, glo
 }
 
 ## 9. Generate or Load SHAP Values, Set Global SHAP Limits
-shap_file <- "shap_values_FNYield.rds"
-if (file.exists(shap_file)) {
-  shap_values <- readRDS(shap_file)
-  message("Loaded cached SHAP values from ", shap_file)
-} else {
-  generate_shap_values <- function(model, kept_drivers, sample_size = 30) {
-    predictors <- all.vars(model$terms)[-1]
-    X_input <- kept_drivers %>% dplyr::select(all_of(predictors))
-    custom_predict <- function(object, newdata) {
-      newdata <- as.data.frame(newdata)
-      colnames(newdata) <- predictors
-      predict(object, newdata = newdata, type = "response")
-    }
-    fastshap::explain(
-      object = model,
-      X = X_input,
-      pred_wrapper = custom_predict,
-      nsim = sample_size
-    )
-  }
-  shap_values <- generate_shap_values(rf_model2, kept_drivers, sample_size = 30)
-  saveRDS(shap_values, shap_file)
-  message("Saved SHAP values to ", shap_file)
-}
-
-global_shap_min <- min(shap_values, na.rm = TRUE)
-global_shap_max <- max(shap_values, na.rm = TRUE)
+global_shap_min <- min(shap_values_FNYield, na.rm = TRUE)
+global_shap_max <- max(shap_values_FNYield, na.rm = TRUE)
 
 ## 10. Generate Dot Plots for Each Cluster
 dot_plots <- lapply(unique_clusters, function(cl) {
-  generate_shap_dot_plot_obj(cl, shap_values, full_scaled, global_shap_min, global_shap_max)
+  generate_shap_dot_plot_obj(cl, shap_values_FNYield, full_scaled, global_shap_min, global_shap_max)
 })
 
 # Remove x-axis labels for all but the last dot plot
@@ -354,9 +342,9 @@ ggsave(
 ###############################################################################
 
 # Define a function to compute & plot mean absolute SHAP for one cluster
-plot_mean_abs_shap <- function(cluster_id, shap_values, full_scaled) {
+plot_mean_abs_shap <- function(cluster_id, shap_values_FNYield, full_scaled) {
   cluster_indices <- which(full_scaled$cluster == cluster_id)
-  shap_cluster    <- shap_values[cluster_indices, , drop = FALSE]
+  shap_cluster    <- shap_values_FNYield[cluster_indices, , drop = FALSE]
   
   mean_abs_shap <- colMeans(abs(shap_cluster), na.rm = TRUE)
   df_shap <- data.frame(
@@ -381,7 +369,6 @@ plot_mean_abs_shap <- function(cluster_id, shap_values, full_scaled) {
     "rocks_plutonic" = "Plutonic Rock",
     "elevation" = "Elevation",
     "permafrost" = "Permafrost",
-    "temp" = "Temperature",
     "rocks_metamorphic" = "Metamorphic Rock",
     "NOx" = "NOx",
     "evapotrans" = "ET",
@@ -395,7 +382,7 @@ plot_mean_abs_shap <- function(cluster_id, shap_values, full_scaled) {
       alpha = 0.8
     ) +
     coord_flip() +
-    scale_y_continuous(limits = c(0, 9)) +
+    scale_y_continuous(limits = c(0, 15)) +
     labs(
       x = NULL,
       y = "Mean Absolute SHAP Value",  # We will selectively remove this later
@@ -410,22 +397,21 @@ plot_mean_abs_shap <- function(cluster_id, shap_values, full_scaled) {
 }
 
 # 2. Generate a plot for each of your 5 clusters
-unique_clusters <- c("1","2","3","4","5")  # Adjust as needed
+unique_clusters <- c("1","2","3","4")  # Adjust as needed
 plot_list <- lapply(seq_along(unique_clusters), function(i) {
   cl <- unique_clusters[i]
-  plot_mean_abs_shap(cl, shap_values, full_scaled)
+  plot_mean_abs_shap(cl, shap_values_FNYield, full_scaled)
 })
 
 # 3. Arrange them in a 3×2 grid
 ncol <- 2
-nrow <- 3  # 5 plots => 3 rows × 2 columns (the last cell is empty)
+nrow <- 2  # 5 plots => 3 rows × 2 columns (the last cell is empty)
 
 # 4. Remove the x-axis label for all but:
-#    - The bottom row (row == nrow)
-#    - The 4th plot (i == 4, which is cluster 4 in row 2 col 2)
 for (i in seq_along(plot_list)) {
   row_number <- ceiling(i / ncol)
-  # Keep the x-axis label only if this is row 3 or plot index == 4
+  # Keep the x-axis label only if this plot is in the bottom row (row == nrow)
+  # or if it is the 4th plot (i == 4, corresponding to cluster 4 in row 2 col 2).
   if (!(row_number == nrow || i == 4)) {
     plot_list[[i]] <- plot_list[[i]] + theme(axis.title.x = element_blank())
   }

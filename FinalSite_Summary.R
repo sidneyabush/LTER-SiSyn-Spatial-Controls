@@ -15,9 +15,6 @@ drivers_df_uncleaned <- read.csv(sprintf("AllDrivers_Harmonized_Yearly_filtered_
 
 drivers_df_final_sites <- read.csv(sprintf("All_Drivers_Harmonized_Yearly_FNConc_FNYield_%d_years.csv", record_length)) %>%
   distinct(Stream_ID, .keep_all = TRUE)
-
-FNConc_clusters <- read.csv("FNConc_Stream_ID_Year_Cluster.csv")
-# FNYield_clusters <- read.csv("FNYield_Stream_ID_Year_Cluster.csv")
   
 drivers_df_filtered <- drivers_df_final_sites %>%
   left_join(drivers_df_uncleaned, by = "Stream_ID") %>%
@@ -134,104 +131,104 @@ p_labeled <- p +
 
 print(p_labeled)
 
-# --------------------------------------------------
-# 4) Inset Map for UK/Europe (Black & White, Positioned Over Northern Africa)
-# --------------------------------------------------
-# Define bounding box for inset map (UK/Europe)
-inset_xlim <- c(-10, 30)  
-inset_ylim <- c(49.5, 72)
-
-# Extract coordinates BEFORE filtering
-drivers_df_inset <- drivers_df_filtered %>%
-  mutate(Longitude = st_coordinates(.)[,1], Latitude = st_coordinates(.)[,2]) %>%
-  filter(Longitude > inset_xlim[1] & Longitude < inset_xlim[2],
-         Latitude > inset_ylim[1] & Latitude < inset_ylim[2]) 
-
-# Create inset map with proper projection
-inset_map <- ggplot() +
-  geom_polygon(
-    data = world, aes(x = long, y = lat, group = group),
-    fill = "lightgray", color = "white", linewidth = 0.4
-  ) +
-  geom_point(
-    data = drivers_df_inset,
-    aes(x = Longitude, y = Latitude, fill = Name),
-    shape = 21, size = 3, stroke = 0.3, color = "black"
-  ) +
-  scale_fill_manual(values = cbPalette_lighter) +
-  
-  # Keep the inset map in EPSG:4326 (same as world map)
-  coord_sf(
-    xlim = inset_xlim,  # Explicit zoom for longitude
-    ylim = inset_ylim,  # Explicit zoom for latitude
-    expand = FALSE
-  ) +
-
-  # Scale bar in km
-  annotation_scale(
-    location = "br",
-    width_hint = 0.3,
-    height = unit(0.3, "cm"),
-    text_cex = 0.7,
-    pad_x = unit(0.4, "cm"),
-    pad_y = unit(0.2, "cm"),
-    style = "bar",
-    unit_category = "metric"  # Force km instead of meters
-  ) +
-  
-  # Solid white background
-  theme_void() +
-  theme(
-    legend.position = "none",
-    panel.background = element_rect(fill = "white", color = "white"),
-    plot.background = element_rect(fill = "white", color = "white"),
-    panel.border = element_blank(),
-    axis.text = element_blank(),
-    axis.ticks = element_blank(),
-    panel.grid = element_blank()
-  )
-
-# Convert inset to a grob
-inset_grob <- ggplotGrob(inset_map)
-
-plot(inset_grob)
-
-# --------------------------------------------------
-# 5) Correctly Position Inset Over Egypt & Saudi Arabia
-# --------------------------------------------------
-# Define a larger bounding box for the inset
-inset_xmin <- 20    # Move box more to the east
-inset_xmax <- 60   # Make it wider
-inset_ymin <- 15    # Move lower
-inset_ymax <- 40    # Increase height
-
-
-# Ensure the inset map is exactly this size
-inset_grob <- ggplotGrob(inset_map)  # Convert inset to grob
-
-p_labeled_inset <- p_labeled +
-  # Place inset map with exact dimensions
-  annotation_custom(
-    grob = inset_grob,
-    xmin = inset_xmin, xmax = inset_xmax,
-    ymin = inset_ymin, ymax = inset_ymax
-  ) +
-  
-  # Callout lines from inset to UK/Europe region
-  geom_segment(aes(x = 10, y = 55, xend = inset_xmin + 5, yend = inset_ymax), linewidth = 0.5) +  
-  geom_segment(aes(x = 35, y = 65, xend = inset_xmax - 5, yend = inset_ymax), linewidth = 0.5) +  
-  
-  # Make the black outline EXACTLY match the inset
-  annotate(
-    "rect", xmin = inset_xmin, xmax = inset_xmax, ymin = inset_ymin, ymax = inset_ymax,
-    color = "black", fill = NA, linewidth = 1  # Keep a strong border
-  )
-
-# Print the corrected map
-print(p_labeled_inset)
-
-# Save the final map
-ggsave("world_map_with_corrected_inset_egypt_saudi.png", p_labeled_inset, width = 10, height = 7, dpi = 300)
+# # --------------------------------------------------
+# # 4) Inset Map for UK/Europe (Black & White, Positioned Over Northern Africa)
+# # --------------------------------------------------
+# # Define bounding box for inset map (UK/Europe)
+# inset_xlim <- c(-10, 30)  
+# inset_ylim <- c(49.5, 72)
+# 
+# # Extract coordinates BEFORE filtering
+# drivers_df_inset <- drivers_df_filtered %>%
+#   mutate(Longitude = st_coordinates(.)[,1], Latitude = st_coordinates(.)[,2]) %>%
+#   filter(Longitude > inset_xlim[1] & Longitude < inset_xlim[2],
+#          Latitude > inset_ylim[1] & Latitude < inset_ylim[2]) 
+# 
+# # Create inset map with proper projection
+# inset_map <- ggplot() +
+#   geom_polygon(
+#     data = world, aes(x = long, y = lat, group = group),
+#     fill = "lightgray", color = "white", linewidth = 0.4
+#   ) +
+#   geom_point(
+#     data = drivers_df_inset,
+#     aes(x = Longitude, y = Latitude, fill = Name),
+#     shape = 21, size = 3, stroke = 0.3, color = "black"
+#   ) +
+#   scale_fill_manual(values = cbPalette_lighter) +
+#   
+#   # Keep the inset map in EPSG:4326 (same as world map)
+#   coord_sf(
+#     xlim = inset_xlim,  # Explicit zoom for longitude
+#     ylim = inset_ylim,  # Explicit zoom for latitude
+#     expand = FALSE
+#   ) +
+# 
+#   # Scale bar in km
+#   annotation_scale(
+#     location = "br",
+#     width_hint = 0.3,
+#     height = unit(0.3, "cm"),
+#     text_cex = 0.7,
+#     pad_x = unit(0.4, "cm"),
+#     pad_y = unit(0.2, "cm"),
+#     style = "bar",
+#     unit_category = "metric"  # Force km instead of meters
+#   ) +
+#   
+#   # Solid white background
+#   theme_void() +
+#   theme(
+#     legend.position = "none",
+#     panel.background = element_rect(fill = "white", color = "white"),
+#     plot.background = element_rect(fill = "white", color = "white"),
+#     panel.border = element_blank(),
+#     axis.text = element_blank(),
+#     axis.ticks = element_blank(),
+#     panel.grid = element_blank()
+#   )
+# 
+# # Convert inset to a grob
+# inset_grob <- ggplotGrob(inset_map)
+# 
+# plot(inset_grob)
+# 
+# # --------------------------------------------------
+# # 5) Correctly Position Inset Over Egypt & Saudi Arabia
+# # --------------------------------------------------
+# # Define a larger bounding box for the inset
+# inset_xmin <- 20    # Move box more to the east
+# inset_xmax <- 60   # Make it wider
+# inset_ymin <- 15    # Move lower
+# inset_ymax <- 40    # Increase height
+# 
+# 
+# # Ensure the inset map is exactly this size
+# inset_grob <- ggplotGrob(inset_map)  # Convert inset to grob
+# 
+# p_labeled_inset <- p_labeled +
+#   # Place inset map with exact dimensions
+#   annotation_custom(
+#     grob = inset_grob,
+#     xmin = inset_xmin, xmax = inset_xmax,
+#     ymin = inset_ymin, ymax = inset_ymax
+#   ) +
+#   
+#   # Callout lines from inset to UK/Europe region
+#   geom_segment(aes(x = 10, y = 55, xend = inset_xmin + 5, yend = inset_ymax), linewidth = 0.5) +  
+#   geom_segment(aes(x = 35, y = 65, xend = inset_xmax - 5, yend = inset_ymax), linewidth = 0.5) +  
+#   
+#   # Make the black outline EXACTLY match the inset
+#   annotate(
+#     "rect", xmin = inset_xmin, xmax = inset_xmax, ymin = inset_ymin, ymax = inset_ymax,
+#     color = "black", fill = NA, linewidth = 1  # Keep a strong border
+#   )
+# 
+# # Print the corrected map
+# print(p_labeled_inset)
+# 
+# # Save the final map
+# ggsave("world_map_with_corrected_inset_egypt_saudi.png", p_labeled_inset, width = 10, height = 7, dpi = 300)
 
 # --------------------------------------------------
 # 3) Boxplots (Panel B)
@@ -276,21 +273,14 @@ p2_labeled <- p2 +
 final_boxplots <- p1_labeled + p2_labeled
 
 # Add a left margin to align with map
-final_boxplots_labeled <- final_boxplots +
-  theme(
-    # Increase left margin to ensure the y-axis text aligns with the map
-    plot.margin = margin(t = 0, r = 0, b = 0, l = 0)
-  )
-
+final_boxplots_labeled <- final_boxplots 
 # --------------------------------------------------
 # 4) Combine vertically with map bigger
 # --------------------------------------------------
 # Adjust margins for the map (Panel A) and the boxplots (Panel B) so they line up.
-p_labeled_aligned <- p_labeled +
-  theme(plot.margin = margin(t = 10, r = 5, b = 0, l = 5))  # adjust as needed
+p_labeled_aligned <- p_labeled 
 
-final_boxplots_labeled_aligned <- final_boxplots_labeled +
-  theme(plot.margin = margin(t = 0, r = 5, b = 5, l = 5))  # same left margin
+final_boxplots_labeled_aligned <- final_boxplots_labeled 
 
 # Now, use ggarrange to stack them vertically
 combined_figure <- ggarrange(
@@ -322,7 +312,7 @@ df_lter <- drivers_df_filtered %>%
   group_by(LTER_extracted, Name) %>%  # Grouping by both LTER and Climate Class
   summarise(
     Temperature   = mean(temp, na.rm = TRUE),     
-    Precipitation = mean(precip, na.rm = TRUE),   
+    Precipitation = mean(precip*365, na.rm = TRUE),   
     .groups = "drop"  # Prevents ungrouping warnings
   ) %>%
   mutate(Name = factor(Name, levels = c(
@@ -343,7 +333,7 @@ df_lter$Name <- factor(
 
 
 # Create Plot C: Precipitation vs. Temperature, one point per LTER
-p_temp_precip <- ggplot(df_lter, aes(x = Temperature, y = Precipitation*365,
+p_temp_precip <- ggplot(df_lter, aes(x = Temperature, y = Precipitation,
                                      fill = Name, label = LTER_extracted)) +
   # Add dashed reference lines at Temperature = 0 and Precipitation = 0
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray2", linewidth = 0.6) +
@@ -372,4 +362,9 @@ print(p_temp_precip)
 
 # Save the figure as a high-resolution PNG file
 ggsave("precip_temp_plot.png", p_temp_precip, width = 10, height = 9.5, dpi = 300)
- 
+
+# Now we need to plot the clusters on the global map
+FNConc_clusters <- read.csv("FNConc_Stream_ID_Year_Cluster.csv")
+# FNYield_clusters <- read.csv("FNYield_Stream_ID_Year_Cluster.csv")
+
+# Combine with drivers_df to get lat long values
