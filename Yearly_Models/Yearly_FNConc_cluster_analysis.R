@@ -242,7 +242,7 @@ df <- data.frame(
 # Export df to upload to the map making script
 write.csv(
   df, 
-  file = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Stream_ID_Cluster.csv",
+  file = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/FNConc_Stream_ID_Year_Cluster.csv",
   row.names = FALSE
 )
 

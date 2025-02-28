@@ -365,6 +365,6 @@ ggsave("precip_temp_plot.png", p_temp_precip, width = 10, height = 9.5, dpi = 30
 
 # Now we need to plot the clusters on the global map
 FNConc_clusters <- read.csv("FNConc_Stream_ID_Year_Cluster.csv")
-# FNYield_clusters <- read.csv("FNYield_Stream_ID_Year_Cluster.csv")
+FNYield_clusters <- read.csv("FNYield_Stream_ID_Year_Cluster.csv")
 
 # Combine with drivers_df to get lat long values

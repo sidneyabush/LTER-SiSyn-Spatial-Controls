@@ -259,6 +259,13 @@ df <- data.frame(
   cluster = scaled_data$cluster    # cluster assignment from k-means
 )
 
+# Export df to upload to the map making script
+write.csv(
+  df, 
+  file = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/FYield_Stream_ID_Year_Cluster.csv",
+  row.names = FALSE
+)
+
 # -- STEP 2: Make a box plot + jitter of FNYield across 5 clusters --
 p <- ggplot(df, aes(x = factor(cluster), y = FNYield, fill = factor(cluster))) +
   # Boxplot with lighter fill colors and black outline
