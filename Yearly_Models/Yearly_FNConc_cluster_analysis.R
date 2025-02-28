@@ -237,8 +237,8 @@ df <- data.frame(
   Year = drivers_df$Year, 
   FNConc  = drivers_df$FNConc,     # Adjust if your column name is different
   cluster = scaled_data$cluster
-  
 )
+
 # Export df to upload to the map making script
 write.csv(
   df, 

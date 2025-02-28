@@ -72,13 +72,13 @@ long_data <- scaled_data %>%
 # -------------------------------
 # 5. Define a Named Color Vector
 # -------------------------------
-my_cluster_colors <- c(
-  "1" = "#AC7B32",  # Rich Ochre (Warm Earthy Brown-Gold)  
-  "2" = "#579C8E",  # Muted Teal (Cool & fresh)  
-  "3" = "#C26F86",  # Dusty Rose (Soft but warm)  
-  "4" = "#8F7E4F",  # Olive-Taupe (Neutral & grounding)  
-  "5" = "#5E88B0"   # Soft Steel Blue (Cool contrast)  
-  )
+# my_cluster_colors <- c(
+#   "1" = "#AC7B32",  # Rich Ochre (Warm Earthy Brown-Gold)  
+#   "2" = "#579C8E",  # Muted Teal (Cool & fresh)  
+#   "3" = "#C26F86",  # Dusty Rose (Soft but warm)  
+#   "4" = "#8F7E4F",  # Olive-Taupe (Neutral & grounding)  
+#   "5" = "#5E88B0"   # Soft Steel Blue (Cool contrast)  
+#   )
 
 my_cluster_colors <- c(
   "1" = "#AC7B32",  # Rich Ochre (Warm Earthy Brown-Gold)
@@ -253,16 +253,19 @@ print(final_combined_plot)
 # CREATE BOX PLOT OF FNYield BY CLUSTER
 ###############################################################################
 
-# -- STEP 1: Build a data frame with FNYield and cluster for each site --
+# -- STEP 1: Build a data frame with FNConc and cluster for each site --
 df <- data.frame(
+  Stream_ID  = drivers_df$Stream_ID,
+  Year = drivers_df$Year, 
   FNYield  = drivers_df$FNYield,     # Adjust if your column name is different
-  cluster = scaled_data$cluster    # cluster assignment from k-means
+  cluster = scaled_data$cluster
+  
 )
 
 # Export df to upload to the map making script
 write.csv(
   df, 
-  file = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/FYield_Stream_ID_Year_Cluster.csv",
+  file = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/FNYield_Stream_ID_Year_Cluster.csv",
   row.names = FALSE
 )
 

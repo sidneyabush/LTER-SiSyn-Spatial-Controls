@@ -63,12 +63,13 @@ wrtds_df <- wrtds_df %>%
   select(-Stream_ID2)
 
 ## ------------------------------------------------------- ##
-            # Calculate Yields ----
+# Calculate Yields ----
 ## ------------------------------------------------------- ##
 yields <- wrtds_df %>%
-  mutate(FNYield = FNFlux / drainSqKm,
-         GenYield = GenFlux / drainSqKm) %>%
+  mutate(FNYield = (FNFlux * 1e6) / drainSqKm,
+         GenYield = (GenFlux * 1e6) / drainSqKm) %>%
   dplyr::select(-FNFlux, -GenFlux)
+
 
 tot <- wrtds_df %>%
   left_join(yields, by = c("Stream_ID", "Year")) %>%
@@ -797,60 +798,6 @@ write.csv(as.data.frame(tot_annual),
           sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.csv", record_length),
           row.names = FALSE)
 
-# write.csv(as.data.frame(tot_annual), "AllDrivers_Harmonized_Yearly_filtered_1_years.csv")
-
-# Create the tot_average dataframe with mean, q_5, and q_95
-tot_average <- tot_annual %>%
-  dplyr::group_by(Stream_ID) %>%
-  summarise(
-    # Numerical variables: calculate the mean across all years
-    drainage_area = mean(drainage_area, na.rm = TRUE),
-    NOx = mean(NOx, na.rm = TRUE),
-    P = mean(P, na.rm = TRUE),
-    precip = mean(precip, na.rm = TRUE),
-    Q = mean(Q, na.rm = TRUE),
-    temp = mean(temp, na.rm = TRUE),
-    Max_Daylength = mean(Max_Daylength, na.rm = TRUE),
-    snow_cover = mean(snow_cover, na.rm = TRUE),
-    npp = mean(npp, na.rm = TRUE),
-    evapotrans = mean(evapotrans, na.rm = TRUE),
-    silicate_weathering = mean(silicate_weathering, na.rm = TRUE),
-    greenup_day = mean(greenup_day, na.rm = TRUE),
-    permafrost = mean(permafrost, na.rm = TRUE),
-    elevation = mean(elevation, na.rm = TRUE),
-    basin_slope = mean(basin_slope, na.rm = TRUE),
-    FNConc = mean(FNConc, na.rm = TRUE),
-    FNYield = mean(FNYield, na.rm = TRUE),
-    GenConc = mean(GenConc, na.rm = TRUE),
-    GenYield = mean(GenYield, na.rm = TRUE),
-    
-    # Calculate q_5 (5th percentile) and q_95 (95th percentile) for numerical variables
-    q_5 = quantile(Q, 0.05, na.rm = TRUE),
-    q_95 = quantile(Q, 0.95, na.rm = TRUE),
-    
-    # Categorical variables: grab the first value
-    across(contains("rocks"), ~ first(.)),
-    across(contains("land_"), ~ first(.))
-  ) %>%
-  ungroup() %>%
-  # Replace NaN with NA in all columns
-  mutate(across(everything(), ~ ifelse(is.nan(.), NA, .)))
-
-# Print a preview
-print(head(tot_average))
-
-
-# Count the number of unique Stream_IDs
-num_unique_stream_ids <- tot_average %>%
-  pull(Stream_ID) %>%
-  n_distinct()
-
-print(num_unique_stream_ids) 
-
-# Export average data with dynamic filename
-write.csv(as.data.frame(tot_average), 
-          sprintf("AllDrivers_Harmonized_Average_filtered_%d_years.csv", record_length),
-          row.names = FALSE)
 # Define record length (1, 5, 10, 20... years)
 record_length <- 5
 
@@ -927,6 +874,60 @@ print(unique_stream_id_count)
 # Export with dynamic filename based on record length
 write.csv(drivers_df, 
           sprintf("All_Drivers_Harmonized_Yearly_FNConc_FNYield_%d_years.csv", record_length), 
+          row.names = FALSE)
+
+
+# Create the tot_average dataframe with mean, q_5, and q_95
+tot_average <- drivers_df %>%
+  dplyr::group_by(Stream_ID) %>%
+  summarise(
+    # Numerical variables: calculate the mean across all years
+    drainage_area = mean(drainage_area, na.rm = TRUE),
+    NOx = mean(NOx, na.rm = TRUE),
+    P = mean(P, na.rm = TRUE),
+    precip = mean(precip, na.rm = TRUE),
+    Q = mean(Q, na.rm = TRUE),
+    temp = mean(temp, na.rm = TRUE),
+    Max_Daylength = mean(Max_Daylength, na.rm = TRUE),
+    snow_cover = mean(snow_cover, na.rm = TRUE),
+    npp = mean(npp, na.rm = TRUE),
+    evapotrans = mean(evapotrans, na.rm = TRUE),
+    silicate_weathering = mean(silicate_weathering, na.rm = TRUE),
+    greenup_day = mean(greenup_day, na.rm = TRUE),
+    permafrost = mean(permafrost, na.rm = TRUE),
+    elevation = mean(elevation, na.rm = TRUE),
+    basin_slope = mean(basin_slope, na.rm = TRUE),
+    FNConc = mean(FNConc, na.rm = TRUE),
+    FNYield = mean(FNYield, na.rm = TRUE),
+    GenConc = mean(GenConc, na.rm = TRUE),
+    GenYield = mean(GenYield, na.rm = TRUE),
+    
+    # Calculate q_5 (5th percentile) and q_95 (95th percentile) for numerical variables
+    q_5 = quantile(Q, 0.05, na.rm = TRUE),
+    q_95 = quantile(Q, 0.95, na.rm = TRUE),
+    
+    # Categorical variables: grab the first value
+    across(contains("rocks"), ~ first(.)),
+    across(contains("land_"), ~ first(.))
+  ) %>%
+  ungroup() %>%
+  # Replace NaN with NA in all columns
+  mutate(across(everything(), ~ ifelse(is.nan(.), NA, .)))
+
+# Print a preview
+print(head(tot_average))
+
+
+# Count the number of unique Stream_IDs
+num_unique_stream_ids <- tot_average %>%
+  pull(Stream_ID) %>%
+  n_distinct()
+
+print(num_unique_stream_ids) 
+
+# Export average data with dynamic filename
+write.csv(as.data.frame(tot_average), 
+          sprintf("AllDrivers_Harmonized_Average_filtered_%d_years.csv", record_length),
           row.names = FALSE)
 
 gc()

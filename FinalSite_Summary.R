@@ -1,4 +1,3 @@
-
 librarian::shelf(dplyr, stringr, ggplot2, maps, patchwork, scales, 
                  colorspace, ggrepel, ggspatial, sf, ggpubr)
 
@@ -54,7 +53,6 @@ cbPalette_named <- c(
   "Arid"            = "#C55A11",  # Burnt Orange (More Natural)
   "Subarctic"       = "#A75078"   # Deepened Pinkish Purple (Colder but Stronger)
 )
-
 
 
 cbPalette_lighter <- lighten(cbPalette_named, amount = 0.3)
@@ -241,7 +239,8 @@ p1 <- ggplot(drivers_df_filtered, aes(x = FNConc, y = Name)) +
   labs(x = expression("Concentration (mg L"^-1*")"), y = NULL) +
   theme_classic(base_size = 14) +
   scale_y_discrete(limits = rev(levels(drivers_df_filtered$Name))) +
-  theme(legend.position = "none")
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 45, hjust = 1))
 
 p2 <- ggplot(drivers_df_filtered, aes(x = FNYield, y = Name)) +
   geom_boxplot(aes(fill = Name), outlier.shape = NA, alpha = 0.8) +
@@ -251,10 +250,13 @@ p2 <- ggplot(drivers_df_filtered, aes(x = FNYield, y = Name)) +
   labs(x = expression("Yield (kg km"^-2*" year"^-1*")"), y = NULL) +
   theme_classic(base_size = 14) +
   scale_y_discrete(limits = rev(levels(drivers_df_filtered$Name))) +
+  scale_x_continuous(labels = function(x) format(x, scientific = FALSE)) +
   theme(
     legend.position = "none",
-    axis.text.y = element_blank()
+    axis.text.y = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1)
   )
+
 
 # Label only the concentration plot (p1) as "B"
 p1_labeled <- p1 + 
@@ -293,6 +295,8 @@ combined_figure <- ggarrange(
   labels = NULL,      # Avoids extra label space
   vjust = -2          # Move them closer together
 )
+
+print(p2)
 
 print(combined_figure)
 
@@ -363,8 +367,216 @@ print(p_temp_precip)
 # Save the figure as a high-resolution PNG file
 ggsave("precip_temp_plot.png", p_temp_precip, width = 10, height = 9.5, dpi = 300)
 
-# Now we need to plot the clusters on the global map
+library(tidyverse)
+library(ggplot2)
+library(ggpubr)
+library(maps)
+
+# Define discrete color palettes for clusters
+my_conc_cluster_colors <- c(
+  "1" = "#88A2DC",  # Muted Blue (instead of bold primary blue)
+  "2" = "#E69F00",  # Warm Muted Orange
+  "3" = "#E2C744",  # Softer Yellow-Gold
+  "4" = "#6BAE75",  # Desaturated Green (instead of bright primary green)
+  "5" = "#A3A3A3",  # Muted Neutral Gray (lighter than before)
+  "6" = "#B07AA1"   # Muted Purple-Pink
+)
+
+my_yield_cluster_colors <- c(
+  "1" = "#AC7B32",  # Rich Ochre (Warm Earthy Brown-Gold)
+  "2" = "#579C8E",  # Muted Teal (Cool & fresh)
+  "3" = "#C26F86",  # Dusty Rose (Soft but warm)
+  "4" = "#5E88B0"   # Soft Steel Blue (Cool contrast)
+)
+
+# 1. Read in the cluster data
 FNConc_clusters <- read.csv("FNConc_Stream_ID_Year_Cluster.csv")
 FNYield_clusters <- read.csv("FNYield_Stream_ID_Year_Cluster.csv")
 
-# Combine with drivers_df to get lat long values
+# Helper function to calculate the mode (first in case of ties)
+calc_mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+# 2. Merge clusters with drivers_df to get lat/long values and compute modal cluster per site
+
+# For FNConc: merge and compute modal cluster per stream_id
+df_FNConc <- drivers_df_filtered %>%
+  inner_join(FNConc_clusters, by = c("Stream_ID")) %>% 
+  group_by(Stream_ID) %>%
+  summarize(
+    modal_cluster = calc_mode(cluster),
+    lat = first(Latitude),
+    long = first(Longitude),
+    .groups = "drop"
+  ) %>%
+  mutate(modal_cluster = factor(modal_cluster))
+
+# For FNYield: merge and compute modal cluster per stream_id
+df_FNYield <- drivers_df_filtered %>%
+  inner_join(FNYield_clusters, by = c("Stream_ID")) %>% 
+  group_by(Stream_ID) %>%
+  summarize(
+    modal_cluster = calc_mode(cluster),
+    lat = first(Latitude),
+    long = first(Longitude),
+    .groups = "drop"
+  ) %>%
+  mutate(modal_cluster = factor(modal_cluster))
+
+# --------------------------------------------------
+# World Map for Clusters
+# --------------------------------------------------
+library(tidyverse)
+library(ggplot2)
+library(ggpubr)
+library(sf)
+library(ggspatial)
+
+# 1. Get the world data
+world_data <- map_data("world")
+
+# 2. Create a base world map with your desired styling
+world_map_base <- ggplot() +
+  geom_polygon(
+    data = world_data,
+    aes(x = long, y = lat, group = group),
+    fill = "lightgray",
+    color = "white"
+  ) +
+  coord_sf(
+    crs = st_crs(3857), 
+    expand = FALSE
+  ) +
+  annotation_scale(
+    location = "bl",  
+    width_hint = 0.5,  
+    unit_category = "metric",
+    plot_unit = "km",
+    pad_x = unit(11, "cm"),  
+    pad_y = unit(0.1, "cm")
+  ) +
+  annotation_north_arrow(
+    location = "br",
+    which_north = "true",
+    height = unit(0.7, "cm"),
+    width = unit(0.5, "cm"),
+    pad_x = unit(0.1, "cm"),
+    pad_y = unit(0.1, "cm"),
+    style = north_arrow_orienteering()
+  ) +
+  theme_minimal() +
+  labs(fill = NULL) +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.grid = element_blank(),
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    legend.text = element_text(size = 10),
+    legend.position = c(0.05, 0.65),
+    legend.justification = c("left", "top")
+  )
+
+# 3. Prepare your cluster data and drivers data (assuming these objects already exist)
+#    For FNConc:
+df_FNConc <- drivers_df_filtered %>%
+  inner_join(FNConc_clusters, by = c("Stream_ID")) %>% 
+  group_by(Stream_ID) %>%
+  summarize(
+    modal_cluster = calc_mode(cluster),
+    lat = first(Latitude),
+    long = first(Longitude),
+    .groups = "drop"
+  )
+# Ensure modal_cluster is a factor:
+df_FNConc <- df_FNConc %>% mutate(modal_cluster = factor(modal_cluster))
+
+# For FNYield:
+df_FNYield <- drivers_df_filtered %>%
+  inner_join(FNYield_clusters, by = c("Stream_ID")) %>% 
+  group_by(Stream_ID) %>%
+  summarize(
+    modal_cluster = calc_mode(cluster),
+    lat = first(Latitude),
+    long = first(Longitude),
+    .groups = "drop"
+  )
+# Ensure modal_cluster is a factor:
+df_FNYield <- df_FNYield %>% mutate(modal_cluster = factor(modal_cluster))
+
+# Define your cluster color palettes
+my_conc_cluster_colors <- c(
+  "1" = "#88A2DC",  # Muted Blue
+  "2" = "#E69F00",  # Warm Muted Orange
+  "3" = "#E2C744",  # Softer Yellow-Gold
+  "4" = "#6BAE75",  # Desaturated Green
+  "5" = "#A3A3A3",  # Muted Neutral Gray
+  "6" = "#B07AA1"   # Muted Purple-Pink
+)
+
+my_yield_cluster_colors <- c(
+  "1" = "#AC7B32",  # Rich Ochre
+  "2" = "#579C8E",  # Muted Teal
+  "3" = "#C26F86",  # Dusty Rose
+  "4" = "#5E88B0"   # Soft Steel Blue
+)
+
+# 4. Create Panel A: Global map for FNConc modal clusters
+p_FNConc_map <- world_map_base +
+  # Optionally, overlay a slightly different polygon to mimic your original settings:
+  geom_polygon(
+    data = world_data,
+    aes(x = long, y = lat, group = group),
+    fill = "lightgray",
+    color = "white",
+    inherit.aes = FALSE
+  ) +
+  geom_point(
+    data = df_FNConc,
+    aes(x = long, y = lat, color = modal_cluster),
+    size = 3, alpha = 0.8
+  ) +
+  scale_color_manual(values = my_conc_cluster_colors) +
+  labs(title = NULL,
+       x = "Longitude", y = "Latitude",
+       tag = "A") +
+  theme(
+    plot.tag = element_text(size = 16, hjust = 0, vjust = 1),
+    legend.position = c(0.05, 0.65),
+    legend.justification = c("left", "top"), 
+    legend.title = element_blank())
+
+# 5. Create Panel B: Global map for FNYield modal clusters
+p_FNYield_map <- world_map_base +
+  geom_polygon(
+    data = world_data,
+    aes(x = long, y = lat, group = group),
+    fill = "lightgray",
+    color = "white",
+    inherit.aes = FALSE
+  ) +
+  geom_point(
+    data = df_FNYield,
+    aes(x = long, y = lat, color = modal_cluster),
+    size = 3, alpha = 0.8
+  ) +
+  scale_color_manual(values = my_yield_cluster_colors) +
+  labs(title = NULL,
+       x = "Longitude", y = "Latitude",
+       tag = "B") +
+  theme(
+    plot.tag = element_text(size = 16, hjust = 0, vjust = 1),
+    legend.position = c(0.05, 0.65),
+    legend.justification = c("left", "top"), 
+    legend.title = element_blank())
+
+# 6. Combine the two panels vertically
+combined_map <- ggarrange(p_FNConc_map, p_FNYield_map, 
+                          ncol = 1, nrow = 2,
+                          heights = c(1, 1))
+
+# Display the combined map
+print(combined_map)
