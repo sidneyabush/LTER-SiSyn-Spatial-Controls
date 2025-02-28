@@ -27,13 +27,13 @@ shap_values_FNConc <- shap_values_FNConc
 
 # ------------------------- FNYield Data (Yield) -------------------------
 # Load required FNYield data and model
-load("FNYield_Yearly_rf_model2_full.RData")
+load("FNYield_Yearly_rf_model2_full_new.RData")
 rf_model2_FNYield <- rf_model2
-load("FNYield_Yearly_kept_drivers_full.RData")
+load("FNYield_Yearly_kept_drivers_full_new.RData")
 kept_drivers_FNYield <- kept_drivers
-load("FNYield_Yearly_full.RData")
+load("FNYield_Yearly_full_new.RData")
 drivers_numeric_FNYield <- drivers_numeric
-load("FNYield_Yearly_full_stream_ids.RData")  # if needed
+load("FNYield_Yearly_full_stream_ids_new.RData")  # if needed
 load("FNYield_Yearly_shap_values_new.RData")
 shap_values_FNYield <- shap_values_FNYield
 
@@ -92,11 +92,44 @@ lm_plot_FNYield <- ggplot(df_FNYield, aes(x = predicted, y = observed)) +
 ###############################################################################
 # Create SHAP Plots Function (for both Concentration and Yield)
 ###############################################################################
+compute_mean_absolute_shap <- function(shap_values) {
+  # Step 1: Convert SHAP values to a data frame and calculate absolute values
+  df_abs <- as.data.frame(shap_values) %>% 
+    mutate(across(everything(), abs))
+  
+  # Optional: Print or inspect df_abs to verify absolute values
+  # print(head(df_abs))
+  
+  # Step 2: Compute the mean of the absolute values for each feature
+  mean_abs <- df_abs %>% 
+    summarise(across(everything(), ~ mean(., na.rm = TRUE)))
+  
+  # Step 3: Reshape the data to long format and arrange in descending order of importance
+  result <- mean_abs %>% 
+    pivot_longer(cols = everything(), names_to = "feature", values_to = "importance") %>%
+    arrange(desc(importance))
+  
+  return(result)
+}
+
+# Compute and print SHAP importances for FNConc and FNYield
+overall_feature_importance_FNConc <- compute_mean_absolute_shap(shap_values_FNConc)
+overall_feature_importance_FNYield <- compute_mean_absolute_shap(shap_values_FNYield)
+
+print("Overall Feature Importance for FNConc:")
+print(overall_feature_importance_FNConc)
+print("Overall Feature Importance for FNYield:")
+print(overall_feature_importance_FNYield)
+
+# Compute the mean of the absolute values for each column
+mean_abs <- apply(abs(shap_values_FNConc), 2, mean, na.rm = TRUE)
+print(mean_abs)
+
 create_shap_plots <- function(shap_values, kept_drivers, output_dir) {
   # Compute overall feature importance (mean absolute SHAP)
-  overall_feature_importance <- shap_values %>%
-    as.data.frame() %>%
-    summarise(across(everything(), ~ mean(abs(.), na.rm = TRUE))) %>%
+  shap_values_abs <- as.data.frame(shap_values) %>% mutate(across(everything(), abs))
+  overall_feature_importance <- shap_values_abs %>%
+    summarise(across(everything(), mean, na.rm = TRUE)) %>%
     pivot_longer(cols = everything(), names_to = "feature", values_to = "importance") %>%
     arrange(desc(importance)) %>%
     mutate(feature = recode(feature,
@@ -118,6 +151,9 @@ create_shap_plots <- function(shap_values, kept_drivers, output_dir) {
                             "rocks_carbonate_evaporite" = "Carbonite & Evaporite Rock",
                             "permafrost" = "Permafrost",
                             "precip" = "Precipitation"))
+  
+  print("Computed Overall Feature Importance (Descending Order):")
+  print(overall_feature_importance)
   
   overall_importance_plot <- ggplot(overall_feature_importance, 
                                     aes(x = reorder(feature, importance), y = importance)) +
@@ -178,6 +214,9 @@ create_shap_plots <- function(shap_values, kept_drivers, output_dir) {
   
   # Set factor levels for the dot plot based on overall importance order
   shap_long$feature <- factor(shap_long$feature, levels = rev(overall_feature_importance$feature))
+  
+  print("Assigned Factor Levels to shap_long$feature:")
+  print(levels(shap_long$feature))  # Debugging check
   
   dot_plot <- ggplot(shap_long, aes(x = shap_value, 
                                     y = feature, 

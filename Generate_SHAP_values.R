@@ -20,13 +20,13 @@ load("FNConc_Yearly_full_stream_ids_full_new.RData")  # if needed
 
 # ------------------------- FNYield Data (Yield) -------------------------
 # 5. Load FNYield model/data
-load("FNYield_Yearly_rf_model2_full.RData")  # => rf_model2
+load("FNYield_Yearly_rf_model2_full_new.RData")  # => rf_model2
 rf_model2_FNYield <- rf_model2
-load("FNYield_Yearly_kept_drivers_full.RData")
+load("FNYield_Yearly_kept_drivers_full_new.RData")
 kept_drivers_FNYield <- kept_drivers
-load("FNYield_Yearly_full.RData")
+load("FNYield_Yearly_full_new.RData")
 drivers_numeric_FNYield <- drivers_numeric
-load("FNYield_Yearly_full_stream_ids.RData") # if needed
+load("FNYield_Yearly_full_stream_ids_new.RData") # if needed
 
 # 6. Set seed and output directory
 set.seed(123)
