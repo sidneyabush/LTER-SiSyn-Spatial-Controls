@@ -383,7 +383,7 @@ tot_with_slope_filled <- tot_with_slope_filled %>%
     basin_slope_mean_degree = case_when(
       Stream_ID == "Walker Branch__east fork" ~ 2.2124321596241265,
       Stream_ID == "Walker Branch__west fork" ~ 1.8972192246291828,  
-      Stream_ID == "ARC__Imnavait Weir" ~ 3.83,   ## Need to confirm this value with Arial S.    
+      # Stream_ID == "ARC__Imnavait Weir" ~ 3.83,   ## Need to confirm this value with Arial S.    
       TRUE ~ basin_slope_mean_degree               # Retain existing values
     )
   ) 
@@ -638,8 +638,8 @@ missing_N_P_data_summary <- tot %>%
   select(-Value)  # Remove the actual value column
 
 # Export missing data summary with dynamic filename
-write.csv(missing_elev_slope_data_summary, 
-          sprintf("missing_elev_slope_data_summary_2001_2024_filtered_%d_years.csv", record_length), 
+write.csv(missing_N_P_data_summary, 
+          sprintf("missing_N_P_data_summary_2001_2024_filtered_%d_years.csv", record_length), 
           row.names = FALSE)
 
 # Get the number of unique Stream_IDs with missing NOx or P
@@ -650,6 +650,27 @@ num_unique_missing_streams <- missing_N_P_data_summary %>%
 # Print summary
 print((num_unique_missing_streams))  # Number of missing entries
 print(head(missing_N_P_data_summary))  # Preview first few rows
+
+library(dplyr)
+
+# Combine the missing data summaries using full_join so that every site/year combination is retained
+missing_all_summary <- missing_N_P_data_summary %>%
+  full_join(missing_elev_slope_data_summary, by = c("Stream_ID", "Year")) %>%
+  full_join(missing_spatial_data_summary, by = c("Stream_ID", "Year"))
+
+# Check the combined summary
+print(head(missing_all_summary))
+
+# Write out to a CSV file
+write.csv(missing_all_summary, "missing_all_data_summary.csv", row.names = FALSE)
+
+# Verify the number of unique Stream_IDs
+num_unique_stream_ids <- tot %>%
+  pull(Stream_ID) %>%
+  n_distinct()
+
+print(num_unique_stream_ids)
+
 
 ## ------------------------------------------------------- ##
               #  Silicate Weathering ----
@@ -666,16 +687,16 @@ tot[, major_rock := as.character(major_rock)]
 mapped_lithologies[, major_rock := as.character(major_rock)]
 
 # Perform the merge and filter out NA values in mapped_lithology
-weathering <- merge(tot[, .(Stream_ID, Year, major_rock, Q, temp, drainSqKm)], 
-                    mapped_lithologies[, .(major_rock, mapped_lithology)], 
+weathering <- merge(tot[, .(Stream_ID, Year, major_rock, Q, temp, drainSqKm)],
+                    mapped_lithologies[, .(major_rock, mapped_lithology)],
                     by = "major_rock", all.x = TRUE)
 weathering <- weathering[!is.na(mapped_lithology)]  # Remove rows with NA in mapped_lithology
 
 # Constants for weathering calculations
-seconds_per_year <- 31536000  
-kg_per_m3 <- 1000  
-km2_to_m2 <- 10^6  
-R <- 8.314  
+seconds_per_year <- 31536000
+kg_per_m3 <- 1000
+km2_to_m2 <- 10^6
+R <- 8.314
 
 # Define lithology parameters as a data.table
 lithology_params <- data.table(
@@ -755,6 +776,13 @@ tot <- tot %>%
   ungroup() %>%
   select(-contains("forest"), land_forest_all)  # Remove old "forest" columns but keep the new one
 
+# Verify the number of unique Stream_IDs
+num_unique_stream_ids <- tot %>%
+  pull(Stream_ID) %>%
+  n_distinct()
+
+print(num_unique_stream_ids)
+
 # Export at this step to keep lat/long: 
 write.csv(as.data.frame(tot), 
           sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years_uncleaned.csv", record_length),
@@ -764,7 +792,7 @@ write.csv(as.data.frame(tot),
 tot_si <- tot %>%
   dplyr::select(Stream_ID, Year, drainSqKm, NOx, P, precip, Q,
                 temp, Max_Daylength, prop_area, npp, evapotrans,
-                silicate_weathering, cycle0, permafrost_mean_m, elevation_mean_m, 
+                cycle0, permafrost_mean_m, elevation_mean_m, 
                 basin_slope_mean_degree, FNConc, FNYield, GenConc, GenYield, 
                 contains("rocks"), contains("land_")) %>%
   dplyr::rename(snow_cover = prop_area, 
@@ -774,14 +802,20 @@ tot_si <- tot %>%
                 permafrost = permafrost_mean_m,
                 basin_slope = basin_slope_mean_degree) %>%
   dplyr::mutate(permafrost = ifelse(is.na(permafrost), 0, permafrost)) %>%
-  dplyr::mutate(snow_cover = ifelse(is.na(snow_cover), 0, snow_cover)) 
+  dplyr::mutate(snow_cover = ifelse(is.na(snow_cover), 0, snow_cover))
 
+# Verify the number of unique Stream_IDs
+num_unique_stream_ids <- tot_si %>%
+  pull(Stream_ID) %>%
+  n_distinct()
+
+print(num_unique_stream_ids)
 
 # Convert numeric columns to numeric
 tot_annual <- tot_si %>%
   distinct(Stream_ID, Year, .keep_all = TRUE)  %>% 
   mutate(across(c(drainage_area, NOx, P, precip, Q, temp, Max_Daylength, 
-                  snow_cover, npp, evapotrans, silicate_weathering, 
+                  snow_cover, npp, evapotrans, 
                   greenup_day, permafrost, elevation, basin_slope, 
                   FNConc, FNYield, GenConc, GenYield), 
                 as.numeric))
@@ -798,21 +832,22 @@ write.csv(as.data.frame(tot_annual),
           sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.csv", record_length),
           row.names = FALSE)
 
-# Define record length (1, 5, 10, 20... years)
-record_length <- 5
-
-# Read in and tidy data ----
-setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
-
 # Read in and preprocess the data
-drivers_df <- read.csv(sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.csv", record_length)) %>%
-  filter(!grepl("^MCM", Stream_ID)) %>% # Remove all Stream_IDs that start with "MCM", no spatial data
-  filter(!grepl("^Cameroon", Stream_ID)) %>% # Remove all Stream_IDs that start with "Cameroon", no spatial data
-  filter(!grepl("^ARC__", Stream_ID)) %>% # Currently do not have basin slope for this site
+drivers_df <- tot_annual %>%
+  #filter(!grepl("^MCM", Stream_ID)) %>% # Remove all Stream_IDs that start with "MCM", no spatial data
+  #filter(!grepl("^Cameroon", Stream_ID)) %>% # Remove all Stream_IDs that start with "Cameroon", no spatial data
+  #filter(!grepl("^ARC__", Stream_ID)) %>% # Currently do not have basin slope for this site
   select(FNConc, everything()) %>%
-  dplyr::mutate_at(vars(22:33), ~replace(., is.na(.), 0)) %>%
+  dplyr::mutate_at(vars(21:32), ~replace(., is.na(.), 0)) %>%
   filter(complete.cases(.)) %>% 
   filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc)
+
+# Count the number of unique Stream_IDs
+num_unique_stream_ids <- drivers_df %>%
+  pull(Stream_ID) %>%
+  n_distinct()
+
+print(num_unique_stream_ids)
 
 # ---- Remove Outliers for FNConc (5 SD Rule) ----
 FNConc_mean <- mean(drivers_df$FNConc, na.rm = TRUE)
@@ -876,7 +911,6 @@ write.csv(drivers_df,
           sprintf("All_Drivers_Harmonized_Yearly_FNConc_FNYield_%d_years.csv", record_length), 
           row.names = FALSE)
 
-
 # Create the tot_average dataframe with mean, q_5, and q_95
 tot_average <- drivers_df %>%
   dplyr::group_by(Stream_ID) %>%
@@ -892,7 +926,7 @@ tot_average <- drivers_df %>%
     snow_cover = mean(snow_cover, na.rm = TRUE),
     npp = mean(npp, na.rm = TRUE),
     evapotrans = mean(evapotrans, na.rm = TRUE),
-    silicate_weathering = mean(silicate_weathering, na.rm = TRUE),
+    # silicate_weathering = mean(silicate_weathering, na.rm = TRUE),
     greenup_day = mean(greenup_day, na.rm = TRUE),
     permafrost = mean(permafrost, na.rm = TRUE),
     elevation = mean(elevation, na.rm = TRUE),
@@ -931,5 +965,3 @@ write.csv(as.data.frame(tot_average),
           row.names = FALSE)
 
 gc()
-
-
