@@ -91,6 +91,7 @@ p <- ggplot() +
     location = "bl",  
     width_hint = 0.5,  
     unit_category = "metric",
+    transform = TRUE,     
     plot_unit = "km",
     pad_x = unit(11, "cm"),  
     pad_y = unit(0.1, "cm") 
@@ -165,6 +166,7 @@ print(p_labeled)
 #     location = "br",
 #     width_hint = 0.3,
 #     height = unit(0.3, "cm"),
+#      transform = TRUE,        # <== Add this line
 #     text_cex = 0.7,
 #     pad_x = unit(0.4, "cm"),
 #     pad_y = unit(0.2, "cm"),
@@ -451,6 +453,7 @@ world_map_base <- ggplot() +
     location = "bl",  
     width_hint = 0.5,  
     unit_category = "metric",
+    transform = TRUE,       
     plot_unit = "km",
     pad_x = unit(11, "cm"),  
     pad_y = unit(0.1, "cm")
