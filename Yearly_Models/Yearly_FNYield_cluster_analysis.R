@@ -392,7 +392,7 @@ plot_mean_abs_shap <- function(cluster_id, shap_values_FNYield, full_scaled) {
       alpha = 0.8
     ) +
     coord_flip() +
-    scale_y_continuous(limits = c(0, 15)) +
+    # scale_y_continuous(limits = c(0, 15)) +
     labs(
       x = NULL,
       y = "Mean Absolute SHAP Value",  # We will selectively remove this later

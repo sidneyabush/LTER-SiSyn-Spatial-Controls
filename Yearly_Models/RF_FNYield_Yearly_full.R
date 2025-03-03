@@ -85,7 +85,7 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 drivers_df <- read.csv(sprintf("All_Drivers_Harmonized_Yearly_FNConc_FNYield_%d_years.csv", record_length)) %>%
   dplyr::select(-contains("Conc"), -contains("Gen"), -Q, -contains("major"), 
-                -Max_Daylength, -silicate_weathering, -drainage_area) %>%
+                -Max_Daylength, -drainage_area) %>%
   mutate(greenup_day = as.numeric(greenup_day))
 
 num_unique_stream_ids <- drivers_df %>%
@@ -125,7 +125,7 @@ print(p)
 
 set.seed(123)
 # Manually select ntree for rf_model1 ----
-manual_ntree_rf1 <- 1100  # Replace with chosen value
+manual_ntree_rf1 <- 2000  # Replace with chosen value
 
 set.seed(123)
 # Tune mtry for rf_model1 ----
@@ -137,7 +137,8 @@ manual_mtry_rf1 <- 7  # Replace with chosen value
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
-rf_model1 <- randomForest(FNYield ~ ., data = drivers_numeric, importance = TRUE, proximity = TRUE, ntree = manual_ntree_rf1, mtry = manual_mtry_rf1)
+rf_model1 <- randomForest(FNYield ~ ., data = drivers_numeric, 
+                          importance = TRUE, proximity = TRUE, ntree = manual_ntree_rf1, mtry = manual_mtry_rf1)
 
 # Visualize output for rf_model1
 print(rf_model1)
@@ -212,7 +213,7 @@ ggplot(MSE_df_parallel, aes(x = ntree, y = mean_MSE)) +
 # Global seed before re-tuning mtry
 set.seed(123)
 kept_drivers <- drivers_numeric[, colnames(drivers_numeric) %in% predictors(result_rfe)]
-tuneRF(kept_drivers, drivers_numeric[, 1], ntreeTry = 1900, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(kept_drivers, drivers_numeric[, 1], ntreeTry = 1400, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)

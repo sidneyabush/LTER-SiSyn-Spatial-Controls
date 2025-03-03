@@ -378,8 +378,8 @@ my_conc_cluster_colors <- c(
   "2" = "#E69F00",  # Warm Muted Orange
   "3" = "#E2C744",  # Softer Yellow-Gold
   "4" = "#6BAE75",  # Desaturated Green (instead of bright primary green)
-  "5" = "#A3A3A3",  # Muted Neutral Gray (lighter than before)
-  "6" = "#B07AA1"   # Muted Purple-Pink
+  "5" = "#B07AA1",  # Muted Neutral Gray (lighter than before)
+  "6" = "#A3A3A3"   # Muted Purple-Pink
 )
 
 my_yield_cluster_colors <- c(
@@ -510,19 +510,12 @@ df_FNYield <- df_FNYield %>% mutate(modal_cluster = factor(modal_cluster))
 
 # Define your cluster color palettes
 my_conc_cluster_colors <- c(
-  "1" = "#88A2DC",  # Muted Blue
+  "1" = "#88A2DC",  # Muted Blue (instead of bold primary blue)
   "2" = "#E69F00",  # Warm Muted Orange
   "3" = "#E2C744",  # Softer Yellow-Gold
-  "4" = "#6BAE75",  # Desaturated Green
-  "5" = "gray40",  # Muted Neutral Gray
-  "6" = "#B07AA1"   # Muted Purple-Pink
-)
-
-my_yield_cluster_colors <- c(
-  "1" = "#AC7B32",  # Rich Ochre
-  "2" = "#579C8E",  # Muted Teal
-  "3" = "#C26F86",  # Dusty Rose
-  "4" = "#5E88B0"   # Soft Steel Blue
+  "4" = "#6BAE75",  # Desaturated Green (instead of bright primary green)
+  "5" = "#B07AA1",  # Muted Neutral Gray (lighter than before)
+  "6" = "gray40"   # Muted Purple-Pink
 )
 
 # 4. Create Panel A: Global map for FNConc modal clusters

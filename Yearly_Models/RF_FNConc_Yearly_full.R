@@ -85,7 +85,7 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 drivers_df <- read.csv(sprintf("All_Drivers_Harmonized_Yearly_FNConc_FNYield_%d_years.csv", record_length)) %>%
   dplyr::select(-contains("Yield"), -contains("Gen"), -contains("major"), 
-                -Max_Daylength, -silicate_weathering, -Q, -drainage_area) %>%
+                -Max_Daylength, -Q, -drainage_area) %>%
   mutate(greenup_day = as.numeric(greenup_day)) 
 
 drivers_numeric <- drivers_df %>%
@@ -93,7 +93,7 @@ drivers_numeric <- drivers_df %>%
 
 # Plot and save correlation matrix ----
 # numeric_drivers <- 2:24 # Change this range to reflect data frame length
-driver_cor <- cor(drivers_numeric)
+driver_cor <- cor(drivers_numeric[2:24])
 save_correlation_plot(driver_cor, output_dir)
 
 
@@ -209,12 +209,12 @@ ggplot(MSE_df_parallel, aes(x = ntree, y = mean_MSE)) +
 # Global seed before re-tuning mtry
 set.seed(123)
 kept_drivers <- drivers_numeric[, colnames(drivers_numeric) %in% predictors(result_rfe)]
-tuneRF(kept_drivers, drivers_numeric[, 1], ntreeTry = 1600, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(kept_drivers, drivers_numeric[, 1], ntreeTry = 2000, stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
 rf_model2 <- randomForest(rf_formula, data = drivers_numeric, 
-                          importance = TRUE, proximity = TRUE, ntree = 1600, mtry = 2)
+                          importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 2)
 
 # Visualize output for rf_model2
 print(rf_model2)

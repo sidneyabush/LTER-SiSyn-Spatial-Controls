@@ -73,9 +73,17 @@ my_cluster_colors <- c(
   "2" = "#E69F00",  # Warm Muted Orange
   "3" = "#E2C744",  # Softer Yellow-Gold
   "4" = "#6BAE75",  # Desaturated Green (instead of bright primary green)
-  "5" = "#A3A3A3",  # Muted Neutral Gray (lighter than before)
-  "6" = "#B07AA1"   # Muted Purple-Pink
+  "5" = "#B07AA1",  # Muted Neutral Gray (lighter than before)
+  "6" = "#A3A3A3"   # Muted Purple-Pink
 )
+
+# my_cluster_colors <- c(
+#   "1" = "#88A2DC",
+#   "2" = "#E69F00",
+#   "3" = "#E2C744",
+#   "4" = "#6BAE75",
+#   "5" = "#B07AA1"
+# )
 
 # Create a lighter version of your cluster colors (adjust the 'amount' as needed)
 my_cluster_colors_lighter <- sapply(my_cluster_colors, function(x) lighten(x, amount = 0.3))
@@ -370,7 +378,7 @@ ggplot(df_shap, aes(x = reorder(feature, mean_abs_shapval), y = mean_abs_shapval
 }
 
 # 2. Generate a plot for each of your 5 clusters
-unique_clusters <- c("1", "2", "3", "4", "5", "6")  # Adjust as needed
+unique_clusters <- c("1","2","3","4","5","6")  # Adjust as needed
 plot_list <- lapply(seq_along(unique_clusters), function(i) {
 cl <- unique_clusters[i]
 plot_mean_abs_shap(cl, shap_values_FNConc, full_scaled)
