@@ -66,8 +66,8 @@ wrtds_df <- wrtds_df %>%
 # Calculate Yields ----
 ## ------------------------------------------------------- ##
 yields <- wrtds_df %>%
-  mutate(FNYield = (FNFlux * 1e6) / drainSqKm,
-         GenYield = (GenFlux * 1e6) / drainSqKm) %>%
+  mutate(FNYield = (FNFlux * 365) / drainSqKm,
+         GenYield = (GenFlux * 365) / drainSqKm) %>%
   dplyr::select(-FNFlux, -GenFlux)
 
 
