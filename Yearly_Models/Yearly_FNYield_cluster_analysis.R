@@ -33,7 +33,7 @@ load("FNYield_Yearly_shap_values_new.RData")
 # 3. Prepare Data & Perform Clustering
 # -------------------------------
 data <- kept_drivers %>%
-  dplyr::select("rocks_volcanic", "basin_slope", "land_shrubland_grassland", "temp", "rocks_plutonic")
+  dplyr::select("rocks_volcanic", "basin_slope", "land_shrubland_grassland", "temp", "permafrost")
 
 scaled_data <- data %>% 
   mutate(across(where(is.numeric), ~ rescale(.)))
@@ -60,13 +60,13 @@ long_data <- scaled_data %>%
   mutate(
     Driver = factor(Driver, levels = c("rocks_volcanic", "temp", 
                                        "land_shrubland_grassland", "basin_slope", 
-                                       "rocks_plutonic")),
+                                       "permafrost")),
     Driver = recode(Driver, 
                     "rocks_volcanic" = "Volcanic Rock",
                     "temp" = "Temperature",
                     "land_shrubland_grassland" = "Land: Shrubland & Grassland",
                     "basin_slope" = "Basin Slope",
-                    "rocks_plutonic" = "Plutonic Rock")
+                    "permafrost" = "Permafrost")
   )
 
 # -------------------------------
