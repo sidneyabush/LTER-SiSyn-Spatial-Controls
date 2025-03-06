@@ -82,20 +82,8 @@ p <- ggplot() +
     guide = guide_legend(override.aes = list(size = 5))  # Increase legend point size
   ) +
   # 2a) Use coord_sf with bounding box to reduce empty space
-  coord_sf(
-    crs = st_crs(3857), 
-    expand = FALSE
-  ) +
-  # 2b) Add scale and north arrow
-  annotation_scale(
-    location = "bl",  
-    width_hint = 0.5,  
-    unit_category = "metric",
-    transform = TRUE,     
-    plot_unit = "km",
-    pad_x = unit(11, "cm"),  
-    pad_y = unit(0.1, "cm") 
-  ) +
+  coord_sf(crs = st_crs("+proj=robin +lon_0=0 +datum=WGS84")) +  # or st_crs("+proj=robin +lon_0=0 +datum=WGS84")
+  # 2b) Add north arrow
   annotation_north_arrow(
     location = "br",
     which_north = "true",
@@ -127,106 +115,6 @@ p_labeled <- p +
   )
 
 print(p_labeled)
-
-# # --------------------------------------------------
-# # 4) Inset Map for UK/Europe (Black & White, Positioned Over Northern Africa)
-# # --------------------------------------------------
-# # Define bounding box for inset map (UK/Europe)
-# inset_xlim <- c(-10, 30)  
-# inset_ylim <- c(49.5, 72)
-# 
-# # Extract coordinates BEFORE filtering
-# drivers_df_inset <- drivers_df_filtered %>%
-#   mutate(Longitude = st_coordinates(.)[,1], Latitude = st_coordinates(.)[,2]) %>%
-#   filter(Longitude > inset_xlim[1] & Longitude < inset_xlim[2],
-#          Latitude > inset_ylim[1] & Latitude < inset_ylim[2]) 
-# 
-# # Create inset map with proper projection
-# inset_map <- ggplot() +
-#   geom_polygon(
-#     data = world, aes(x = long, y = lat, group = group),
-#     fill = "lightgray", color = "white", linewidth = 0.4
-#   ) +
-#   geom_point(
-#     data = drivers_df_inset,
-#     aes(x = Longitude, y = Latitude, fill = Name),
-#     shape = 21, size = 3, stroke = 0.3, color = "black"
-#   ) +
-#   scale_fill_manual(values = cbPalette_lighter) +
-#   
-#   # Keep the inset map in EPSG:4326 (same as world map)
-#   coord_sf(
-#     xlim = inset_xlim,  # Explicit zoom for longitude
-#     ylim = inset_ylim,  # Explicit zoom for latitude
-#     expand = FALSE
-#   ) +
-# 
-#   # Scale bar in km
-#   annotation_scale(
-#     location = "br",
-#     width_hint = 0.3,
-#     height = unit(0.3, "cm"),
-#      transform = TRUE,        # <== Add this line
-#     text_cex = 0.7,
-#     pad_x = unit(0.4, "cm"),
-#     pad_y = unit(0.2, "cm"),
-#     style = "bar",
-#     unit_category = "metric"  # Force km instead of meters
-#   ) +
-#   
-#   # Solid white background
-#   theme_void() +
-#   theme(
-#     legend.position = "none",
-#     panel.background = element_rect(fill = "white", color = "white"),
-#     plot.background = element_rect(fill = "white", color = "white"),
-#     panel.border = element_blank(),
-#     axis.text = element_blank(),
-#     axis.ticks = element_blank(),
-#     panel.grid = element_blank()
-#   )
-# 
-# # Convert inset to a grob
-# inset_grob <- ggplotGrob(inset_map)
-# 
-# plot(inset_grob)
-# 
-# # --------------------------------------------------
-# # 5) Correctly Position Inset Over Egypt & Saudi Arabia
-# # --------------------------------------------------
-# # Define a larger bounding box for the inset
-# inset_xmin <- 20    # Move box more to the east
-# inset_xmax <- 60   # Make it wider
-# inset_ymin <- 15    # Move lower
-# inset_ymax <- 40    # Increase height
-# 
-# 
-# # Ensure the inset map is exactly this size
-# inset_grob <- ggplotGrob(inset_map)  # Convert inset to grob
-# 
-# p_labeled_inset <- p_labeled +
-#   # Place inset map with exact dimensions
-#   annotation_custom(
-#     grob = inset_grob,
-#     xmin = inset_xmin, xmax = inset_xmax,
-#     ymin = inset_ymin, ymax = inset_ymax
-#   ) +
-#   
-#   # Callout lines from inset to UK/Europe region
-#   geom_segment(aes(x = 10, y = 55, xend = inset_xmin + 5, yend = inset_ymax), linewidth = 0.5) +  
-#   geom_segment(aes(x = 35, y = 65, xend = inset_xmax - 5, yend = inset_ymax), linewidth = 0.5) +  
-#   
-#   # Make the black outline EXACTLY match the inset
-#   annotate(
-#     "rect", xmin = inset_xmin, xmax = inset_xmax, ymin = inset_ymin, ymax = inset_ymax,
-#     color = "black", fill = NA, linewidth = 1  # Keep a strong border
-#   )
-# 
-# # Print the corrected map
-# print(p_labeled_inset)
-# 
-# # Save the final map
-# ggsave("world_map_with_corrected_inset_egypt_saudi.png", p_labeled_inset, width = 10, height = 7, dpi = 300)
 
 # --------------------------------------------------
 # 3) Boxplots (Panel B)
@@ -376,10 +264,7 @@ library(maps)
 my_conc_cluster_colors <- c(
   "1" = "#88A2DC",  # Muted Blue (instead of bold primary blue)
   "2" = "#E69F00",  # Warm Muted Orange
-  "3" = "#E2C744",  # Softer Yellow-Gold
-  "4" = "#6BAE75",  # Desaturated Green (instead of bright primary green)
-  "5" = "#B07AA1",  # Muted Neutral Gray (lighter than before)
-  "6" = "#A3A3A3"   # Muted Purple-Pink
+  "3" = "#6BAE75"
 )
 
 my_yield_cluster_colors <- c(
@@ -449,15 +334,6 @@ world_map_base <- ggplot() +
     crs = st_crs(3857), 
     expand = FALSE
   ) +
-  annotation_scale(
-    location = "bl",  
-    width_hint = 0.5,  
-    unit_category = "metric",
-    transform = TRUE,       
-    plot_unit = "km",
-    pad_x = unit(11, "cm"),  
-    pad_y = unit(0.1, "cm")
-  ) +
   annotation_north_arrow(
     location = "br",
     which_north = "true",
@@ -512,10 +388,7 @@ df_FNYield <- df_FNYield %>% mutate(modal_cluster = factor(modal_cluster))
 my_conc_cluster_colors <- c(
   "1" = "#88A2DC",  # Muted Blue (instead of bold primary blue)
   "2" = "#E69F00",  # Warm Muted Orange
-  "3" = "#E2C744",  # Softer Yellow-Gold
-  "4" = "#6BAE75",  # Desaturated Green (instead of bright primary green)
-  "5" = "#B07AA1",  # Muted Neutral Gray (lighter than before)
-  "6" = "gray40"   # Muted Purple-Pink
+  "3" = "#6BAE75"
 )
 
 # 4. Create Panel A: Global map for FNConc modal clusters

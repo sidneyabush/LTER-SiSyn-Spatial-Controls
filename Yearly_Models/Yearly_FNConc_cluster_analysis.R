@@ -48,10 +48,10 @@ wss_plot <- fviz_nbclust(scaled_data, kmeans, method = "wss", k.max = 20) +
 print(wss_plot)
 
 set.seed(123)
-kmeans_result <- kmeans(scaled_data, iter.max = 50, nstart = 50, centers = 6)
+kmeans_result <- kmeans(scaled_data, iter.max = 50, nstart = 50, centers = 3)
 
 scaled_data <- scaled_data %>%
-  mutate(cluster = factor(kmeans_result$cluster, levels = c("1","2","3","4","5","6")))
+  mutate(cluster = factor(kmeans_result$cluster, levels = c("1","2","3")))
 
 ## 4. Create Long-format Data for Box Plots
 long_data <- scaled_data %>%
@@ -71,20 +71,8 @@ long_data <- scaled_data %>%
 my_cluster_colors <- c(
   "1" = "#88A2DC",  # Muted Blue (instead of bold primary blue)
   "2" = "#E69F00",  # Warm Muted Orange
-  "3" = "#E2C744",  # Softer Yellow-Gold
-  "4" = "#6BAE75",  # Desaturated Green (instead of bright primary green)
-  "5" = "#B07AA1",  # Muted Neutral Gray (lighter than before)
-  "6" = "#A3A3A3"   # Muted Purple-Pink
-)
-
-# my_cluster_colors <- c(
-#   "1" = "#88A2DC",
-#   "2" = "#E69F00",
-#   "3" = "#E2C744",
-#   "4" = "#6BAE75",
-#   "5" = "#B07AA1"
-# )
-
+  "3" = "#6BAE75")  # Softer Yellow-Gold
+  
 # Create a lighter version of your cluster colors (adjust the 'amount' as needed)
 my_cluster_colors_lighter <- sapply(my_cluster_colors, function(x) lighten(x, amount = 0.3))
 
@@ -119,7 +107,7 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
 full_scaled <- kept_drivers %>%
   mutate(across(where(is.numeric), ~ scales::rescale(.))) %>%
   as.data.frame()
-full_scaled$cluster <- factor(kmeans_result$cluster, levels = c("1","2","3","4","5","6"))
+full_scaled$cluster <- factor(kmeans_result$cluster, levels = c("1","2","3"))
 
 global_min <- min(full_scaled %>% dplyr::select(-cluster), na.rm = TRUE)
 global_max <- max(full_scaled %>% dplyr::select(-cluster), na.rm = TRUE)
@@ -378,7 +366,7 @@ ggplot(df_shap, aes(x = reorder(feature, mean_abs_shapval), y = mean_abs_shapval
 }
 
 # 2. Generate a plot for each of your 5 clusters
-unique_clusters <- c("1","2","3","4","5","6")  # Adjust as needed
+unique_clusters <- c("1","2","3")  # Adjust as needed
 plot_list <- lapply(seq_along(unique_clusters), function(i) {
 cl <- unique_clusters[i]
 plot_mean_abs_shap(cl, shap_values_FNConc, full_scaled)
@@ -386,7 +374,7 @@ plot_mean_abs_shap(cl, shap_values_FNConc, full_scaled)
 
 # 3. Arrange them in a 3×2 grid
 ncol <- 2
-nrow <- 3  # 3 rows, 2 columns
+nrow <- 2  # 3 rows, 2 columns
 
 # 4. Remove the x-axis label for all but the bottom row (row == nrow)
 for (i in seq_along(plot_list)) {

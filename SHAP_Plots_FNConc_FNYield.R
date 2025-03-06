@@ -45,16 +45,21 @@ output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/
 # Create ggplot LM Plots for predicted vs. observed for Concentration and Yield
 ###############################################################################
 
-# FNConc LM plot (Concentration)
+# ----- For FNConc (Concentration) -----
 df_FNConc <- data.frame(
   predicted = rf_model2_FNConc$predicted,
   observed  = drivers_numeric_FNConc$FNConc  # adjust if needed
 )
-r2_val_FNConc <- format(mean(rf_model2_FNConc$rsq), digits = 3)
-mse_val_FNConc <- format(mean(rf_model2_FNConc$mse), digits = 3)
+
+# Compute OOB R² and RMSE for FNConc
+oob_r2_FNConc <- mean(rf_model2_FNConc$rsq)
+r2_val_FNConc   <- format(oob_r2_FNConc, digits = 3)
+rmse_val_FNConc <- format(sqrt(mean(rf_model2_FNConc$mse)), digits = 3)
+
 lm_plot_FNConc <- ggplot(df_FNConc, aes(x = predicted, y = observed)) +
   geom_point(shape = 16, size = 3) +
-  geom_abline(intercept = 0, slope = 1, color = "#6699CC", linetype = "dashed", size = 1.2) +
+  geom_abline(intercept = 0, slope = 1, color = "#6699CC", 
+              linetype = "dashed", size = 1.2) +
   labs(x = "Predicted", y = "Observed", title = "Concentration") +
   theme_classic(base_size = 14) +
   theme(
@@ -62,21 +67,32 @@ lm_plot_FNConc <- ggplot(df_FNConc, aes(x = predicted, y = observed)) +
     axis.title = element_text(size = 14),
     axis.text = element_text(size = 14)
   ) +
-  annotate("text", x = max(df_FNConc$predicted)*0.2, y = max(df_FNConc$observed)*0.95, 
-           label = bquote(R^2 == .(r2_val_FNConc)), hjust = 0.5, size = 5) +
-  annotate("text", x = max(df_FNConc$predicted)*0.95, y = min(df_FNConc$observed)*1.05, 
-           label = paste("MSE =", mse_val_FNConc), hjust = 1, size = 5)
+  # Annotate with OOB R² on the top left
+  annotate("text", x = max(df_FNConc$predicted)*0.2, 
+           y = max(df_FNConc$observed)*0.95, 
+           label = paste("R² =", r2_val_FNConc), 
+           hjust = 0.5, size = 5) +
+  # Annotate with RMSE on the bottom right
+  annotate("text", x = max(df_FNConc$predicted)*0.95, 
+           y = min(df_FNConc$observed)*1.05, 
+           label = paste("RMSE =", rmse_val_FNConc), 
+           hjust = 1, size = 5)
 
-# FNYield LM plot (Yield)
+# ----- For FNYield (Yield) -----
 df_FNYield <- data.frame(
   predicted = rf_model2_FNYield$predicted,
   observed  = drivers_numeric_FNYield$FNYield  # adjust if needed
 )
-r2_val_FNYield <- format(mean(rf_model2_FNYield$rsq), digits = 3)
-mse_val_FNYield <- format(mean(rf_model2_FNYield$mse), digits = 3)
+
+# Compute OOB R² and RMSE for FNYield
+oob_r2_FNYield <- mean(rf_model2_FNYield$rsq)
+r2_val_FNYield   <- format(oob_r2_FNYield, digits = 3)
+rmse_val_FNYield <- format(sqrt(mean(rf_model2_FNYield$mse)), digits = 3)
+
 lm_plot_FNYield <- ggplot(df_FNYield, aes(x = predicted, y = observed)) +
   geom_point(shape = 16, size = 3) +
-  geom_abline(intercept = 0, slope = 1, color = "#6699CC", linetype = "dashed", size = 1.2) +
+  geom_abline(intercept = 0, slope = 1, color = "#6699CC", 
+              linetype = "dashed", size = 1.2) +
   labs(x = "Predicted", y = NULL, title = "Yield") +
   theme_classic(base_size = 14) +
   theme(
@@ -84,10 +100,16 @@ lm_plot_FNYield <- ggplot(df_FNYield, aes(x = predicted, y = observed)) +
     axis.title = element_text(size = 14),
     axis.text = element_text(size = 14)
   ) +
-  annotate("text", x = max(df_FNYield$predicted)*0.2, y = max(df_FNYield$observed)*0.95, 
-           label = bquote(R^2 == .(r2_val_FNYield)), hjust = 0.5, size = 5) +
-  annotate("text", x = max(df_FNYield$predicted)*0.95, y = min(df_FNYield$observed)*1.05, 
-           label = paste("MSE =", mse_val_FNYield), hjust = 1, size = 5)
+  annotate("text", x = max(df_FNYield$predicted)*0.2, 
+           y = max(df_FNYield$observed)*0.95, 
+           label = paste("R² =", r2_val_FNYield), 
+           hjust = 0.5, size = 5) +
+  annotate("text", x = max(df_FNYield$predicted)*0.95, 
+           y = min(df_FNYield$observed)*1.05, 
+           label = paste("RMSE =", rmse_val_FNYield), 
+           hjust = 1, size = 5)
+
+
 
 ###############################################################################
 # Create SHAP Plots Function (for both Concentration and Yield)
@@ -347,3 +369,4 @@ final_overall_grid_labeled <- final_overall_grid + plot_annotation(tag_levels = 
 ggsave(filename = "Final_Overall_FNConc_FNYield.png", 
        plot = final_overall_grid_labeled,
        width = 11, height = 6, dpi = 300, path = output_dir)
+
