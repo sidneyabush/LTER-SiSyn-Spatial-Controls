@@ -160,25 +160,25 @@ australia_map <- create_regional_map(australia_xlim, australia_ylim)
 # --------------------------------------------------
 # Adjust positions
 final_map <- ggdraw(global_map_labeled) +
-  draw_plot(uk_map, x = 0.35, y = 0.44, width = 0.2, height = 0.2) +
-  draw_plot(scandinavia_map, x = 0.55, y = 0.45, width = 0.2, height = 0.2) +
-  draw_plot(australia_map, x = 0.6, y = 0.25, width = 0.2, height = 0.2) +
+  draw_plot(uk_map, x = 0.345, y = 0.447, width = 0.25, height = 0.25) +
+  draw_plot(scandinavia_map, x = 0.524, y = 0.47, width = 0.25, height = 0.25) +
+  draw_plot(australia_map, x = 0.56, y = 0.12, width = 0.25, height = 0.25) +
   draw_line(
-    x = c(0.42, 0.48),
-    y = c(0.63, 0.66),
-    color = "black", linewidth = 1
+    x = c(0.419, 0.48),
+    y = c(0.68, 0.71),
+    color = "black", linewidth = 0.7
   ) +
-  # Scandinavia line: from bottom-center (x=0.55 + 0.2/2=0.65, y=0.45) to (0.65, 0.40)
+  # Scandinavia line: from bottom-center 
   draw_line(
-    x = c(0.56, 0.65),
-    y = c(0.68, 0.64),
-    color = "black", linewidth = 1
+    x = c(0.54, 0.58),
+    y = c(0.72, 0.66),
+    color = "black", linewidth = 0.7
   ) +
-  # Australia line: from top-center (x=0.60 + 0.2/2=0.70, y=0.25+0.2=0.45) to (0.80, 0.50)
+  # Australia line: from top-center 
   draw_line(
-    x = c(0.7899, 0.86),
-    y = c(0.32, 0.375),
-    color = "black", linewidth = 1
+    x = c(0.788, 0.85),
+    y = c(0.26, 0.32),
+    color = "black", linewidth = 0.7
   )
 
 # print(final_map)

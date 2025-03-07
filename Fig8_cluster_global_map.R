@@ -234,22 +234,48 @@ australia_inlay_FNYield <- create_regional_map(australia_xlim, australia_ylim, d
 
 # 8. Overlay the Regional Inlay Maps onto the Global Maps using cowplot
 final_FNConc_map <- ggdraw(p_FNConc_map) +
-  draw_plot(uk_inlay_FNConc, x = 0.35, y = 0.44, width = 0.2, height = 0.2) +
-  draw_plot(scandinavia_inlay_FNConc, x = 0.55, y = 0.45, width = 0.2, height = 0.2) +
-  draw_plot(australia_inlay_FNConc, x = 0.6, y = 0.25, width = 0.2, height = 0.2) +
-  # Optional connecting lines
-  draw_line(x = c(0.42, 0.48), y = c(0.63, 0.66), color = "black", linewidth = 1) +
-  draw_line(x = c(0.56, 0.65), y = c(0.68, 0.64), color = "black", linewidth = 1) +
-  draw_line(x = c(0.7899, 0.86), y = c(0.32, 0.375), color = "black", linewidth = 1)
+  draw_plot(uk_inlay_FNConc, x = 0.345, y = 0.45, width = 0.25, height = 0.25) +
+  draw_plot(scandinavia_inlay_FNConc, x = 0.523, y = 0.499, width = 0.25, height = 0.25) +
+  draw_plot(australia_inlay_FNConc, x = 0.57, y = 0.12, width = 0.25, height = 0.25) +
+  draw_line(
+    x = c(0.419, 0.48),
+    y = c(0.68, 0.73),
+    color = "black", linewidth = 0.7
+  ) +
+  # Scandinavia line: from bottom-center 
+  draw_line(
+    x = c(0.55, 0.587),
+    y = c(0.76, 0.70),
+    color = "black", linewidth = 0.7
+  ) +
+  # Australia line: from top-center 
+  draw_line(
+    x = c(0.788, 0.85),
+    y = c(0.25, 0.31),
+    color = "black", linewidth = 0.7
+  )
 
 final_FNYield_map <- ggdraw(p_FNYield_map) +
-  draw_plot(uk_inlay_FNYield, x = 0.35, y = 0.44, width = 0.25, height = 0.25) +
-  draw_plot(scandinavia_inlay_FNYield, x = 0.55, y = 0.45, width = 0.25, height = 0.25) +
-  draw_plot(australia_inlay_FNYield, x = 0.6, y = 0.25, width = 0.25, height = 0.25) +
-  # Optional connecting lines
-  draw_line(x = c(0.42, 0.48), y = c(0.63, 0.66), color = "black", linewidth = 1) +
-  draw_line(x = c(0.56, 0.65), y = c(0.68, 0.64), color = "black", linewidth = 1) +
-  draw_line(x = c(0.7899, 0.86), y = c(0.32, 0.375), color = "black", linewidth = 1)
+  draw_plot(uk_inlay_FNYield,x = 0.345, y = 0.45, width = 0.25, height = 0.25) +
+  draw_plot(scandinavia_inlay_FNYield, x = 0.523, y = 0.499, width = 0.25, height = 0.25) +
+  draw_plot(australia_inlay_FNYield, x = 0.57, y = 0.12, width = 0.25, height = 0.25) +
+  draw_line(
+    x = c(0.419, 0.48),
+    y = c(0.68, 0.73),
+    color = "black", linewidth = 0.7
+  ) +
+  # Scandinavia line: from bottom-center 
+  draw_line(
+    x = c(0.55, 0.587),
+    y = c(0.76, 0.70),
+    color = "black", linewidth = 0.7
+  ) +
+  # Australia line: from top-center 
+  draw_line(
+    x = c(0.788, 0.85),
+    y = c(0.25, 0.31),
+    color = "black", linewidth = 0.7
+  )
 
 # 9. Combine the two panels vertically
 combined_map <- ggarrange(final_FNConc_map, final_FNYield_map, 
@@ -262,3 +288,4 @@ print(combined_map)
 # Save the final output
 ggsave("global_map_clusters_with_inlays.png", 
        combined_map, width = 8, height = 8.5, dpi = 300)
+
