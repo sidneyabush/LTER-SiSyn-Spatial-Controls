@@ -70,48 +70,48 @@ scaled_data$cluster <- factor(lookup[as.character(scaled_data$cluster)], levels 
 ## 4. Create Long-format Data for Box Plots
 long_data <- scaled_data %>%
   pivot_longer(-cluster, names_to = "Driver", values_to = "Value") %>%
-mutate(
-  Driver = factor(Driver, levels = c(
-    "FNConc",
-    "elevation","basin_slope",
-    "NOx","P","npp","greenup_day","evapotrans",
-    "precip","temp","snow_cover","permafrost",
-    "rocks_volcanic","rocks_sedimentary","rocks_carbonate_evaporite","rocks_metamorphic", "rocks_plutonic",
-    "land_tundra","land_barren_or_sparsely_vegetated","land_cropland","land_shrubland_grassland",
-    "land_urban_and_built_up_land","land_wetland","land_forest_all")),
-  Driver = recode(Driver,
-                  "FNConc" = "DSi Concentration",
-                  "NOx" = "Nitrate",
-                  "P" = "Phosphorous",
-                  "precip" = "Precip",
-                  "temp" = "Temperature",
-                  "snow_cover" = "Snow Cover",
-                  "npp" = "NPP",
-                  "evapotrans" = "ET",
-                  "greenup_day" = "Greenup Day",
-                  "permafrost" = "Permafrost",
-                  "elevation" = "Elevation",
-                  "basin_slope" = "Basin Slope",
-                  "rocks_volcanic" = "Rock: Volcanic",
-                  "rocks_sedimentary" = "Rock: Sedimentary",
-                  "rocks_carbonate_evaporite" = "Rock: Carbonate & Evaporite",
-                  "rocks_metamorphic" = "Rock: Metamorphic",
-                  "rocks_plutonic" = "Rock: Plutonic",
-                  "land_tundra" = "Land: Tundra",
-                  "land_barren_or_sparsely_vegetated" = "Land: Barren & Sparsely Vegetated",
-                  "land_cropland" = "Land: Cropland",
-                  "land_shrubland_grassland" = "Land: Shrubland & Grassland",
-                  "land_urban_and_built_up_land" = "Land: Urban & Built-up",
-                  "land_wetland" = "Land: Wetland",
-                  "land_forest_all" = "Land: Forest"))
+  mutate(
+    Driver = factor(Driver, levels = c(
+                "FNConc",
+                "elevation","basin_slope",
+                "NOx","P","npp","greenup_day","evapotrans",
+                "precip","temp","snow_cover","permafrost",
+                "rocks_volcanic","rocks_sedimentary","rocks_carbonate_evaporite","rocks_metamorphic", "rocks_plutonic",
+                "land_tundra","land_barren_or_sparsely_vegetated","land_cropland","land_shrubland_grassland",
+                "land_urban_and_built_up_land","land_wetland","land_forest_all")),
+    Driver = recode(Driver,
+              "FNConc" = "DSi Concentration",
+              "NOx" = "Nitrate",
+              "P" = "Phosphorous",
+              "precip" = "Precip",
+              "temp" = "Temperature",
+              "snow_cover" = "Snow Cover",
+              "npp" = "NPP",
+              "evapotrans" = "ET",
+              "greenup_day" = "Greenup Day",
+              "permafrost" = "Permafrost",
+              "elevation" = "Elevation",
+              "basin_slope" = "Basin Slope",
+              "rocks_volcanic" = "Rock: Volcanic",
+              "rocks_sedimentary" = "Rock: Sedimentary",
+              "rocks_carbonate_evaporite" = "Rock: Carbonate & Evaporite",
+              "rocks_metamorphic" = "Rock: Metamorphic",
+              "rocks_plutonic" = "Rock: Plutonic",
+              "land_tundra" = "Land: Tundra",
+              "land_barren_or_sparsely_vegetated" = "Land: Barren & Sparsely Vegetated",
+              "land_cropland" = "Land: Cropland",
+              "land_shrubland_grassland" = "Land: Shrubland & Grassland",
+              "land_urban_and_built_up_land" = "Land: Urban & Built-up",
+              "land_wetland" = "Land: Wetland",
+              "land_forest_all" = "Land: Forest"))
 
 ## 5. Define Cluster Colors
 my_cluster_colors <- c(
   "1" = "#88A2DC",  # Muted Blue (instead of bold primary blue)
   "2" = "#E69F00",  # Warm Muted Orange
-  "3" = "#6BAE75", 
-  "4" = "#999999")  # Softer Yellow-Gold
-  
+  "3" = "#E2C744", 
+  "4" = "#6BAE75")  # Softer Yellow-Gold
+
 # Create a lighter version of your cluster colors (adjust the 'amount' as needed)
 my_cluster_colors_lighter <- sapply(my_cluster_colors, function(x) lighten(x, amount = 0.3))
 
@@ -145,9 +145,8 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
 ## 7. Prepare Data for SHAP Dot Plots
 full_scaled <- drivers_numeric %>%
   mutate(across(where(is.numeric), ~ scales::rescale(.))) %>%
+  mutate(cluster = scaled_data$cluster) %>%  # Add the re-assigned cluster column
   as.data.frame()
-
-full_scaled$cluster <- factor(kmeans_result$cluster, levels = c("1","2","3","4"))
 
 global_min <- min(full_scaled %>% dplyr::select(-cluster), na.rm = TRUE)
 global_max <- max(full_scaled %>% dplyr::select(-cluster), na.rm = TRUE)
@@ -327,7 +326,7 @@ ggsave("FNConc_Yearly_Clusters.png", p, width = 8, height = 5, dpi = 300, path =
 ###############################################################################
 
 # 1. Compute silhouette widths from your k-means result
-sil_obj <- silhouette(kmeans_result$cluster, dist(scaled_data))
+sil_obj <- silhouette(as.numeric(as.character(scaled_data$cluster)), dist(scaled_data))
 mean_sil_value <- mean(sil_obj[, "sil_width"])
 
 # 2. Create a silhouette plot with factoextra
@@ -346,7 +345,7 @@ p_sil <- fviz_silhouette(
   ) +
   annotate(
     "text",
-    x     = nrow(sil_obj) * 0.9,  # Position text near the right side of the plot
+    x     = nrow(sil_obj) * 0.8,  # Position text near the right side of the plot
     y     = mean_sil_value,
     label = paste("Mean =", round(mean_sil_value, 2)),
     color = "gray4",
@@ -364,6 +363,7 @@ p_sil <- fviz_silhouette(
     axis.text.x = element_blank(),  # Remove x-axis text
     axis.ticks.x = element_blank()  # Remove x-axis ticks
   )
+
 # 5. Print and/or save the plot
 print(p_sil)
 ggsave(

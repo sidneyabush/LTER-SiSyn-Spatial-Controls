@@ -9,38 +9,38 @@ library(dplyr)
 library(tidyr)
 library(cluster)
 library(factoextra)
-library(patchwork)   
+library(patchwork)   # For wrap_plots(), plot_annotation()
 library(scales)
 library(fastshap)
 library(RColorBrewer)
-library(grid)       
+library(grid)        # For textGrob() if needed
 library(colorspace)
 
+# Set working directory and output directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model/FNYield"
 
-# -------------------------------
-# 2. Load Data & Model
-# -------------------------------
+## 2. Load Data & Model
 load("FNYield_Yearly_rf_model2_full_new.RData")
 load("FNYield_Yearly_kept_drivers_full_new.RData")
 load("FNYield_Yearly_full_new.RData")
 load("FNYield_Yearly_full_stream_ids_new.RData")
+
 # Load precomputed SHAP values
 load("FNYield_Yearly_shap_values_new.RData")
 
-# -------------------------------
-# 3. Prepare Data & Perform Clustering
-# -------------------------------
+drivers_numeric 
+
+## 3. Prepare Data & Perform Clustering
+# Select driver variables
 data <- drivers_numeric 
-  # %>%
-  # dplyr::select("rocks_volcanic", "basin_slope", "land_shrubland_grassland", "temp", "permafrost")
 
+# Scale them between 0 and 1
 scaled_data <- data %>%
-  mutate(across(where(is.numeric), ~ rescale(.)))
+  mutate(across(where(is.numeric), ~ scales::rescale(.)))
 
-set.seed(123)
-p2 <- fviz_nbclust(scaled_data, kmeans, method = "silhouette", k.max = 20)
+# Optional: check silhouette to pick k
+p2 <- factoextra::fviz_nbclust(scaled_data, kmeans, method = "silhouette", k.max = 20)
 print(p2)
 
 # Evaluate optimal number of clusters using the WSS (elbow) method
@@ -48,32 +48,64 @@ wss_plot <- fviz_nbclust(scaled_data, kmeans, method = "wss", k.max = 20) +
   geom_vline(xintercept = 4, linetype = 2)  # Optional: add a vertical line to highlight potential optimal cluster count
 print(wss_plot)
 
+set.seed(123)
 kmeans_result <- kmeans(scaled_data, iter.max = 50, nstart = 50, centers = 4)
 
-scaled_data <- scaled_data %>%
-  mutate(cluster = factor(kmeans_result$cluster, levels = c("1","2","3","4")))
+# Add initial cluster assignments
+scaled_data$cluster <- factor(kmeans_result$cluster)
 
-# -------------------------------
-# 4. Create Long-format Data for Box Plots
-# -------------------------------
+# Compute the median FNYield (DSi Yield) for each cluster
+cluster_order <- scaled_data %>%
+  group_by(cluster) %>%
+  summarize(median_FNYield = median(FNYield, na.rm = TRUE)) %>%
+  arrange(median_FNYield)
+
+# Create a lookup table: the cluster with the lowest median becomes "1", next "2", etc.
+lookup <- setNames(as.character(1:nrow(cluster_order)), cluster_order$cluster)
+
+# Reassign the clusters using the lookup so that:
+# Cluster 1 = lowest, Cluster 2 = second lowest, Cluster 3 = second highest, Cluster 4 = highest
+scaled_data$cluster <- factor(lookup[as.character(scaled_data$cluster)], levels = c("1", "2", "3", "4"))
+
+## 4. Create Long-format Data for Box Plots
 long_data <- scaled_data %>%
   pivot_longer(-cluster, names_to = "Driver", values_to = "Value") %>%
   mutate(
-    Driver = factor(Driver, levels = c("rocks_volcanic", "temp",
-                                       "land_shrubland_grassland", "basin_slope",
-                                       "permafrost")),
+    Driver = factor(Driver, levels = c(
+      "FNYield",
+      "elevation","basin_slope",
+      "NOx","P","npp","greenup_day","evapotrans",
+      "precip","temp","snow_cover","permafrost",
+      "rocks_volcanic","rocks_sedimentary","rocks_carbonate_evaporite","rocks_metamorphic", "rocks_plutonic",
+      "land_tundra","land_barren_or_sparsely_vegetated","land_cropland","land_shrubland_grassland",
+      "land_urban_and_built_up_land","land_wetland","land_forest_all")),
     Driver = recode(Driver,
-                    "rocks_volcanic" = "Volcanic Rock",
+                    "FNYield" = "DSi Yield",
+                    "NOx" = "Nitrate",
+                    "P" = "Phosphorous",
+                    "precip" = "Precip",
                     "temp" = "Temperature",
-                    "land_shrubland_grassland" = "Land: Shrubland & Grassland",
+                    "snow_cover" = "Snow Cover",
+                    "npp" = "NPP",
+                    "evapotrans" = "ET",
+                    "greenup_day" = "Greenup Day",
+                    "permafrost" = "Permafrost",
+                    "elevation" = "Elevation",
                     "basin_slope" = "Basin Slope",
-                    "permafrost" = "Permafrost")
-  )
+                    "rocks_volcanic" = "Rock: Volcanic",
+                    "rocks_sedimentary" = "Rock: Sedimentary",
+                    "rocks_carbonate_evaporite" = "Rock: Carbonate & Evaporite",
+                    "rocks_metamorphic" = "Rock: Metamorphic",
+                    "rocks_plutonic" = "Rock: Plutonic",
+                    "land_tundra" = "Land: Tundra",
+                    "land_barren_or_sparsely_vegetated" = "Land: Barren & Sparsely Vegetated",
+                    "land_cropland" = "Land: Cropland",
+                    "land_shrubland_grassland" = "Land: Shrubland & Grassland",
+                    "land_urban_and_built_up_land" = "Land: Urban & Built-up",
+                    "land_wetland" = "Land: Wetland",
+                    "land_forest_all" = "Land: Forest"))
 
-# -------------------------------
-# 5. Define a Named Color Vector
-# ------------------------------
-
+## 5. Define Cluster Colors
 my_cluster_colors <- c(
   "1" = "#AC7B32",  # Rich Ochre (Warm Earthy Brown-Gold)
   "2" = "#579C8E",  # Muted Teal (Cool & fresh)
@@ -81,9 +113,8 @@ my_cluster_colors <- c(
   "4" = "#5E88B0"   # Soft Steel Blue (Cool contrast)
 )
 
-
 # Create a lighter version of your cluster colors (adjust the 'amount' as needed)
-my_cluster_colors_lighter <- sapply(my_cluster_colors, function(x) lighten(x, amount = 0.1))
+my_cluster_colors_lighter <- sapply(my_cluster_colors, function(x) lighten(x, amount = 0.3))
 
 ## 6. Generate Box Plots (No manual letters)
 unique_clusters <- sort(unique(long_data$cluster))
@@ -96,11 +127,12 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
     scale_fill_manual(values = my_cluster_colors_lighter, guide = "none") +
     scale_y_continuous(limits = c(0, 1)) +
     labs(x = NULL, y = NULL,
-         title = paste("Cluster", cl)) +
+         title = paste("Cluster", cl)
+    ) +
     theme_classic() +
     theme(
       plot.title   = element_text(size = 14, hjust = 0.5),
-      axis.text.x = element_text(angle = 45, hjust = 1, size = 14),
+      axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 14),
       axis.text.y = element_text(size = 14)
     )
   
@@ -114,8 +146,8 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
 ## 7. Prepare Data for SHAP Dot Plots
 full_scaled <- drivers_numeric %>%
   mutate(across(where(is.numeric), ~ scales::rescale(.))) %>%
+  mutate(cluster = scaled_data$cluster) %>%  # Add the re-assigned cluster column
   as.data.frame()
-full_scaled$cluster <- factor(kmeans_result$cluster, levels = c("1","2","3","4"))
 
 global_min <- min(full_scaled %>% dplyr::select(-cluster), na.rm = TRUE)
 global_max <- max(full_scaled %>% dplyr::select(-cluster), na.rm = TRUE)
@@ -146,25 +178,31 @@ generate_shap_dot_plot_obj <- function(cluster_id, shap_values_FNYield, full_sca
   
   # Recode feature names
   shap_long$feature <- recode(shap_long$feature,
-                              "rocks_volcanic" = "Volcanic Rock",
-                              "basin_slope" = "Basin Slope",
-                              "land_urban_and_built_up_land" = "Land: Urban & Built Up",
+                              "FNYield" = "DSi Yield",
+                              "NOx" = "Nitrate",
+                              "P" = "Phosphorous",
+                              "precip" = "Precip",
                               "temp" = "Temperature",
-                              "land_shrubland_grassland" = "Land: Shrubland & Grassland",
-                              "land_cropland" = "Land: Cropland",
-                              "rocks_sedimentary" = "Sedimentary Rock",
+                              "snow_cover" = "Snow Cover",
                               "npp" = "NPP",
-                              "precip" = "Precipitation",
-                              "land_forest_all" = "Land: Forest",
-                              "rocks_plutonic" = "Plutonic Rock",
-                              "elevation" = "Elevation",
-                              "permafrost" = "Permafrost",
-                              "rocks_metamorphic" = "Metamorphic Rock",
-                              "NOx" = "NOx",
                               "evapotrans" = "ET",
-                              "rocks_carbonate_evaporite" = "Carbonite & Evaporite Rock",
-                              "P"="P")
-  # 
+                              "greenup_day" = "Greenup Day",
+                              "permafrost" = "Permafrost",
+                              "elevation" = "Elevation",
+                              "basin_slope" = "Basin Slope",
+                              "rocks_volcanic" = "Rock: Volcanic",
+                              "rocks_sedimentary" = "Rock: Sedimentary",
+                              "rocks_carbonate_evaporite" = "Rock: Carbonate & Evaporite",
+                              "rocks_metamorphic" = "Rock: Metamorphic",
+                              "rocks_plutonic" = "Rock: Plutonic",
+                              "land_tundra" = "Land: Tundra",
+                              "land_barren_or_sparsely_vegetated" = "Land: Barren & Sparsely Vegetated",
+                              "land_cropland" = "Land: Cropland",
+                              "land_shrubland_grassland" = "Land: Shrubland & Grassland",
+                              "land_urban_and_built_up_land" = "Land: Urban & Built-up",
+                              "land_wetland" = "Land: Wetland",
+                              "land_forest_all" = "Land: Forest")
+  
   # Build dot plot
   dot_plot <- ggplot(shap_long, aes(x = shap_value, y = feature, fill = feature_value)) +
     geom_point(alpha = 0.6, size = 3, shape = 21, stroke = 0.1, color = "black") +
@@ -188,7 +226,7 @@ generate_shap_dot_plot_obj <- function(cluster_id, shap_values_FNYield, full_sca
   return(dot_plot)
 }
 
-## 9. Generate or Load SHAP Values, Set Global SHAP Limits
+## 9. Set Global SHAP Limits
 global_shap_min <- min(shap_values_FNYield, na.rm = TRUE)
 global_shap_max <- max(shap_values_FNYield, na.rm = TRUE)
 
@@ -221,7 +259,7 @@ final_combined_plot <- left_col | right_col
 final_combined_plot <- final_combined_plot +
   plot_layout(guides = "collect") +
   plot_annotation(
-    tag_levels = "A",   # Automatic labeling A, B, C, ...
+    tag_levels = "A",   
     title = NULL,
     caption = NULL,
     theme = theme(
@@ -232,9 +270,9 @@ final_combined_plot <- final_combined_plot +
 
 ## 12. Save the Final Figure
 ggsave(
-  filename = "Combined_Cluster_Boxplot_and_SHAP_DotPlots_5x2.png",
+  filename = "Combined_Cluster_Boxplot_and_SHAP_DotPlots_6x2.png",
   plot = final_combined_plot,
-  width = 12,
+  width = 16,
   height = 18,
   dpi = 300,
   path = output_dir
@@ -247,13 +285,12 @@ print(final_combined_plot)
 # CREATE BOX PLOT OF FNYield BY CLUSTER
 ###############################################################################
 
-# -- STEP 1: Build a data frame with FNConc and cluster for each site --
+# -- STEP 1: Build a data frame with FNYield and cluster for each site --
 df <- data.frame(
   Stream_ID  = drivers_df$Stream_ID,
   Year = drivers_df$Year, 
   FNYield  = drivers_df$FNYield,     # Adjust if your column name is different
   cluster = scaled_data$cluster
-  
 )
 
 # Export df to upload to the map making script
@@ -289,11 +326,8 @@ ggsave("FNYield_Yearly_Clusters.png", p, width = 8, height = 5, dpi = 300, path 
 # CREATE SILHOUETTE PLOT FOR FNYield CLUSTERS
 ###############################################################################
 
-library(cluster)    # for silhouette()
-library(factoextra) # for fviz_silhouette()
-
 # 1. Compute silhouette widths from your k-means result
-sil_obj <- silhouette(kmeans_result$cluster, dist(scaled_data))
+sil_obj <- silhouette(as.numeric(as.character(scaled_data$cluster)), dist(scaled_data))
 mean_sil_value <- mean(sil_obj[, "sil_width"])
 
 # 2. Create a silhouette plot with factoextra
@@ -312,7 +346,7 @@ p_sil <- fviz_silhouette(
   ) +
   annotate(
     "text",
-    x     = nrow(sil_obj) * 0.85,  # Position text near the right side of the plot
+    x     = nrow(sil_obj) * 0.8,  # Position text near the right side of the plot
     y     = mean_sil_value,
     label = paste("Mean =", round(mean_sil_value, 2)),
     color = "gray4",
@@ -330,6 +364,7 @@ p_sil <- fviz_silhouette(
     axis.text.x = element_blank(),  # Remove x-axis text
     axis.ticks.x = element_blank()  # Remove x-axis ticks
   )
+
 # 5. Print and/or save the plot
 print(p_sil)
 ggsave(
@@ -392,7 +427,7 @@ plot_mean_abs_shap <- function(cluster_id, shap_values_FNYield, full_scaled) {
       alpha = 0.8
     ) +
     coord_flip() +
-    # scale_y_continuous(limits = c(0, 15)) +
+    scale_y_continuous(limits = c(0, 6500)) +
     labs(
       x = NULL,
       y = "Mean Absolute SHAP Value",  # We will selectively remove this later
@@ -415,17 +450,18 @@ plot_list <- lapply(seq_along(unique_clusters), function(i) {
 
 # 3. Arrange them in a 3×2 grid
 ncol <- 2
-nrow <- 2  # 5 plots => 3 rows × 2 columns (the last cell is empty)
+nrow <- 2  # 3 rows, 2 columns
 
-# 4. Remove the x-axis label for all but:
+# 4. Remove the x-axis label for all but the bottom row (row == nrow)
 for (i in seq_along(plot_list)) {
   row_number <- ceiling(i / ncol)
-  # Keep the x-axis label only if this plot is in the bottom row (row == nrow)
-  # or if it is the 4th plot (i == 4, corresponding to cluster 4 in row 2 col 2).
-  if (!(row_number == nrow || i == 4)) {
-    plot_list[[i]] <- plot_list[[i]] + theme(axis.title.x = element_blank())
+  
+  # Keep the x-axis label only if this is the bottom row
+  if (row_number != nrow) {
+    plot_list[[i]] <- plot_list[[i]] + theme(axis.title.x = element_blank(), axis.text.x = element_blank())
   }
 }
+
 
 final_shap_grid <- wrap_plots(plot_list, ncol = ncol, nrow = nrow)
 print(final_shap_grid)
@@ -434,13 +470,9 @@ print(final_shap_grid)
 ggsave(
   filename = "MeanAbsSHAP_Grid_3x2.png",
   plot     = final_shap_grid,
-  width    = 10,
-  height   = 11,
+  width    = 12,
+  height   = 9,
   dpi      = 300,
   path     = output_dir
 )
-
-
-
-
 
