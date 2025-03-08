@@ -1,23 +1,59 @@
-# --------------------------------------------------
-# World Map for Clusters with Inlay Maps for Both Panels
-# --------------------------------------------------
-library(tidyverse)
+library(dplyr)
+library(stringr)
 library(ggplot2)
-library(ggpubr)
-library(sf)
-library(ggspatial)
-library(cowplot)  # For overlaying inlay maps
-
-library(tidyverse)
-library(ggplot2)
-library(ggpubr)
 library(maps)
+library(patchwork)
+library(scales)
+library(colorspace)
+library(ggrepel)
+library(ggspatial)
+library(sf)
+library(ggpubr)
+library(cowplot)
+
+# --------------------------------------------------
+# 1) Data Preparation
+# --------------------------------------------------
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
+rm(list = ls())
+
+record_length <- 5
+
+drivers_df_uncleaned <- read.csv(sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years_uncleaned.csv", record_length)) %>%
+  distinct(Stream_ID, .keep_all = TRUE)
+
+drivers_df_final_sites <- read.csv(sprintf("All_Drivers_Harmonized_Yearly_FNConc_FNYield_%d_years.csv", record_length)) %>%
+  distinct(Stream_ID, .keep_all = TRUE)
+
+drivers_df_filtered <- drivers_df_final_sites %>%
+  left_join(drivers_df_uncleaned, by = "Stream_ID") %>%
+  select(-ends_with(".y"), -contains("Gen"), -contains("Flux")) %>%
+  select(-Year.x, -X, -DecYear, -num_days, -drainSqKm, -chemical, 
+         -Stream_Name, -LTER, -contains("Coord"), -cycle0, -prop_area, 
+         -contains("elevation_"), -contains("basin_slope_"), -contains("major"),
+         -contains("permafrost_"), -Use_WRTDS) %>%
+  rename_with(~ str_remove(., "\\.x$"), ends_with(".x"))
+
+drivers_df_filtered$Name <- factor(
+  drivers_df_filtered$Name,
+  levels = c("Tropical", "Humid Subtropical", "Humid Temperate", 
+             "Humid Continental", "Mediterranean", "Semi-Arid", 
+             "Arid", "Subarctic")
+)
+
+# Convert to sf in WGS84 (lat/lon)
+drivers_df_filtered <- st_as_sf(drivers_df_filtered, 
+                                coords = c("Longitude", "Latitude"), crs = 4326)
+drivers_df_filtered <- drivers_df_filtered %>%
+  mutate(Longitude = st_coordinates(.)[,1],
+         Latitude = st_coordinates(.)[,2])
 
 # Define discrete color palettes for clusters
 my_conc_cluster_colors <- c(
   "1" = "#88A2DC",  # Muted Blue (instead of bold primary blue)
   "2" = "#E69F00",  # Warm Muted Orange
-  "3" = "#6BAE75"
+  "3" = "#6BAE75", 
+  "4" = "darkgray"
 )
 
 my_yield_cluster_colors <- c(

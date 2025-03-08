@@ -9,11 +9,11 @@ library(dplyr)
 library(tidyr)
 library(cluster)
 library(factoextra)
-library(patchwork)   # For wrap_plots(), plot_annotation()
+library(patchwork)   
 library(scales)
 library(fastshap)
 library(RColorBrewer)
-library(grid)        # For textGrob() if needed
+library(grid)       
 library(colorspace)
 
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
@@ -32,10 +32,11 @@ load("FNYield_Yearly_shap_values_new.RData")
 # -------------------------------
 # 3. Prepare Data & Perform Clustering
 # -------------------------------
-data <- kept_drivers %>%
-  dplyr::select("rocks_volcanic", "basin_slope", "land_shrubland_grassland", "temp", "permafrost")
+data <- drivers_numeric 
+  # %>%
+  # dplyr::select("rocks_volcanic", "basin_slope", "land_shrubland_grassland", "temp", "permafrost")
 
-scaled_data <- data %>% 
+scaled_data <- data %>%
   mutate(across(where(is.numeric), ~ rescale(.)))
 
 set.seed(123)
@@ -58,10 +59,10 @@ scaled_data <- scaled_data %>%
 long_data <- scaled_data %>%
   pivot_longer(-cluster, names_to = "Driver", values_to = "Value") %>%
   mutate(
-    Driver = factor(Driver, levels = c("rocks_volcanic", "temp", 
-                                       "land_shrubland_grassland", "basin_slope", 
+    Driver = factor(Driver, levels = c("rocks_volcanic", "temp",
+                                       "land_shrubland_grassland", "basin_slope",
                                        "permafrost")),
-    Driver = recode(Driver, 
+    Driver = recode(Driver,
                     "rocks_volcanic" = "Volcanic Rock",
                     "temp" = "Temperature",
                     "land_shrubland_grassland" = "Land: Shrubland & Grassland",
@@ -71,14 +72,7 @@ long_data <- scaled_data %>%
 
 # -------------------------------
 # 5. Define a Named Color Vector
-# -------------------------------
-# my_cluster_colors <- c(
-#   "1" = "#AC7B32",  # Rich Ochre (Warm Earthy Brown-Gold)  
-#   "2" = "#579C8E",  # Muted Teal (Cool & fresh)  
-#   "3" = "#C26F86",  # Dusty Rose (Soft but warm)  
-#   "4" = "#8F7E4F",  # Olive-Taupe (Neutral & grounding)  
-#   "5" = "#5E88B0"   # Soft Steel Blue (Cool contrast)  
-#   )
+# ------------------------------
 
 my_cluster_colors <- c(
   "1" = "#AC7B32",  # Rich Ochre (Warm Earthy Brown-Gold)
@@ -118,7 +112,7 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
 })
 
 ## 7. Prepare Data for SHAP Dot Plots
-full_scaled <- kept_drivers %>%
+full_scaled <- drivers_numeric %>%
   mutate(across(where(is.numeric), ~ scales::rescale(.))) %>%
   as.data.frame()
 full_scaled$cluster <- factor(kmeans_result$cluster, levels = c("1","2","3","4"))
@@ -156,7 +150,7 @@ generate_shap_dot_plot_obj <- function(cluster_id, shap_values_FNYield, full_sca
                               "basin_slope" = "Basin Slope",
                               "land_urban_and_built_up_land" = "Land: Urban & Built Up",
                               "temp" = "Temperature",
-                              "land_shrubland_grassland" = "Land: Shrubland & Grassland", 
+                              "land_shrubland_grassland" = "Land: Shrubland & Grassland",
                               "land_cropland" = "Land: Cropland",
                               "rocks_sedimentary" = "Sedimentary Rock",
                               "npp" = "NPP",
@@ -170,7 +164,7 @@ generate_shap_dot_plot_obj <- function(cluster_id, shap_values_FNYield, full_sca
                               "evapotrans" = "ET",
                               "rocks_carbonate_evaporite" = "Carbonite & Evaporite Rock",
                               "P"="P")
-  
+  # 
   # Build dot plot
   dot_plot <- ggplot(shap_long, aes(x = shap_value, y = feature, fill = feature_value)) +
     geom_point(alpha = 0.6, size = 3, shape = 21, stroke = 0.1, color = "black") +
@@ -366,24 +360,30 @@ plot_mean_abs_shap <- function(cluster_id, shap_values_FNYield, full_scaled) {
   # Recode feature names for the y-axis
   df_shap$feature <- recode(
     df_shap$feature,
-    "rocks_volcanic" = "Volcanic Rock",
-    "basin_slope" = "Basin Slope",
-    "land_urban_and_built_up_land" = "Land: Urban & Built Up",
+    "NOx" = "Nitrate",
+    "P" = "Phosphorous",
+    "precip" = "Precip", 
     "temp" = "Temperature",
-    "land_shrubland_grassland" = "Land: Shrubland & Grassland", 
-    "land_cropland" = "Land: Cropland",
-    "rocks_sedimentary" = "Sedimentary Rock",
+    "snow_cover" = "Snow Cover",
     "npp" = "NPP",
-    "precip" = "Precipitation",
-    "land_forest_all" = "Land: Forest",
-    "rocks_plutonic" = "Plutonic Rock",
-    "elevation" = "Elevation",
+    "evapotrans" = "ET", 
+    "greenup_day" = "Greenup Day",
     "permafrost" = "Permafrost",
-    "rocks_metamorphic" = "Metamorphic Rock",
-    "NOx" = "NOx",
-    "evapotrans" = "ET",
-    "rocks_carbonate_evaporite" = "Carbonite & Evaporite Rock",
-    "P"="P")
+    "elevation" = "Elevation",
+    "basin_slope" = "Basin Slope",
+    "FNConc" = "DSi Concentration",
+    "rocks_volcanic" = "Rock: Volcanic",
+    "rocks_sedimentary" = "Rock: Sedimentary",
+    "rocks_carbonate_evaporite" = "Rock: Carbonate & Evaporite",
+    "rocks_metamorphic" = "Rock: Metamorphic",
+    "rocks_plutonic" = "Rock: Plutonic",
+    "land_tundra" = "Land: Tundra", 
+    "land_barren_or_sparsely_vegetated" = "Land: Barren & Sparsely Vegetated",
+    "land_cropland" = "Land: Cropland",
+    "land_shrubland_grassland" = "Land: Shrubland & Grassland",
+    "land_urban_and_built_up_land" = "Land: Urban & Built-up",
+    "land_wetland" = "Land: Wetland",
+    "land_forest_all" = "Land: Forest")
   
   ggplot(df_shap, aes(x = reorder(feature, mean_abs_shapval), y = mean_abs_shapval)) +
     geom_bar(
