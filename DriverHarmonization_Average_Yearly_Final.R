@@ -793,7 +793,7 @@ tot_si <- tot %>%
   dplyr::select(Stream_ID, Year, drainSqKm, NOx, P, precip, Q,
                 temp, Max_Daylength, prop_area, npp, evapotrans,
                 cycle0, permafrost_mean_m, elevation_mean_m, 
-                basin_slope_mean_degree, FNConc, FNYield, GenConc, GenYield, 
+                basin_slope_mean_degree, FNConc, FNYield, GenConc, GenYield, major_rock, major_land,
                 contains("rocks"), contains("land_")) %>%
   dplyr::rename(snow_cover = prop_area, 
                 greenup_day = cycle0,
@@ -827,20 +827,19 @@ num_unique_stream_ids <- tot_annual %>%
 
 print(num_unique_stream_ids)
 
-# Export annual data with dynamic filename
-write.csv(as.data.frame(tot_annual), 
-          sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.csv", record_length),
-          row.names = FALSE)
+# # Export annual data with dynamic filename
+# write.csv(as.data.frame(tot_annual), 
+#           sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.csv", record_length),
+#           row.names = FALSE)
 
-# Read in and preprocess the data
 drivers_df <- tot_annual %>%
-  #filter(!grepl("^MCM", Stream_ID)) %>% # Remove all Stream_IDs that start with "MCM", no spatial data
-  #filter(!grepl("^Cameroon", Stream_ID)) %>% # Remove all Stream_IDs that start with "Cameroon", no spatial data
-  #filter(!grepl("^ARC__", Stream_ID)) %>% # Currently do not have basin slope for this site
+  # Convert blank strings to NA in all character columns
+  mutate(across(where(is.character), ~ na_if(., ""))) %>%
   select(FNConc, everything()) %>%
-  dplyr::mutate_at(vars(21:32), ~replace(., is.na(.), 0)) %>%
-  filter(complete.cases(.)) %>% 
-  filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc)
+  # Replace NAs in selected numeric columns with 0 (if desired)
+  mutate_at(vars(23:34), ~ replace(., is.na(.), 0)) %>%
+  filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc) %>%
+  filter(complete.cases(.))
 
 # Count the number of unique Stream_IDs
 num_unique_stream_ids <- drivers_df %>%
@@ -897,7 +896,7 @@ print(unique_stream_id_count)
 drivers_df <- drivers_df %>%
   group_by(Stream_ID) %>%
   filter(n_distinct(Year) >= 5) %>%
-  ungroup()
+  ungroup() 
 
 # Count the number of unique Stream_IDs after filtering
 unique_stream_id_count <- drivers_df %>%
@@ -935,11 +934,11 @@ tot_average <- drivers_df %>%
     FNYield = mean(FNYield, na.rm = TRUE),
     GenConc = mean(GenConc, na.rm = TRUE),
     GenYield = mean(GenYield, na.rm = TRUE),
-    
+
     # Calculate q_5 (5th percentile) and q_95 (95th percentile) for numerical variables
     q_5 = quantile(Q, 0.05, na.rm = TRUE),
     q_95 = quantile(Q, 0.95, na.rm = TRUE),
-    
+
     # Categorical variables: grab the first value
     across(contains("rocks"), ~ first(.)),
     across(contains("land_"), ~ first(.))
@@ -957,10 +956,10 @@ num_unique_stream_ids <- tot_average %>%
   pull(Stream_ID) %>%
   n_distinct()
 
-print(num_unique_stream_ids) 
+print(num_unique_stream_ids)
 
 # Export average data with dynamic filename
-write.csv(as.data.frame(tot_average), 
+write.csv(as.data.frame(tot_average),
           sprintf("AllDrivers_Harmonized_Average_filtered_%d_years.csv", record_length),
           row.names = FALSE)
 
