@@ -548,8 +548,14 @@ wrtds_NP_wide <- wrtds_NP %>%
 # ## ------------------------------------------------------- ##
 #           # Import RAW N_P Data ---- 
 # ## ------------------------------------------------------- ##
-# Read in the dataset
-raw_NP <- read.csv("20241003_masterdata_chem.csv")
+raw_NP <- read.csv("20241003_masterdata_chem.csv") %>%
+  filter(variable %in% c("NOx", "NO3", "SRP", "PO4")) %>%
+  mutate(mgL = case_when(
+    variable %in% c("NOx", "NO3") ~ value * 62 / 1000,
+    variable == "PO4" ~ value * 95 / 1000,
+    variable == "SRP" ~ value * 31 / 1000,
+    TRUE ~ NA_real_
+  ))
 
 # Step 1: Filter, create Stream_ID, simplify solutes, and calculate median
 raw_NP_median <- raw_NP %>%
@@ -565,7 +571,7 @@ raw_NP_median <- raw_NP %>%
   filter(!is.na(solute_simplified)) %>%  # Keep only relevant solutes (NOx, P)
   dplyr::group_by(Stream_ID, Year, solute_simplified) %>%  # Group by Stream_ID, year, and solute
   summarise(
-    median_value = median(value, na.rm = TRUE),  # Calculate median value
+    median_value = median(mgL, na.rm = TRUE),  # Calculate median value
     .groups = "drop"  # Ungroup after summarizing
   )
 
@@ -583,23 +589,37 @@ raw_NP_wide <- raw_NP_median %>%
 # Perform a full outer join to combine `wrtds_NP_wide` and `raw_NP_wide`
 combined_NP <- full_join(wrtds_NP_wide, raw_NP_wide, by = c("Stream_ID", "Year"))
 
-# Rename columns to keep source identifiers for clarity
+# Fill gaps in WRTDS data with raw data where necessary
 combined_NP <- combined_NP %>%
+  # Rename columns so that we have source identifiers
   rename(
     P_wrtds = P.x,      # P from WRTDS
     NOx_wrtds = NOx.x,  # NOx from WRTDS
     P_raw = P.y,        # P from raw data
     NOx_raw = NOx.y     # NOx from raw data
-  )
-
-# Fill gaps in WRTDS data with raw data where necessary
-combined_NP <- combined_NP %>%
-  mutate(
-    P = ifelse(is.na(P_wrtds), P_raw, P_wrtds),         # Prioritize P_wrtds
-    NOx = ifelse(is.na(NOx_wrtds), NOx_raw, NOx_wrtds)  # Prioritize NOx_wrtds
   ) %>%
-  select(-P_wrtds, -NOx_wrtds, -P_raw, -NOx_raw)  # Clean up intermediate columns
+  # Create source indicator columns
+  mutate(
+    P_source = if_else(is.na(P_wrtds), "raw", "WRTDS"),
+    NOx_source = if_else(is.na(NOx_wrtds), "raw", "WRTDS")
+  ) %>%
+  # Fill gaps: if WRTDS is missing, use raw data
+  mutate(
+    P = if_else(is.na(P_wrtds), P_raw, P_wrtds),
+    NOx = if_else(is.na(NOx_wrtds), NOx_raw, NOx_wrtds)
+  ) %>%
+  # Drop the intermediate columns
+  select(-P_wrtds, -NOx_wrtds, -P_raw, -NOx_raw)
 
+
+streams_gapfill <- combined_NP %>%
+  filter(P_source == "raw" | NOx_source == "raw") %>%
+  distinct(Stream_ID) %>%
+  pull(Stream_ID)
+
+streams_gapfill_df <- combined_NP %>%
+  filter(P_source == "raw" | NOx_source == "raw") %>%
+  distinct(Stream_ID)
 
 # ## ------------------------------------------------------- ##
 #           # Merge Combined Data with `tot` ----
@@ -651,8 +671,6 @@ num_unique_missing_streams <- missing_N_P_data_summary %>%
 print((num_unique_missing_streams))  # Number of missing entries
 print(head(missing_N_P_data_summary))  # Preview first few rows
 
-library(dplyr)
-
 # Combine the missing data summaries using full_join so that every site/year combination is retained
 missing_all_summary <- missing_N_P_data_summary %>%
   full_join(missing_elev_slope_data_summary, by = c("Stream_ID", "Year")) %>%
@@ -670,7 +688,6 @@ num_unique_stream_ids <- tot %>%
   n_distinct()
 
 print(num_unique_stream_ids)
-
 
 ## ------------------------------------------------------- ##
               #  Silicate Weathering ----
