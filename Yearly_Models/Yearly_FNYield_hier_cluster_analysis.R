@@ -272,8 +272,7 @@ generate_shap_dot_plot_obj <- function(cluster_id, shap_values_FNYield, full_sca
   cluster_indices <- which(full_scaled$cluster == cluster_id)
   
   # Extract numeric features, remove 'cluster' from the data
-  cluster_data <- full_scaled[cluster_indices, , drop = FALSE] %>%
-    dplyr::select(-cluster)
+  cluster_data <- full_scaled[cluster_indices, , drop = FALSE] %>% dplyr::select(-cluster)
   cluster_data$id <- seq_len(nrow(cluster_data))
   
   # Pivot to long for the feature values
@@ -284,10 +283,14 @@ generate_shap_dot_plot_obj <- function(cluster_id, shap_values_FNYield, full_sca
   shap_values_FNYield_df <- as.data.frame(shap_values_FNYield)[cluster_indices, , drop = FALSE] %>%
     mutate(id = seq_len(nrow(.)))
   
-  # Pivot SHAP to long
+  # Pivot SHAP to long and join with the feature values
   shap_long <- shap_values_FNYield_df %>%
     pivot_longer(cols = -id, names_to = "feature", values_to = "shap_value") %>%
     left_join(cluster_long, by = c("id", "feature"))
+  
+  # Filter out any rows with "rock" in the feature name (case-insensitive)
+  shap_long <- shap_long %>% 
+    filter(!grepl("rock", feature, ignore.case = TRUE))
   
   # Order features by mean absolute SHAP
   overall_feature_importance <- shap_long %>%
@@ -311,11 +314,6 @@ generate_shap_dot_plot_obj <- function(cluster_id, shap_values_FNYield, full_sca
     "permafrost" = "Permafrost",
     "elevation" = "Elevation",
     "basin_slope" = "Basin Slope",
-    "rocks_volcanic" = "Rock: Volcanic",
-    "rocks_sedimentary" = "Rock: Sedimentary",
-    "rocks_carbonate_evaporite" = "Rock: Carbonate & Evaporite",
-    "rocks_metamorphic" = "Rock: Metamorphic",
-    "rocks_plutonic" = "Rock: Plutonic",
     "land_tundra" = "Land: Tundra",
     "land_barren_or_sparsely_vegetated" = "Land: Barren & Sparsely Vegetated",
     "land_cropland" = "Land: Cropland",
@@ -516,7 +514,9 @@ plot_mean_abs_shap <- function(cluster_id, shap_values_FNYield, full_scaled) {
     feature          = names(mean_abs_shap),
     mean_abs_shapval = as.numeric(mean_abs_shap)
   ) %>%
-    arrange(desc(mean_abs_shapval))
+    arrange(desc(mean_abs_shapval)) %>%
+    filter(!grepl("rock", feature, ignore.case = TRUE))
+  
   
   # Recode feature names for the plot
   df_shap$feature <- recode(
