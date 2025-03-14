@@ -39,27 +39,55 @@ drivers_combined <- drivers_df %>%
 drivers_numeric_consolidated_lith <- drivers_combined %>%
   filter(trimws(major_rock) != "") %>%
   mutate(consolidated_rock = case_when(
-    major_rock == "volcanic"                                   ~ "volcanic",
-    major_rock == "sedimentary"                                ~ "sedimentary",
-    major_rock == "metamorphic"                                ~ "metamorphic",
-    major_rock == "plutonic"                                   ~ "plutonic",
-    major_rock == "carbonate_evaporite"                       ~ "sedimentary",
-    major_rock == "sedimentary; carbonate_evaporite"          ~ "sedimentary",
-    major_rock == "volcanic; plutonic"                         ~ "igneous",
-    major_rock %in% c("plutonic; metamorphic", "volcanic; plutonic; metamorphic") ~ "igneous/metamorphic",
-    major_rock %in% c("sedimentary; plutonic; carbonate_evaporite; metamorphic",
+    major_rock %in% c("volcanic", 
                       "volcanic; sedimentary; carbonate_evaporite",
-                      "volcanic; carbonate_evaporite",
-                      "sedimentary; metamorphic",
-                      "carbonate_evaporite; metamorphic")       ~ "mixed"
-  )) %>%
+                      "volcanic; carbonate_evaporite", 
+                      "volcanic; plutonic", 
+                      "volcanic; plutonic; metamorphic")                                 ~ "volcanic",
+    major_rock %in% c("sedimentary", 
+                      "sedimentary; carbonate_evaporite", 
+                      "sedimentary; plutonic; carbonate_evaporite; metamorphic",
+                      "sedimentary; metamorphic")                                        ~ "sedimentary",
+    major_rock %in% c("metamorphic", 
+                      "plutonic", 
+                      "plutonic; metamorphic", 
+                      "carbonate_evaporite; metamorphic")                                ~ "metamorphic/ plutonic",
+    major_rock == "carbonate_evaporite"                                                  ~ "carbonate/ evaporite")
+    ) %>%
   mutate(consolidated_rock = factor(consolidated_rock,
-                                    levels = c("volcanic", "sedimentary", "metamorphic",
-                                               "plutonic", "igneous", "igneous/metamorphic", "mixed")))
+                                    levels = c("volcanic", "sedimentary", "metamorphic/ plutonic",
+                                                 "carbonate/ evaporite")))
+
+## Lump all volcanic into one "volcanic" category
 
 ggplot(drivers_numeric_consolidated_lith, aes(x = consolidated_rock, y = FNYield)) +
   geom_boxplot() +
   labs(x = "Lithology Category", y = "DSi Yield") +
+  theme_classic()
+
+# Or using dplyr:
+drivers_numeric_consolidated_lith %>% 
+  count(consolidated_rock)
+
+# Manually assign clusters based on the consolidated rock types
+# (Assuming the factor levels are ordered as: volcanic, sedimentary, metamorphic/ plutonic, carbonate/ evaporite)
+rock_cluster_df <- drivers_numeric_consolidated_lith %>%
+  mutate(cluster = as.numeric(consolidated_rock)) %>%  # volcanic=1, sedimentary=2, etc.
+  select(cluster, starts_with("rocks_"))
+
+# Convert the data to long format so that each rock type's percentage is in its own row
+rock_long <- rock_cluster_df %>%
+  pivot_longer(cols = starts_with("rocks_"),
+               names_to = "Rock_Type",
+               values_to = "Percentage")
+
+# Plot histograms of the percentage values for each rock type by manually assigned cluster
+ggplot(rock_long, aes(x = Percentage)) +
+  geom_histogram(binwidth = 5, color = "black", fill = "skyblue", alpha = 0.7) +
+  facet_grid(Rock_Type ~ cluster, scales = "free_x") +
+  labs(title = "Distribution of Rock Type Percentages by Cluster",
+       x = "Percentage",
+       y = "Count") +
   theme_classic()
 
 ## 3. Prepare Data & Perform Clustering
@@ -411,3 +439,4 @@ final_shap_grid <- wrap_plots(plot_list, ncol = ncol, nrow = nrow)
 print(final_shap_grid)
 ggsave(filename = "MeanAbsSHAP_Grid.png", plot = final_shap_grid,
        width = 12, height = 9, dpi = 300, path = output_dir)
+
