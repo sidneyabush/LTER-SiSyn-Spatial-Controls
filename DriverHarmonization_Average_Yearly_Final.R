@@ -79,6 +79,16 @@ tot <- wrtds_df %>%
   # Rename columns with .x by removing the suffix
   rename_with(~ str_remove(., "\\.x$"))
 
+# -----------------------------------------------------------
+# Import Flashiness Data and Merge with tot ----
+# -----------------------------------------------------------
+# Import the flashiness CSV that contains Stream_ID and RBFI
+flashiness <- read_csv("flashiness_by_stream_id.csv")
+
+# Merge the flashiness data into the tot dataset by Stream_ID
+tot <- tot %>% 
+  left_join(flashiness, by = "Stream_ID")
+
 num_unique_stream_ids <- tot %>%
   pull(Stream_ID) %>%
   n_distinct()
@@ -153,7 +163,7 @@ daylen_range <- daylen %>%
 
 # Ensure the result is left-joined to "tot"
 tot <- tot %>% 
-  left_join(daylen_range, by = "Stream_Name") %>%
+  left_join(daylen_range, by = "Stream_Name", relationship = "many-to-many") %>%
   distinct(Stream_ID, Year, .keep_all = TRUE) %>%
   # Remove columns with .x
   dplyr::select(-contains(".x")) %>%
@@ -248,7 +258,7 @@ for (i in 1:length(vars_annual)) {
 
 year_cols_melt <- year_cols_melt[,-2]
 
-year_cols_melt <- merge(year_cols_melt, units_df_annual, by="driver")
+year_cols_melt <- merge(year_cols_melt, units_df_annual, by = "driver")
 
 # Parse out character data
 character_cols <- si_drivers[,(colnames(si_drivers) %like% character_vars)]
@@ -276,7 +286,7 @@ drivers_cast <- drivers_cropped %>%
 
 # Combine with character columns: 
 all_spatial <- drivers_cast %>% 
-  left_join(character_cols, by = "Stream_Name") %>%
+  left_join(character_cols, by = "Stream_Name", relationship = "many-to-many") %>%
   distinct(Stream_Name, Year, .keep_all = TRUE) %>%
   # Remove columns with .x
   dplyr::select(-contains(".x")) %>%
@@ -549,13 +559,7 @@ wrtds_NP_wide <- wrtds_NP %>%
 #           # Import RAW N_P Data ---- 
 # ## ------------------------------------------------------- ##
 raw_NP <- read.csv("20241003_masterdata_chem.csv") %>%
-  filter(variable %in% c("NOx", "NO3", "SRP", "PO4")) %>%
-  mutate(mgL = case_when(
-    variable %in% c("NOx", "NO3") ~ value * 62 / 1000,
-    variable == "PO4" ~ value * 95 / 1000,
-    variable == "SRP" ~ value * 31 / 1000,
-    TRUE ~ NA_real_
-  ))
+  filter(variable %in% c("NOx", "NO3", "SRP", "PO4"))
 
 # Step 1: Filter, create Stream_ID, simplify solutes, and calculate median
 raw_NP_median <- raw_NP %>%
@@ -571,7 +575,7 @@ raw_NP_median <- raw_NP %>%
   filter(!is.na(solute_simplified)) %>%  # Keep only relevant solutes (NOx, P)
   dplyr::group_by(Stream_ID, Year, solute_simplified) %>%  # Group by Stream_ID, year, and solute
   summarise(
-    median_value = median(mgL, na.rm = TRUE),  # Calculate median value
+    median_value = median(value, na.rm = TRUE),  # Calculate median value
     .groups = "drop"  # Ungroup after summarizing
   )
 
@@ -617,14 +621,9 @@ streams_gapfill <- combined_NP %>%
   distinct(Stream_ID) %>%
   pull(Stream_ID)
 
-streams_gapfill_df <- combined_NP %>%
-  filter(P_source == "raw" | NOx_source == "raw") %>%
-  distinct(Stream_ID)
-
 # ## ------------------------------------------------------- ##
 #           # Merge Combined Data with `tot` ----
 # ## ------------------------------------------------------- ##
-
 # Merge the combined dataset with `tot`
 tot <- tot %>%
   left_join(combined_NP, by = c("Stream_ID", "Year")) %>%
@@ -673,8 +672,8 @@ print(head(missing_N_P_data_summary))  # Preview first few rows
 
 # Combine the missing data summaries using full_join so that every site/year combination is retained
 missing_all_summary <- missing_N_P_data_summary %>%
-  full_join(missing_elev_slope_data_summary, by = c("Stream_ID", "Year")) %>%
-  full_join(missing_spatial_data_summary, by = c("Stream_ID", "Year"))
+  full_join(missing_elev_slope_data_summary, by = c("Stream_ID", "Year"), relationship = "many-to-many") %>%
+  full_join(missing_spatial_data_summary, by = c("Stream_ID", "Year"), relationship = "many-to-many")
 
 # Check the combined summary
 print(head(missing_all_summary))
@@ -786,20 +785,19 @@ num_unique_stream_ids <- tot %>%
 
 print(num_unique_stream_ids)
 
-# === New Block: Incorporate Land Cover Data ===
 # -----------------------------------------------------------
 # New: Incorporate Land Cover Data ----
 # -----------------------------------------------------------
 lulc <- read.csv("LULC_TempVar_GLC1000m.csv", stringsAsFactors = FALSE) %>%
   dplyr::select(Stream_Name, Year, LandClass, prop) %>%
   mutate(prop = if_else(is.na(prop) | prop == 0, prop, prop * 100))
+
 lulc_wide <- lulc %>%
   pivot_wider(names_from = LandClass, 
               values_from = prop, 
               names_prefix = "land_")
 tot <- tot %>% dplyr::select(-starts_with("land_"), -major_land)
 tot <- tot %>% left_join(lulc_wide, by = c("Stream_Name", "Year"))
-
 
 # Sum all land use types that contain "forest" into a new column `land_forest_all`
 tot <- tot %>%

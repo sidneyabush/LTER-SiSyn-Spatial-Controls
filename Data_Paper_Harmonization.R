@@ -127,7 +127,7 @@ drivers_cast <- drivers_cropped %>%
   pivot_wider(names_from = driver, values_from = value)
 
 all_spatial <- drivers_cast %>% 
-  left_join(character_cols, by = "Stream_Name") %>%
+  left_join(character_cols, by = "Stream_Name", relationship = "many-to-many") %>%
   distinct(Stream_Name, Year, .keep_all = TRUE) %>%
   dplyr::select(-contains(".x")) %>%
   rename_with(~ str_remove(., "\\.x$"))
@@ -157,7 +157,7 @@ daylen_range <- daylen %>%
   rename_with(~ str_remove(., "\\.y$"))
 
 tot <- tot %>% 
-  left_join(daylen_range, by = "Stream_Name") %>%
+  left_join(daylen_range, by = "Stream_Name", relationship = "many-to-many") %>%
   distinct(Stream_Name, Year, .keep_all = TRUE)
 
 # -----------------------------------------------------------
