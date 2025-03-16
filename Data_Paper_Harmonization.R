@@ -136,7 +136,7 @@ all_spatial <- drivers_cast %>%
 tot <- all_spatial
 
 # Merge Daylength data ----
-daylen <- read.csv("Monthly_Daylength_2.csv") %>%
+daylen <- read.csv("Monthly_Daylength_2.csv", stringsAsFactors = FALSE) %>%
   dplyr::select(-1)
 
 daylen_range <- daylen %>%
@@ -159,6 +159,26 @@ daylen_range <- daylen %>%
 tot <- tot %>% 
   left_join(daylen_range, by = "Stream_Name") %>%
   distinct(Stream_Name, Year, .keep_all = TRUE)
+
+# -----------------------------------------------------------
+# New: Incorporate Land Cover Data ----
+# -----------------------------------------------------------
+# Read in the land cover file; expected columns: Stream_Name, Year, LandClass, prop
+lulc <- read.csv("LULC_TempVar_GLC1000m.csv", stringsAsFactors = FALSE) %>%
+  dplyr::select(Stream_Name, Year, LandClass, prop) %>%
+  mutate(prop = if_else(is.na(prop) | prop == 0, prop, prop * 100))  # Convert to percentage only if non-NA and non-zero
+
+# Pivot so each LandClass becomes its own column, with values as the percentage
+lulc_wide <- lulc %>%
+  pivot_wider(names_from = LandClass, 
+              values_from = prop, 
+              names_prefix = "land_")
+
+# Remove any existing columns that start with "land_" and the "major_land" column from tot
+tot <- tot %>% dplyr::select(-starts_with("land_"), -major_land)
+
+# Merge the new land cover data into tot by Stream_Name and Year
+tot <- tot %>% left_join(lulc_wide, by = c("Stream_Name", "Year"))
 
 # -----------------------------------------------------------
 # 4. Gap Filling for Elevation and Slope ----
@@ -233,30 +253,24 @@ tot <- tot %>%
          prop_area = replace_na(as.numeric(prop_area), 0)) %>%
   dplyr::select(-elevation_mean_m_filled)
 
-tot <- as.data.table(tot)  # Ensure tot is still a data.table for any further operations
+tot <- as.data.table(tot)  # Ensure tot is still a data.table
 
 # -----------------------------------------------------------
 # 5. Merge with Chemistry Sites and Convert to Long Format ----
 # -----------------------------------------------------------
-# # (Optionally, filter chemistry_sites to only those Stream_Name present in tot)
-# chemistry_sites <- chemistry_sites %>%
-#   filter(Stream_Name %in% tot$Stream_Name)
-
-# Merge tot (the processed spatial drivers) with chemistry_sites by Stream_Name and Year.
+# Merge tot (the processed spatial drivers) with chemistry_sites by Stream_Name
 chemistry_combined <- chemistry_sites %>%
   left_join(as.data.frame(tot), by = c("Stream_Name"))
 
-# Verify the number of unique Stream_IDs
+# Verify the number of unique streams
 num_unique_streams <- chemistry_combined %>%
   pull(Stream_Name) %>%
   n_distinct()
-
 print(num_unique_streams)
 
 # Convert the merged dataset to long format
-# (Assume identifier columns: Stream_Name, Stream_ID, and Year; adjust if needed)
+# (Assume identifier columns: Stream_Name and Year; adjust if needed)
 cols_to_keep <- c("Stream_Name", "Year")
-
 chemistry_long <- chemistry_combined %>%
   pivot_longer(
     cols = -all_of(cols_to_keep),
@@ -266,10 +280,14 @@ chemistry_long <- chemistry_combined %>%
   )
 
 # -----------------------------------------------------------
-# 6. Export Final Long-Format Data ----
+# 6. Export Final Data ----
 # -----------------------------------------------------------
+# Convert list columns to character strings
+chemistry_combined <- chemistry_combined %>%
+  mutate_if(is.list, ~ sapply(., toString))
+
+# Export Final Data
 write.csv(chemistry_long, "Chemistry_Sites_Harmonized_Long.csv", row.names = FALSE)
 write.csv(chemistry_combined, "Chemistry_Sites_Harmonized_Wide.csv", row.names = FALSE)
-
 
 gc()
