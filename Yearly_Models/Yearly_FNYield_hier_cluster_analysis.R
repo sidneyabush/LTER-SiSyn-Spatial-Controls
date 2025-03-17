@@ -35,7 +35,7 @@ drivers_full <- read.csv("All_Drivers_Harmonized_Yearly_FNConc_FNYield_5_years.c
 # Join 'major_rock' and 'major_land' onto 'drivers_df'
 drivers_combined <- drivers_df %>%
   left_join(
-    drivers_full %>% dplyr::select(Stream_ID, Year, major_rock, major_land),
+    drivers_full %>% dplyr::select(Stream_ID, Year, major_rock),
     by = c("Stream_ID", "Year")
   )
 
@@ -118,7 +118,7 @@ scaled_data <- drivers_numeric_consolidated_lith %>%
 ###############################################################################
 long_data <- scaled_data %>%
   dplyr::select(
-    -major_rock, -consolidated_rock, -major_land,
+    -major_rock, -consolidated_rock,
     -Stream_ID, -Year, -sedimentary_cluster
   ) %>%
   pivot_longer(-final_cluster, names_to = "Driver", values_to = "Value") %>%
@@ -228,7 +228,7 @@ full_scaled <- drivers_numeric_consolidated_lith %>%
     )
   ) %>%
   dplyr::select(
-    -major_rock, -consolidated_rock, -major_land,
+    -major_rock, -consolidated_rock,
     -Stream_ID, -Year, -sedimentary_cluster
   ) %>%
   as.data.frame()

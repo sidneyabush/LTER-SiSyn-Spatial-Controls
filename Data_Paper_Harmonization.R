@@ -117,9 +117,9 @@ character_cols$Stream_Name <- si_drivers$Stream_Name
 
 # Pivot annual spatial driver data to wide format
 drivers <- year_cols_melt
-drivers_cropped <- subset(drivers, as.numeric(year) > 2000 & as.numeric(year) < 2024)
+# drivers_cropped <- subset(drivers, as.numeric(year) > 2000 & as.numeric(year) < 2024)
 
-drivers_cast <- drivers_cropped %>%
+drivers_cast <- drivers %>%
   distinct(Stream_Name, year, driver, value, .keep_all = TRUE) %>%
   rename(Year = year) %>%
   mutate(Year = as.numeric(Year)) %>%
@@ -161,23 +161,43 @@ tot <- tot %>%
   distinct(Stream_Name, Year, .keep_all = TRUE)
 
 # -----------------------------------------------------------
-# New: Incorporate Land Cover Data ----
+# New: Incorporate and re-classify Land Cover Data ----
 # -----------------------------------------------------------
-# Read in the land cover file; expected columns: Stream_Name, Year, LandClass, prop
-lulc <- read.csv("LULC_TempVar_GLC1000m.csv", stringsAsFactors = FALSE) %>%
-  dplyr::select(Stream_Name, Year, LandClass, prop) %>%
-  mutate(prop = if_else(is.na(prop) | prop == 0, prop, prop * 100))  # Convert to percentage only if non-NA and non-zero
-
-# Pivot so each LandClass becomes its own column, with values as the percentage
-lulc_wide <- lulc %>%
-  pivot_wider(names_from = LandClass, 
-              values_from = prop, 
-              names_prefix = "land_")
+# Read in the original land cover file (with percentage values)
+lulc <- read.csv("DSi_LULC_filled_interpolated_Simple.csv", stringsAsFactors = FALSE) %>%
+  dplyr::select("Stream_Name", "Year", "Simple_Class", "LandClass_sum") %>%
+  mutate(LandClass_sum = if_else(is.na(LandClass_sum) | 
+                                   LandClass_sum == 0, LandClass_sum, LandClass_sum * 100))  # convert to percentage
 
 # Remove any existing columns that start with "land_" and the "major_land" column from tot
 tot <- tot %>% dplyr::select(-starts_with("land_"), -major_land)
 
-# Merge the new land cover data into tot by Stream_Name and Year
+# Pivot the aggregated data so each unique Simple_Class becomes its own column
+lulc_wide <- lulc %>%
+  pivot_wider(
+    names_from = Simple_Class,
+    values_from = LandClass_sum,
+    names_prefix = "land_"
+  ) %>%
+  dplyr::select(-"land_Filled_Value")
+
+# Identify all the land cover columns (i.e., columns starting with "land_")
+land_cols <- grep("^land_", names(lulc_wide), value = TRUE)
+
+# Create a new column 'major_land' that finds the class with the highest percentage in each row
+lulc_wide <- lulc_wide %>%
+  mutate(major_land = apply(select(., all_of(land_cols)), 1, function(x) {
+    if(all(is.na(x))) {
+      NA_character_
+    } else {
+      # Identify the column name with the maximum percentage
+      max_col <- names(x)[which.max(x)]
+      # Remove the "land_" prefix to get the actual land class name
+      sub("^land_", "", max_col)
+    }
+  }))
+
+# Merge the reclassified land cover data (including major_land) into tot by Stream_Name and Year
 tot <- tot %>% left_join(lulc_wide, by = c("Stream_Name", "Year"))
 
 # -----------------------------------------------------------
