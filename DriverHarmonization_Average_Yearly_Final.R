@@ -847,7 +847,7 @@ tot_si <- tot %>%
   dplyr::select(Stream_ID, Year, drainSqKm, NOx, P, precip, Q,
                 temp, Max_Daylength, prop_area, npp, evapotrans,
                 cycle0, permafrost_mean_m, elevation_mean_m, 
-                basin_slope_mean_degree, FNConc, FNYield, GenConc, GenYield, major_rock,
+                basin_slope_mean_degree, FNConc, FNYield, GenConc, GenYield, major_rock, major_land,
                 contains("rocks"), contains("land_")) %>%
   dplyr::rename(snow_cover = prop_area, 
                 greenup_day = cycle0,

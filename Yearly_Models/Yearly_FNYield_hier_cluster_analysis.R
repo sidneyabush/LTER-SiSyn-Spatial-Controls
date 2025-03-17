@@ -44,7 +44,7 @@ drivers_combined <- drivers_df %>%
 ###############################################################################
 # We define a single threshold of 70 on the *original* rocks_sedimentary values.
 drivers_numeric_consolidated_lith <- drivers_combined %>%
-  filter(trimws(major_rock) != "") %>%
+  filter(!is.na(major_rock) & trimws(major_rock) != "" & major_rock != "0") %>%
   mutate(
     consolidated_rock = case_when(
       major_rock %in% c(
@@ -65,26 +65,21 @@ drivers_numeric_consolidated_lith <- drivers_combined %>%
         "plutonic", 
         "plutonic; metamorphic", 
         "carbonate_evaporite; metamorphic"
-      ) ~ "metamorphic/ plutonic",
-      major_rock == "carbonate_evaporite" ~ "carbonate/ evaporite"
+      ) ~ "metamorphic",
+      major_rock == "carbonate_evaporite" ~ "carbonate_evaporite"
     )
   ) %>%
   mutate(
-    consolidated_rock = factor(
-      consolidated_rock,
-      levels = c("volcanic", "sedimentary", "metamorphic/ plutonic", "carbonate/ evaporite")
-    )
-  ) %>%
-  mutate(cluster = as.numeric(consolidated_rock)) %>%
-  mutate(
-    sedimentary_cluster = case_when(
-      consolidated_rock == "sedimentary" & rocks_sedimentary >= 70 ~ "Sedimentary",
-      consolidated_rock == "sedimentary" & rocks_sedimentary < 70 ~ "Mixed Sedimentary"
+    final_cluster = case_when(
+      consolidated_rock == "sedimentary" & rocks_sedimentary >= 70 ~ "sedimentary",
+      consolidated_rock == "sedimentary" & rocks_sedimentary < 70  ~ "mixed_sedimentary",
+      TRUE ~ consolidated_rock
     )
   )
 
+
 # Quick plot to check lithology distribution vs. FNYield
-ggplot(drivers_numeric_consolidated_lith, aes(x = consolidated_rock, y = FNYield)) +
+ggplot(drivers_numeric_consolidated_lith, aes(x = final_cluster, y = FNYield)) +
   geom_boxplot() +
   labs(x = "Lithology Category", y = "DSi Yield") +
   theme_classic()
@@ -170,11 +165,11 @@ long_data <- scaled_data %>%
 # 7. Define Cluster Colors
 ###############################################################################
 my_cluster_colors <- c(
-  "Sedimentary"       = "#579C8E",  
-  "Mixed Sedimentary" = "#89C8A0",
-  "1"                 = "#AC7B32",  
-  "3"                 = "#C26F86",  
-  "4"                 = "#5E88B0"   
+  "Volcanic"                            = "#AC7B32",  
+  "Sedimentary"                         = "#579C8E",  
+  "Mixed Sedimentary"                   = "#89C8A0",
+  "Metamorphic"                         = "#C26F86",  
+  "Carbonate_Evaporite"                 = "#5E88B0"   
 )
 my_cluster_colors_lighter <- sapply(my_cluster_colors, function(x) lighten(x, amount = 0.3))
 
