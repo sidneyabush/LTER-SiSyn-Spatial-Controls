@@ -11,6 +11,12 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 # 1. Load the Chemistry Sites Data (key file with Stream_Name) ----
 # -----------------------------------------------------------
 chemistry_sites <- read.csv("chemistry_sites_si.csv", stringsAsFactors = FALSE)
+ref_table <- read.csv("Site_Reference_Table - WRTDS_Reference_Table_LTER_V2.csv", 
+                      stringsAsFactors = FALSE) %>%
+  dplyr::select("Stream_Name", "drainSqKm")
+
+chemistry_sites <- chemistry_sites %>%
+  left_join(ref_table, by = "Stream_Name")
 
 # -----------------------------------------------------------
 # 2. Load the Finnish Sites Data (for use in spatial drivers) ----
@@ -325,6 +331,18 @@ chemistry_long <- chemistry_combined %>%
     values_transform = list(Value = as.character)
   )
 
+# Convert relevant columns to numeric 
+chemistry_combined <- chemistry_combined %>%
+  mutate(across(c(drainSqKm, cycle0, evapotrans, npp, num_days, precip, 
+                  prop_area, temp, elevation_median_m, elevation_mean_m, 
+                  elevation_min_m, elevation_max_m, basin_slope_median_degree, 
+                  basin_slope_mean_degree, basin_slope_min_degree, basin_slope_max_degree, 
+                  permafrost_median_m, permafrost_mean_m, permafrost_min_m, 
+                  permafrost_max_m, Max_Daylength, land_Bare, land_Cropland, 
+                  land_Forest, land_Grassland_Shrubland, land_Ice_Snow, 
+                  land_Impervious, land_Salt_Water, land_Tidal_Wetland, 
+                  land_Water, land_Wetland_Marsh), as.numeric))
+
 # -----------------------------------------------------------
 # 6. Export Final Data ----
 # -----------------------------------------------------------
@@ -337,3 +355,65 @@ write.csv(chemistry_long, "Chemistry_Sites_Harmonized_Long.csv", row.names = FAL
 write.csv(chemistry_combined, "Chemistry_Sites_Harmonized_Wide.csv", row.names = FALSE)
 
 gc()
+
+# Now do averaging: 
+tot_average <- chemistry_combined %>%
+  dplyr::group_by(Stream_ID) %>%
+  summarise(
+    # Numerical variables: calculate the mean across all years
+    drainSqKm = mean(drainSqKm, na.rm = TRUE),
+    cycle0 = mean(cycle0, na.rm = TRUE),
+    evapotrans = mean(evapotrans, na.rm = TRUE),
+    npp = mean(npp, na.rm = TRUE),
+    num_days = mean(num_days, na.rm = TRUE),
+    precip = mean(precip, na.rm = TRUE),
+    prop_area = mean(prop_area, na.rm = TRUE),
+    temp = mean(temp, na.rm = TRUE),
+    elevation_median_m = mean(elevation_median_m, na.rm = TRUE),
+    elevation_mean_m = mean(elevation_mean_m, na.rm = TRUE),
+    elevation_min_m = mean(elevation_min_m, na.rm = TRUE),
+    elevation_max_m = mean(elevation_max_m, na.rm = TRUE),
+    basin_slope_median_degree = mean(basin_slope_median_degree, na.rm = TRUE),
+    basin_slope_mean_degree = mean(basin_slope_mean_degree, na.rm = TRUE),
+    basin_slope_min_degree = mean(basin_slope_min_degree, na.rm = TRUE),
+    basin_slope_max_degree = mean(basin_slope_max_degree, na.rm = TRUE),
+    permafrost_median_m = mean(permafrost_median_m, na.rm = TRUE),
+    permafrost_mean_m = mean(permafrost_mean_m, na.rm = TRUE),
+    permafrost_min_m = mean(permafrost_min_m, na.rm = TRUE),
+    permafrost_max_m = mean(permafrost_max_m, na.rm = TRUE),
+    Max_Daylength = mean(Max_Daylength, na.rm = TRUE),
+    land_Bare = mean(land_Bare, na.rm = TRUE),
+    land_Cropland = mean(land_Cropland, na.rm = TRUE),
+    land_Forest = mean(land_Forest, na.rm = TRUE),
+    land_Grassland_Shrubland = mean(land_Grassland_Shrubland, na.rm = TRUE),
+    land_Ice_Snow = mean(land_Ice_Snow, na.rm = TRUE),
+    land_Impervious = mean(land_Impervious, na.rm = TRUE),
+    land_Salt_Water = mean(land_Salt_Water, na.rm = TRUE),
+    land_Tidal_Wetland = mean(land_Tidal_Wetland, na.rm = TRUE),
+    land_Water = mean(land_Water, na.rm = TRUE),
+    land_Wetland_Marsh = mean(land_Wetland_Marsh, na.rm = TRUE),
+  
+    # Categorical variables: grab the first value
+    across(contains("rocks"), ~ first(.)),
+    across(contains("soil_"), ~ first(.))
+  ) %>%
+  ungroup() %>%
+  # Replace NaN with NA in all columns
+  mutate(across(everything(), ~ ifelse(is.nan(.), NA, .)))
+
+# Print a preview
+print(head(tot_average))
+
+
+# Count the number of unique Stream_IDs
+num_unique_stream_ids <- tot_average %>%
+  pull(Stream_ID) %>%
+  n_distinct()
+
+print(num_unique_stream_ids)
+
+# Export average data with dynamic filename
+write.csv(tot_average, "Chemistry_Sites_Harmonized_Wide_Average.csv", row.names = FALSE)
+
+gc()
+

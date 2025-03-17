@@ -224,13 +224,9 @@ p_FNYield <- ggplot(df, aes(x = final_cluster, y = FNYield, fill = final_cluster
 ###############################################################################
 # 9. Silhouette-Like Plot with Custom ggplot (Using final_cluster)
 ###############################################################################
-library(cluster)
-library(factoextra)
-library(ggplot2)
-
-# 1) Compute silhouette with numeric clusters
+# Compute the silhouette using numeric cluster IDs
 sil_obj <- silhouette(
-  as.numeric(scaled_data$final_cluster),  # silhouette requires numeric
+  as.numeric(scaled_data$final_cluster),
   dist(
     scaled_data %>% 
       dplyr::select(rocks_volcanic, rocks_sedimentary, rocks_carbonate_evaporite,
@@ -238,42 +234,35 @@ sil_obj <- silhouette(
   )
 )
 
-# 2) Create the fviz_silhouette plot, which initially uses numeric labels (1..5)
+# Use fviz_silhouette() with your palette of colors
 p_sil <- fviz_silhouette(
   sil_obj,
-  label   = FALSE,        # Hide per-site text labels
-  color   = "cluster",    # Color by cluster
-  palette = c("#AC7B32", "#579C8E", "#89C8A0", "#C26F86", "#5E88B0")
+  label   = FALSE,
+  palette = c("#AC7B32","#579C8E","#89C8A0","#C26F86","#5E88B0")
 )
 
-# 3) Remove the default legend(s) that show numeric 1..5
-#    Sometimes fviz_silhouette uses color or fill. Remove both just to be safe.
-p_sil <- p_sil + guides(color = "none", fill = "none")
+# After creating p_sil with fviz_silhouette() ...
+p_sil <- p_sil + guides(color = "none")
 
-# 4) Add a new manual scale that uses your numeric codes (1..5) as keys
-#    but displays the cluster names as labels. We apply it to both color & fill
-#    to ensure we only get one legend.
-p_sil <- p_sil + scale_color_manual(
-  name       = "Cluster",
-  aesthetics = c("color","fill"),
-  values = c(
-    "1" = "#AC7B32",  # Volcanic
-    "2" = "#579C8E",  # Sedimentary
-    "3" = "#89C8A0",  # Mixed Sedimentary
-    "4" = "#C26F86",  # Metamorphic
-    "5" = "#5E88B0"   # Carbonate_Evaporite
-  ),
-  labels = c(
-    "1" = "Volcanic",
-    "2" = "Sedimentary",
-    "3" = "Mixed Sedimentary",
-    "4" = "Metamorphic",
-    "5" = "Carbonate_Evaporite"
+# Override the legend labels with your desired cluster names
+p_sil <- p_sil +
+  scale_fill_manual(
+    name   = "Cluster",
+    values = c("1" = "#AC7B32",
+               "2" = "#579C8E",
+               "3" = "#89C8A0",
+               "4" = "#C26F86",
+               "5" = "#5E88B0"),
+    
+    labels = c("1" = "Volcanic",
+               "2" = "Sedimentary",
+               "3" = "Mixed Sedimentary",
+               "4" = "Metamorphic",
+               "5" = "Carbonate_Evaporite")
   )
-)
 
-# 5) (Optional) Add mean silhouette line, etc.
-mean_sil_value <- mean(sil_obj[, "sil_width"], na.rm = TRUE)
+# (Optional) Add additional ggplot layers (e.g., mean silhouette line) if needed
+mean_sil_value <- mean(sil_obj[, 3], na.rm = TRUE)
 p_sil <- p_sil +
   geom_hline(
     yintercept = mean_sil_value,
@@ -289,12 +278,28 @@ p_sil <- p_sil +
     vjust = -0.5
   ) +
   labs(x = "Sites", y = "Silhouette Width") +
+  theme_classic(base_size = 16)
+
+p_sil <- p_sil +
+  # Remove the built-in plot title and subtitle from fviz_silhouette
+  labs(title = NULL, subtitle = NULL, x = NULL) + 
+  # Or: labs(title = "", subtitle = "", x = "")
   theme_classic(base_size = 16) +
-  theme(legend.position = "right")  # place legend on the right
+  theme(
+    # Remove x-axis text and ticks
+    axis.text.x  = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.title.x = element_blank(),
+    
+    # Remove legend title
+    legend.title = element_blank(),
+    
+    # Also remove any leftover plot title/subtitle space
+    plot.title    = element_blank(),
+    plot.subtitle = element_blank()
+  )
 
 print(p_sil)
-
-
 
 ###############################################################################
 # 10. Mean Absolute SHAP Bar Plots (Using final_cluster)
@@ -411,7 +416,7 @@ ggsave(
 
 ggsave(
   filename = "Custom_Silhouette_Plot.png",
-  plot = p_custom_sil,
+  plot = p_sil,
   width = 10,
   height = 6,
   dpi = 300,
@@ -430,5 +435,5 @@ ggsave(
 # Print final objects to screen
 print(left_col)
 print(p_FNYield)
-print(p_custom_sil)
+print(p_sil)
 print(final_shap_grid)
