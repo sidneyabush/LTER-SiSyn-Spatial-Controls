@@ -224,51 +224,77 @@ p_FNYield <- ggplot(df, aes(x = final_cluster, y = FNYield, fill = final_cluster
 ###############################################################################
 # 9. Silhouette-Like Plot with Custom ggplot (Using final_cluster)
 ###############################################################################
-# 9a) Compute silhouette with numeric labels
+library(cluster)
+library(factoextra)
+library(ggplot2)
+
+# 1) Compute silhouette with numeric clusters
 sil_obj <- silhouette(
-  as.numeric(scaled_data$final_cluster),  # numeric vector 1..5
+  as.numeric(scaled_data$final_cluster),  # silhouette requires numeric
   dist(
-    scaled_data %>% select(
-      rocks_volcanic, rocks_sedimentary, rocks_carbonate_evaporite,
-      rocks_metamorphic, rocks_plutonic
-    )
+    scaled_data %>% 
+      dplyr::select(rocks_volcanic, rocks_sedimentary, rocks_carbonate_evaporite,
+                    rocks_metamorphic, rocks_plutonic)
   )
 )
 
-# 9b) Convert silhouette object to data frame, adding factor labels
-sil_df <- data.frame(
-  cluster   = scaled_data$final_cluster,  # your factor names
-  sil_width = sil_obj[, "sil_width"],
-  neighbor  = sil_obj[, "neighbor"]
+# 2) Create the fviz_silhouette plot, which initially uses numeric labels (1..5)
+p_sil <- fviz_silhouette(
+  sil_obj,
+  label   = FALSE,        # Hide per-site text labels
+  color   = "cluster",    # Color by cluster
+  palette = c("#AC7B32", "#579C8E", "#89C8A0", "#C26F86", "#5E88B0")
 )
 
-# 9c) (Optional) Order by cluster and silhouette width
-sil_df <- sil_df %>%
-  group_by(cluster) %>%
-  arrange(desc(sil_width), .by_group = TRUE) %>%
-  ungroup() %>%
-  mutate(site_order = row_number())
+# 3) Remove the default legend(s) that show numeric 1..5
+#    Sometimes fviz_silhouette uses color or fill. Remove both just to be safe.
+p_sil <- p_sil + guides(color = "none", fill = "none")
 
-# 9d) Build a custom silhouette-like plot in ggplot
-p_custom_sil <- ggplot(sil_df, aes(x = site_order, y = sil_width, fill = cluster)) +
-  geom_bar(stat = "identity") +
-  facet_wrap(~ cluster, scales = "free_x", nrow = 1) +
-  scale_fill_manual(values = my_cluster_colors) +
-  labs(x = "Sites", y = "Silhouette Width") +
-  theme_classic(base_size = 14)
+# 4) Add a new manual scale that uses your numeric codes (1..5) as keys
+#    but displays the cluster names as labels. We apply it to both color & fill
+#    to ensure we only get one legend.
+p_sil <- p_sil + scale_color_manual(
+  name       = "Cluster",
+  aesthetics = c("color","fill"),
+  values = c(
+    "1" = "#AC7B32",  # Volcanic
+    "2" = "#579C8E",  # Sedimentary
+    "3" = "#89C8A0",  # Mixed Sedimentary
+    "4" = "#C26F86",  # Metamorphic
+    "5" = "#5E88B0"   # Carbonate_Evaporite
+  ),
+  labels = c(
+    "1" = "Volcanic",
+    "2" = "Sedimentary",
+    "3" = "Mixed Sedimentary",
+    "4" = "Metamorphic",
+    "5" = "Carbonate_Evaporite"
+  )
+)
 
-# 9e) Add dashed line for overall mean silhouette width
-mean_sil_value <- mean(sil_df$sil_width, na.rm = TRUE)
-
-p_custom_sil <- p_custom_sil +
-  geom_hline(yintercept = mean_sil_value, linetype = "dashed") +
+# 5) (Optional) Add mean silhouette line, etc.
+mean_sil_value <- mean(sil_obj[, "sil_width"], na.rm = TRUE)
+p_sil <- p_sil +
+  geom_hline(
+    yintercept = mean_sil_value,
+    linetype   = "dashed",
+    color      = "gray4"
+  ) +
   annotate(
     "text",
-    x     = max(sil_df$site_order) * 0.8,
+    x     = nrow(sil_obj) * 0.8,
     y     = mean_sil_value,
     label = paste("Mean =", round(mean_sil_value, 2)),
+    color = "gray4",
     vjust = -0.5
-  )
+  ) +
+  labs(x = "Sites", y = "Silhouette Width") +
+  theme_classic(base_size = 16) +
+  theme(legend.position = "right")  # place legend on the right
+
+print(p_sil)
+
+
 
 ###############################################################################
 # 10. Mean Absolute SHAP Bar Plots (Using final_cluster)

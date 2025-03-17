@@ -27,7 +27,7 @@ finn <- finn %>%
 # -----------------------------------------------------------
 # Read and preprocess spatial drivers data
 si_drivers <- read.csv("all-data_si-extract_2_20250203.csv", stringsAsFactors = FALSE) %>%
-  dplyr::select(-contains("soil"), -contains("cycle1")) %>%
+  dplyr::select(-contains("cycle1")) %>%
   mutate(
     Stream_Name = case_when(
       Stream_Name == "East Fork" ~ "east fork",
@@ -134,6 +134,30 @@ all_spatial <- drivers_cast %>%
 
 # Here, since we don't have any wrtds_df data, let the final spatial drivers dataset be "tot"
 tot <- all_spatial
+
+## ------------------------------------------------------- ##
+# Add in KG Classifications ----
+## ------------------------------------------------------- ##
+# Read in climate data produced in KoeppenGeigerClassification.R
+KG <- read.csv("Koeppen_Geiger_2.csv") %>%
+  dplyr::mutate(
+    Stream_Name = case_when(
+      Stream_Name == "East Fork" ~ "east fork",
+      Stream_Name == "West Fork" ~ "west fork",
+      Stream_Name == "Amazon River at Obidos" ~ "Obidos",
+      TRUE ~ Stream_Name
+    ),
+    Stream_ID = paste0(LTER, "__", Stream_Name) # Closing parenthesis added here
+  )
+
+
+tot <- tot %>%
+  left_join(KG, by = "Stream_Name") %>%
+  distinct(Stream_Name, Year, .keep_all = TRUE) %>%
+  # Remove columns with .x
+  dplyr::select(-contains(".x")) %>%
+  # Rename columns with .x by removing the suffix
+  rename_with(~ str_remove(., "\\.y$"))
 
 # Merge Daylength data ----
 daylen <- read.csv("Monthly_Daylength_2.csv", stringsAsFactors = FALSE) %>%
