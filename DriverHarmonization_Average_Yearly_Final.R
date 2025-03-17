@@ -558,8 +558,7 @@ wrtds_NP_wide <- wrtds_NP %>%
 # ## ------------------------------------------------------- ##
 #           # Import RAW N_P Data ---- 
 # ## ------------------------------------------------------- ##
-raw_NP <- read.csv("20241003_masterdata_chem.csv") %>%
-  filter(variable %in% c("NOx", "NO3", "SRP", "PO4"))
+raw_NP <- read.csv("converted_raw_NP.csv")
 
 # Step 1: Filter, create Stream_ID, simplify solutes, and calculate median
 raw_NP_median <- raw_NP %>%
@@ -615,11 +614,12 @@ combined_NP <- combined_NP %>%
   # Drop the intermediate columns
   dplyr::select(-P_wrtds, -NOx_wrtds, -P_raw, -NOx_raw)
 
-
 streams_gapfill <- combined_NP %>%
   filter(P_source == "raw" | NOx_source == "raw") %>%
   distinct(Stream_ID) %>%
   pull(Stream_ID)
+
+print(streams_gapfill)
 
 # ## ------------------------------------------------------- ##
 #           # Merge Combined Data with `tot` ----
@@ -799,12 +799,17 @@ lulc_wide <- lulc %>%
 tot <- tot %>% dplyr::select(-starts_with("land_"), -major_land)
 tot <- tot %>% left_join(lulc_wide, by = c("Stream_Name", "Year"))
 
-# Sum all land use types that contain "forest" into a new column `land_forest_all`
 tot <- tot %>%
   rowwise() %>%
-  mutate(land_forest_all = sum(c_across(contains("forest")), na.rm = TRUE)) %>%
+  mutate(
+    land_forest_all = sum(c_across(contains("forest")), na.rm = TRUE),
+    land_cropland  = sum(c_across(contains("cropland")), na.rm = TRUE),
+    land_shrubland_grassland = sum(c_across(c(contains("grassland"), 
+                                              contains("shrubland"))), na.rm = TRUE)
+  ) %>%
   ungroup() %>%
-  dplyr::select(-contains("forest"), land_forest_all)  # Remove old "forest" columns but keep the new one
+  dplyr::select(-contains("forest"), -contains("cropland"), -contains("grassland"), 
+                -contains("shrubland"))
 
 tot <- tot %>%
   mutate(across(where(is.list), ~ sapply(., function(x) paste(x, collapse = ","))))
@@ -859,11 +864,6 @@ num_unique_stream_ids <- tot_annual %>%
   n_distinct()
 
 print(num_unique_stream_ids)
-
-# # Export annual data with dynamic filename
-# write.csv(as.data.frame(tot_annual), 
-#           sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.csv", record_length),
-#           row.names = FALSE)
 
 drivers_df <- tot_annual %>%
   # Convert blank strings to NA in all character columns
