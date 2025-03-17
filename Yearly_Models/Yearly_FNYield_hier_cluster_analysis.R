@@ -1,9 +1,6 @@
 ###############################################################################
-# COMPLETE WORKFLOW: FNYield Cluster Plotting with Manually Assigned Clusters
-# (Single Global Scaling for All Data)
+# 1. Load Packages & Clear Environment
 ###############################################################################
-
-## 1. Load Packages & Clear Environment
 rm(list = ls())
 library(ggplot2)
 library(dplyr)
@@ -15,13 +12,15 @@ library(RColorBrewer)
 library(grid)        # For textGrob() if needed
 library(colorspace)
 library(cluster)     # silhouette()
-library(factoextra)  # fviz_silhouette()
+library(factoextra)  # fviz_silhouette() - used earlier, but we'll do custom now
 
 # Set working directory and output directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model/FNYield"
 
-## 2. Load Data & Model
+###############################################################################
+# 2. Load Data & Model
+###############################################################################
 load("FNYield_Yearly_rf_model2_full_new.RData")
 load("FNYield_Yearly_kept_drivers_full_new.RData")
 load("FNYield_Yearly_full_new.RData")
@@ -42,10 +41,11 @@ drivers_combined <- drivers_df %>%
 ###############################################################################
 # 3. Consolidate Lithology Categories & Manually Assign Clusters
 ###############################################################################
-# We define a single threshold of 70 on the *original* rocks_sedimentary values.
 drivers_numeric_consolidated_lith <- drivers_combined %>%
+  # Remove rows with missing, blank, or "0" in major_rock
   filter(!is.na(major_rock) & trimws(major_rock) != "" & major_rock != "0") %>%
   mutate(
+    # Group various string combos to one of four categories
     consolidated_rock = case_when(
       major_rock %in% c(
         "volcanic", 
@@ -53,68 +53,74 @@ drivers_numeric_consolidated_lith <- drivers_combined %>%
         "volcanic; carbonate_evaporite", 
         "volcanic; plutonic", 
         "volcanic; plutonic; metamorphic"
-      ) ~ "volcanic",
+      ) ~ "Volcanic",
       major_rock %in% c(
         "sedimentary", 
         "sedimentary; carbonate_evaporite", 
         "sedimentary; plutonic; carbonate_evaporite; metamorphic",
         "sedimentary; metamorphic"
-      ) ~ "sedimentary",
+      ) ~ "Sedimentary",
       major_rock %in% c(
         "metamorphic", 
         "plutonic", 
         "plutonic; metamorphic", 
         "carbonate_evaporite; metamorphic"
-      ) ~ "metamorphic",
-      major_rock == "carbonate_evaporite" ~ "carbonate_evaporite"
+      ) ~ "Metamorphic",
+      major_rock == "carbonate_evaporite" ~ "Carbonate_Evaporite"
     )
   ) %>%
   mutate(
+    # If Sedimentary and >=70% sed rocks -> Sedimentary; else Mixed Sedimentary
     final_cluster = case_when(
-      consolidated_rock == "sedimentary" & rocks_sedimentary >= 70 ~ "sedimentary",
-      consolidated_rock == "sedimentary" & rocks_sedimentary < 70  ~ "mixed_sedimentary",
+      consolidated_rock == "Sedimentary" & rocks_sedimentary >= 70 ~ "Sedimentary",
+      consolidated_rock == "Sedimentary" & rocks_sedimentary < 70  ~ "Mixed Sedimentary",
       TRUE ~ consolidated_rock
     )
-  )
-
-
-# Quick plot to check lithology distribution vs. FNYield
-ggplot(drivers_numeric_consolidated_lith, aes(x = final_cluster, y = FNYield)) +
-  geom_boxplot() +
-  labs(x = "Lithology Category", y = "DSi Yield") +
-  theme_classic()
+  ) %>%
+  # Manually order clusters
+  mutate(final_cluster = factor(
+    final_cluster, 
+    levels = c("Volcanic", "Sedimentary", "Mixed Sedimentary", 
+               "Metamorphic", "Carbonate_Evaporite")
+  ))
 
 ###############################################################################
 # 4. Prepare Data for Further Analysis (Single Global Scaling)
 ###############################################################################
-# Identify numeric columns to scale (exclude 'cluster' if numeric)
+# Identify numeric columns to scale (exclude "cluster" if it exists)
 numeric_cols <- setdiff(
   names(dplyr::select(drivers_numeric_consolidated_lith, where(is.numeric))),
   "cluster"
 )
 
-# 1. Create final_cluster
-# 2. Scale all numeric columns across entire dataset (no group_by)
+# Scale all numeric columns across the entire dataset
 scaled_data <- drivers_numeric_consolidated_lith %>%
-  mutate(final_cluster = if_else(
-    consolidated_rock == "sedimentary",
-    sedimentary_cluster,
-    as.character(cluster)
-  )) %>%
   mutate(
     across(
       all_of(numeric_cols),
-      ~ scales::rescale(.x, na.rm = TRUE)  # global min->0, max->1
+      ~ scales::rescale(.x, na.rm = TRUE)
     )
   )
 
 ###############################################################################
-# 6. Create Long-format Data for Box Plots (Using final_cluster)
+# 5. Define Cluster Colors (Using New Naming & Order)
+###############################################################################
+my_cluster_colors <- c(
+  "Volcanic"            = "#AC7B32",  
+  "Sedimentary"         = "#579C8E",  
+  "Mixed Sedimentary"   = "#89C8A0",
+  "Metamorphic"         = "#C26F86",  
+  "Carbonate_Evaporite" = "#5E88B0"   
+)
+my_cluster_colors_lighter <- sapply(my_cluster_colors, function(x) lighten(x, amount = 0.3))
+
+###############################################################################
+# 6. Create Long-format Data for Box Plots (Drivers) using final_cluster
 ###############################################################################
 long_data <- scaled_data %>%
   dplyr::select(
     -major_rock, -consolidated_rock, -major_land,
-    -Stream_ID, -Year, -sedimentary_cluster
+    -Stream_ID, -Year
   ) %>%
   pivot_longer(-final_cluster, names_to = "Driver", values_to = "Value") %>%
   mutate(
@@ -162,21 +168,10 @@ long_data <- scaled_data %>%
   )
 
 ###############################################################################
-# 7. Define Cluster Colors
+# 7. Generate Box Plots for Each Cluster (Drivers) using final_cluster
 ###############################################################################
-my_cluster_colors <- c(
-  "Volcanic"                            = "#AC7B32",  
-  "Sedimentary"                         = "#579C8E",  
-  "Mixed Sedimentary"                   = "#89C8A0",
-  "Metamorphic"                         = "#C26F86",  
-  "Carbonate_Evaporite"                 = "#5E88B0"   
-)
-my_cluster_colors_lighter <- sapply(my_cluster_colors, function(x) lighten(x, amount = 0.3))
+unique_clusters <- levels(long_data$final_cluster)
 
-###############################################################################
-# 8. Generate Box Plots for Each Cluster (Drivers) using final_cluster
-###############################################################################
-unique_clusters <- sort(unique(long_data$final_cluster))
 cluster_boxplots <- lapply(unique_clusters, function(cl) {
   p <- long_data %>%
     filter(final_cluster == cl) %>%
@@ -203,182 +198,20 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
 })
 
 ###############################################################################
-# 9. Prepare Data for SHAP Dot Plots (Global Scaling)
+# 8. Box Plot of FNYield by Manually Assigned Cluster
 ###############################################################################
-# We'll do the same global scaling logic for SHAP analysis.
-# 1) Add final_cluster
-# 2) Rescale numeric columns globally
-# 3) Drop non-numeric columns
+df <- scaled_data %>%
+  dplyr::select(Stream_ID, Year, FNYield, final_cluster)
 
-full_scaled <- drivers_numeric_consolidated_lith %>%
-  mutate(final_cluster = if_else(
-    consolidated_rock == "sedimentary",
-    sedimentary_cluster,
-    as.character(cluster)
-  )) %>%
-  mutate(
-    across(
-      all_of(numeric_cols),
-      ~ scales::rescale(.x, na.rm = TRUE)
-    )
-  ) %>%
-  dplyr::select(
-    -major_rock, -consolidated_rock, -major_land,
-    -Stream_ID, -Year, -sedimentary_cluster
-  ) %>%
-  as.data.frame()
-
-# Compute global min & max from scaled numeric columns (excluding final_cluster)
-global_min <- min(full_scaled %>% dplyr::select(-final_cluster), na.rm = TRUE)
-global_max <- max(full_scaled %>% dplyr::select(-final_cluster), na.rm = TRUE)
-
-###############################################################################
-# 10. Define SHAP Dot Plot Function (Using final_cluster)
-###############################################################################
-generate_shap_dot_plot_obj <- function(cluster_id, shap_values_FNYield, full_scaled,
-                                       global_shap_min, global_shap_max) {
-  cluster_indices <- which(full_scaled$final_cluster == cluster_id)
-  
-  # Subset numeric features (excluding final_cluster)
-  cluster_data <- full_scaled[cluster_indices, , drop = FALSE] %>%
-    dplyr::select(-final_cluster)
-  cluster_data$id <- seq_len(nrow(cluster_data))
-  
-  # Pivot longer for feature values
-  cluster_long <- cluster_data %>%
-    pivot_longer(cols = -id, names_to = "feature", values_to = "feature_value")
-  
-  # Subset SHAP values for this cluster
-  shap_values_FNYield_df <- as.data.frame(shap_values_FNYield)[cluster_indices, , drop = FALSE] %>%
-    mutate(id = seq_len(nrow(.)))
-  
-  # Pivot SHAP to long & join
-  shap_long <- shap_values_FNYield_df %>%
-    pivot_longer(cols = -id, names_to = "feature", values_to = "shap_value") %>%
-    left_join(cluster_long, by = c("id", "feature"))
-  
-  # Filter out 'rock' features if desired
-  shap_long <- shap_long %>% 
-    filter(!grepl("rock", feature, ignore.case = TRUE))
-  
-  # Order features by mean absolute SHAP
-  overall_feature_importance <- shap_long %>%
-    group_by(feature) %>%
-    summarize(mean_abs_shap = mean(abs(shap_value), na.rm = TRUE)) %>%
-    arrange(desc(mean_abs_shap))
-  shap_long$feature <- factor(shap_long$feature, levels = rev(overall_feature_importance$feature))
-  
-  # Recode feature names
-  shap_long$feature <- recode(
-    shap_long$feature,
-    "FNYield" = "DSi Yield",
-    "NOx" = "Nitrate",
-    "P" = "Phosphorous",
-    "precip" = "Precip",
-    "temp" = "Temperature",
-    "snow_cover" = "Snow Cover",
-    "npp" = "NPP",
-    "evapotrans" = "ET",
-    "greenup_day" = "Greenup Day",
-    "permafrost" = "Permafrost",
-    "elevation" = "Elevation",
-    "basin_slope" = "Basin Slope",
-    "land_tundra" = "Land: Tundra",
-    "land_barren_or_sparsely_vegetated" = "Land: Barren & Sparsely Vegetated",
-    "land_cropland" = "Land: Cropland",
-    "land_shrubland_grassland" = "Land: Shrubland & Grassland",
-    "land_urban_and_built_up_land" = "Land: Urban & Built-up",
-    "land_wetland" = "Land: Wetland",
-    "land_forest_all" = "Land: Forest"
-  )
-  
-  # Build dot plot
-  dot_plot <- ggplot(shap_long, aes(x = shap_value, y = feature, fill = feature_value)) +
-    geom_point(alpha = 0.6, size = 3, shape = 21, stroke = 0.1, color = "black") +
-    scale_fill_gradientn(
-      colors = c("white", "gray", "black"),
-      name   = NULL,
-      limits = c(global_min, global_max)
-    ) +
-    labs(x = "SHAP Value", y = NULL) +
-    geom_vline(xintercept = 0, linetype = "dashed", color = "grey30") +
-    scale_x_continuous(limits = c(global_shap_min, global_shap_max)) +
-    theme_classic() +
-    theme(
-      axis.title     = element_text(size = 14, face = "bold"),
-      axis.text      = element_text(size = 12),
-      legend.text    = element_text(size = 12),
-      legend.title   = element_text(size = 14),
-      legend.key.size = unit(1.5, "lines")
-    )
-  
-  return(dot_plot)
-}
-
-###############################################################################
-# 11. Generate Dot Plots for Each final_cluster
-###############################################################################
-global_shap_min <- min(shap_values_FNYield, na.rm = TRUE)
-global_shap_max <- max(shap_values_FNYield, na.rm = TRUE)
-
-unique_clusters <- sort(unique(full_scaled$final_cluster))
-dot_plots <- lapply(unique_clusters, function(cl) {
-  generate_shap_dot_plot_obj(cl, shap_values_FNYield, full_scaled,
-                             global_shap_min, global_shap_max)
-})
-
-# Remove x-axis labels for all but last
-for(i in seq_along(dot_plots)) {
-  if(i < length(dot_plots)) {
-    dot_plots[[i]] <- dot_plots[[i]] + 
-      theme(axis.title.x = element_blank(), axis.text.x = element_blank())
-  }
-}
-
-###############################################################################
-# 12. Combine Box Plots & SHAP Dot Plots
-###############################################################################
-left_col <- wrap_plots(cluster_boxplots, ncol = 1) & labs(y = "Scaled Value")
-right_col <- wrap_plots(dot_plots, ncol = 1)
-
-final_combined_plot <- left_col | right_col +
-  plot_layout(guides = "collect") +
-  plot_annotation(
-    tag_levels = "A",
-    theme = theme(
-      plot.tag = element_text(size = 30, face = "bold"),
-      plot.tag.position = "topleft"
-    )
-  )
-
-ggsave(
-  filename = "Combined_Cluster_Boxplot_and_SHAP_DotPlots.png",
-  plot = final_combined_plot,
-  width = 16,
-  height = 18,
-  dpi = 300,
-  path = output_dir
-)
-print(final_combined_plot)
-
-###############################################################################
-# 13. Box Plot of FNYield by Manually Assigned Cluster (Using final_cluster)
-###############################################################################
-df <- data.frame(
-  Stream_ID     = drivers_full$Stream_ID,
-  Year          = drivers_full$Year,
-  FNYield       = drivers_full$FNYield,
-  final_cluster = scaled_data$final_cluster
-)
 write.csv(
   df,
   file = file.path(output_dir, "FNYield_Stream_ID_Year_Cluster.csv"),
   row.names = FALSE
 )
 
-p <- ggplot(df, aes(x = factor(final_cluster), y = FNYield, fill = factor(final_cluster))) +
+p_FNYield <- ggplot(df, aes(x = final_cluster, y = FNYield, fill = final_cluster)) +
   geom_boxplot(outlier.shape = NA, color = "black") +
-  geom_jitter(aes(color = factor(final_cluster)), width = 0.3, alpha = 0.4, size = 2) +
+  geom_jitter(aes(color = final_cluster), width = 0.3, alpha = 0.4, size = 2) +
   scale_fill_manual(values = my_cluster_colors_lighter) +
   scale_color_manual(values = my_cluster_colors) +
   labs(
@@ -388,68 +221,59 @@ p <- ggplot(df, aes(x = factor(final_cluster), y = FNYield, fill = factor(final_
   theme_classic(base_size = 16) +
   theme(legend.position = "none")
 
-print(p)
-ggsave(
-  "FNYield_Yearly_Clusters.png",
-  p,
-  width = 8,
-  height = 5,
-  dpi = 300,
-  path = output_dir
-)
-
 ###############################################################################
-# 14. Silhouette Plot for Manually Assigned FNYield Clusters (Optional)
+# 9. Silhouette-Like Plot with Custom ggplot (Using final_cluster)
 ###############################################################################
+# 9a) Compute silhouette with numeric labels
 sil_obj <- silhouette(
-  as.numeric(scaled_data$cluster),
+  as.numeric(scaled_data$final_cluster),  # numeric vector 1..5
   dist(
-    scaled_data %>%
-      dplyr::select(rocks_volcanic, rocks_sedimentary, rocks_carbonate_evaporite,
-             rocks_metamorphic, rocks_plutonic)
+    scaled_data %>% select(
+      rocks_volcanic, rocks_sedimentary, rocks_carbonate_evaporite,
+      rocks_metamorphic, rocks_plutonic
+    )
   )
 )
-mean_sil_value <- mean(sil_obj[, "sil_width"])
 
-p_sil <- fviz_silhouette(
-  sil_obj,
-  label   = FALSE,
-  palette = unname(my_cluster_colors)
-) +
-  geom_hline(
-    yintercept = mean_sil_value,
-    linetype   = "dashed",
-    color      = "gray4"
-  ) +
+# 9b) Convert silhouette object to data frame, adding factor labels
+sil_df <- data.frame(
+  cluster   = scaled_data$final_cluster,  # your factor names
+  sil_width = sil_obj[, "sil_width"],
+  neighbor  = sil_obj[, "neighbor"]
+)
+
+# 9c) (Optional) Order by cluster and silhouette width
+sil_df <- sil_df %>%
+  group_by(cluster) %>%
+  arrange(desc(sil_width), .by_group = TRUE) %>%
+  ungroup() %>%
+  mutate(site_order = row_number())
+
+# 9d) Build a custom silhouette-like plot in ggplot
+p_custom_sil <- ggplot(sil_df, aes(x = site_order, y = sil_width, fill = cluster)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~ cluster, scales = "free_x", nrow = 1) +
+  scale_fill_manual(values = my_cluster_colors) +
+  labs(x = "Sites", y = "Silhouette Width") +
+  theme_classic(base_size = 14)
+
+# 9e) Add dashed line for overall mean silhouette width
+mean_sil_value <- mean(sil_df$sil_width, na.rm = TRUE)
+
+p_custom_sil <- p_custom_sil +
+  geom_hline(yintercept = mean_sil_value, linetype = "dashed") +
   annotate(
     "text",
-    x     = nrow(sil_obj) * 0.8,
+    x     = max(sil_df$site_order) * 0.8,
     y     = mean_sil_value,
     label = paste("Mean =", round(mean_sil_value, 2)),
-    color = "gray4",
     vjust = -0.5
-  ) +
-  labs(x = "Sites", y = "Silhouette Width") +
-  theme_classic(base_size = 16) +
-  theme(
-    legend.title = element_blank(),
-    axis.text.x  = element_blank(),
-    axis.ticks.x = element_blank()
   )
 
-print(p_sil)
-ggsave(
-  filename = "FNYield_Yearly_Silhouette.png",
-  plot = p_sil,
-  width = 8,
-  height = 5,
-  dpi = 300,
-  path = output_dir
-)
-
 ###############################################################################
-# 15. Mean Absolute SHAP Bar Plots (Using final_cluster)
+# 10. Mean Absolute SHAP Bar Plots (Using final_cluster)
 ###############################################################################
+# If shap_values_FNYield is an NxM matrix with M features
 plot_mean_abs_shap <- function(cluster_id, shap_values_FNYield, full_scaled) {
   cluster_indices <- which(full_scaled$final_cluster == cluster_id)
   shap_cluster    <- shap_values_FNYield[cluster_indices, , drop = FALSE]
@@ -460,6 +284,7 @@ plot_mean_abs_shap <- function(cluster_id, shap_values_FNYield, full_scaled) {
     mean_abs_shapval = as.numeric(mean_abs_shap)
   ) %>%
     arrange(desc(mean_abs_shapval)) %>%
+    # Optionally remove 'rock' features if you don't want them in the bar plot
     filter(!grepl("rock", feature, ignore.case = TRUE))
   
   df_shap$feature <- recode(
@@ -497,6 +322,7 @@ plot_mean_abs_shap <- function(cluster_id, shap_values_FNYield, full_scaled) {
       alpha = 0.8
     ) +
     coord_flip() +
+    # Adjust limits as needed for your data
     scale_y_continuous(limits = c(0, 6500)) +
     labs(x = NULL, y = "Mean Absolute SHAP Value", title = paste("Cluster", cluster_id)) +
     theme_classic(base_size = 14) +
@@ -507,15 +333,64 @@ plot_mean_abs_shap <- function(cluster_id, shap_values_FNYield, full_scaled) {
     )
 }
 
-unique_clusters <- sort(unique(full_scaled$final_cluster))
-plot_list <- lapply(unique_clusters, function(cl) {
+# We'll rescale the data again for shap if needed, or just re-use scaled_data
+full_scaled <- scaled_data
+
+unique_clusters_shap <- sort(unique(full_scaled$final_cluster))
+plot_list <- lapply(unique_clusters_shap, function(cl) {
   plot_mean_abs_shap(cl, shap_values_FNYield, full_scaled)
 })
 
 ncol <- 2
-nrow <- ceiling(length(unique_clusters)/ncol)
+nrow <- ceiling(length(unique_clusters_shap)/ncol)
 final_shap_grid <- wrap_plots(plot_list, ncol = ncol, nrow = nrow)
-print(final_shap_grid)
+
+###############################################################################
+# 11. Combine & Save Plots
+###############################################################################
+# Combine cluster boxplots for drivers
+left_col <- wrap_plots(cluster_boxplots, ncol = 1) & labs(y = "Scaled Value")
+
+# Optionally combine with other plots, e.g., a placeholder for a SHAP dot plot
+# right_col <- some_shap_dot_plot_code
+
+# final_combined_plot <- left_col | right_col +
+#   plot_layout(guides = "collect") +
+#   plot_annotation(
+#     tag_levels = "A",
+#     theme = theme(
+#       plot.tag = element_text(size = 30, face = "bold"),
+#       plot.tag.position = "topleft"
+#     )
+#   )
+
+# For demonstration, we’ll just print and save the separate objects:
+ggsave(
+  filename = "Cluster_Boxplots_for_Drivers.png",
+  plot = left_col,
+  width = 12,
+  height = 18,
+  dpi = 300,
+  path = output_dir
+)
+
+ggsave(
+  filename = "FNYield_Yearly_Clusters.png",
+  plot = p_FNYield,
+  width = 8,
+  height = 5,
+  dpi = 300,
+  path = output_dir
+)
+
+ggsave(
+  filename = "Custom_Silhouette_Plot.png",
+  plot = p_custom_sil,
+  width = 10,
+  height = 6,
+  dpi = 300,
+  path = output_dir
+)
 
 ggsave(
   filename = "MeanAbsSHAP_Grid.png",
@@ -525,3 +400,9 @@ ggsave(
   dpi = 300,
   path = output_dir
 )
+
+# Print final objects to screen
+print(left_col)
+print(p_FNYield)
+print(p_custom_sil)
+print(final_shap_grid)
