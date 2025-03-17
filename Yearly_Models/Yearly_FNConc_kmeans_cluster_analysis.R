@@ -458,3 +458,7 @@ ggsave(
   path     = output_dir
 )
 
+save(full_scaled, cluster_boxplots, shap_values_FNConc, shap_values_FNYield,
+     global_shap_min, global_shap_max, plot_mean_abs_shap, generate_shap_dot_plot_obj,
+     file = "FNConc_HierClust_Workflow_Objects.RData")
+

@@ -1,6 +1,8 @@
 ###############################################################################
-# 1. Load Packages & Clear Environment
+# COMPLETE WORKFLOW: FNConc Cluster Plotting with Dot Plots, Silhouette, & Grid
 ###############################################################################
+
+## 1. Load Packages & Clear Environment
 rm(list = ls())
 library(ggplot2)
 library(dplyr)
@@ -16,18 +18,19 @@ library(factoextra)  # fviz_silhouette() - used earlier, but we'll do custom now
 
 # Set working directory and output directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model/FNYield"
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model/FNConc"
 
 ###############################################################################
 # 2. Load Data & Model
 ###############################################################################
-load("FNYield_Yearly_rf_model2_full_new.RData")
-load("FNYield_Yearly_kept_drivers_full_new.RData")
-load("FNYield_Yearly_full_new.RData")
-load("FNYield_Yearly_full_stream_ids_new.RData")
+## 2. Load Data & Model
+load("FNConc_Yearly_rf_model2_full_new.RData")
+load("FNConc_Yearly_kept_drivers__full_new.RData")
+load("FNConc_Yearly_full_new.RData")
+load("FNConc_Yearly_full_stream_ids_full_new.RData")
 
 # Load precomputed SHAP values
-load("FNYield_Yearly_shap_values_new.RData")
+load("FNConc_Yearly_shap_values_new.RData")
 
 drivers_full <- read.csv("All_Drivers_Harmonized_Yearly_FNConc_FNYield_5_years.csv")
 
@@ -117,17 +120,15 @@ my_cluster_colors_lighter <- sapply(my_cluster_colors, function(x) lighten(x, am
 ###############################################################################
 # 6. Create Long-format Data for Box Plots (Drivers) using final_cluster
 ###############################################################################
+# Replace references to FNYield with FNConc.
 long_data <- scaled_data %>%
-  dplyr::select(
-    -major_rock, -consolidated_rock, -major_land,
-    -Stream_ID, -Year
-  ) %>%
+  dplyr::select(-major_rock, -consolidated_rock, -major_land, -Stream_ID, -Year) %>%
   pivot_longer(-final_cluster, names_to = "Driver", values_to = "Value") %>%
   mutate(
     Driver = factor(
       Driver,
       levels = c(
-        "FNYield",
+        "FNConc",  # changed from FNYield to FNConc
         "elevation", "basin_slope",
         "NOx", "P", "npp", "greenup_day", "evapotrans",
         "precip", "temp", "snow_cover", "permafrost",
@@ -140,7 +141,7 @@ long_data <- scaled_data %>%
     ),
     Driver = recode(
       Driver,
-      "FNYield" = "DSi Yield",
+      "FNConc" = "DSi Concentration",  # updated recode
       "NOx" = "Nitrate",
       "P" = "Phosphorous",
       "precip" = "Precip",
@@ -178,19 +179,14 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
     ggplot(aes(x = Driver, y = Value, fill = final_cluster)) +
     geom_boxplot() +
     scale_fill_manual(values = my_cluster_colors_lighter, guide = "none") +
-    scale_y_continuous(limits = c(0, 1)) +  # Force axis 0..1
-    labs(
-      x = NULL,
-      y = NULL,
-      title = NULL
-    ) +
+    scale_y_continuous(limits = c(0, 1)) +
+    labs(x = NULL, y = NULL, title = NULL) +  # Remove cluster title labels
     theme_classic() +
     theme(
-      plot.title  = element_text(size = 14, hjust = 0.5),
+      plot.title = element_blank(),
       axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 14),
       axis.text.y = element_text(size = 14)
     )
-  # Remove x-axis labels for all but the last plot
   if (cl != tail(unique_clusters, 1)) {
     p <- p + theme(axis.title.x = element_blank(), axis.text.x = element_blank())
   }
@@ -198,26 +194,23 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
 })
 
 ###############################################################################
-# 8. Box Plot of FNYield by Manually Assigned Cluster
+# 8. Box Plot of FNConc by Manually Assigned Cluster (Unscaled FNConc)
 ###############################################################################
 df <- drivers_numeric_consolidated_lith %>%
-  dplyr::select(Stream_ID, Year, FNYield, final_cluster)
+  dplyr::select(Stream_ID, Year, FNConc, final_cluster)  # replaced FNYield with FNConc
 
 write.csv(
   df,
-  file = file.path(output_dir, "FNYield_Stream_ID_Year_Cluster.csv"),
+  file = file.path(output_dir, "FNConc_Stream_ID_Year_Cluster.csv"),
   row.names = FALSE
 )
 
-p_FNYield <- ggplot(df, aes(x = final_cluster, y = FNYield, fill = final_cluster)) +
+p_FNConc <- ggplot(df, aes(x = final_cluster, y = FNConc, fill = final_cluster)) +
   geom_boxplot(outlier.shape = NA, color = "black") +
   geom_jitter(aes(color = final_cluster), width = 0.3, alpha = 0.4, size = 2) +
   scale_fill_manual(values = my_cluster_colors_lighter) +
   scale_color_manual(values = my_cluster_colors) +
-  labs(
-    x = NULL,
-    y = expression(DSi~Yield~(kg~m^{-2}~y^{-1}))
-  ) +
+  labs(x = NULL, y = expression(DSi~Concentration~(mg~L^{-1}))) +
   theme_classic(base_size = 16) +
   theme(legend.position = "none")
 
@@ -262,9 +255,9 @@ print(p_sil)
 ###############################################################################
 # ***** Define the function plot_mean_abs_shap for SHAP bar plots *****
 ###############################################################################
-plot_mean_abs_shap <- function(cluster_id, shap_values_FNYield, full_scaled) {
+plot_mean_abs_shap <- function(cluster_id, shap_values_FNConc, full_scaled) {
   cluster_indices <- which(full_scaled$final_cluster == cluster_id)
-  shap_cluster    <- shap_values_FNYield[cluster_indices, , drop = FALSE]
+  shap_cluster    <- shap_values_FNConc[cluster_indices, , drop = FALSE]
   mean_abs_shap <- colMeans(abs(shap_cluster), na.rm = TRUE)
   
   df_shap <- data.frame(
@@ -304,11 +297,11 @@ plot_mean_abs_shap <- function(cluster_id, shap_values_FNYield, full_scaled) {
   ggplot(df_shap, aes(x = reorder(feature, mean_abs_shapval), y = mean_abs_shapval)) +
     geom_bar(stat = "identity", fill = my_cluster_colors[[as.character(cluster_id)]], alpha = 0.8) +
     coord_flip() +
-    scale_y_continuous(limits = c(0, 1100)) +
+    scale_y_continuous(limits = c(0, 1.3)) +
     labs(x = NULL, y = "Mean Absolute SHAP Value", title = NULL) +
     theme_classic(base_size = 14) +
     theme(
-      plot.title  = element_text(size = 14, hjust = 0.5),
+      plot.title = element_blank(),
       axis.text.y = element_text(size = 12),
       axis.text.x = element_text(size = 12)
     )
@@ -322,7 +315,7 @@ full_scaled <- scaled_data
 global_min <- min(full_scaled %>% dplyr::select(where(is.numeric)), na.rm = TRUE)
 global_max <- max(full_scaled %>% dplyr::select(where(is.numeric)), na.rm = TRUE)
 
-generate_shap_dot_plot_obj <- function(cluster_name, shap_values_FNYield, full_scaled, global_shap_min, global_shap_max) {
+generate_shap_dot_plot_obj <- function(cluster_name, shap_values_FNConc, full_scaled, global_shap_min, global_shap_max) {
   cluster_indices <- which(full_scaled$final_cluster == cluster_name)
   cluster_data <- full_scaled[cluster_indices, , drop = FALSE] %>% dplyr::select(where(is.numeric))
   cluster_data$id <- seq_len(nrow(cluster_data))
@@ -330,16 +323,15 @@ generate_shap_dot_plot_obj <- function(cluster_name, shap_values_FNYield, full_s
   cluster_long <- cluster_data %>%
     pivot_longer(cols = -id, names_to = "feature", values_to = "feature_value")
   
-  shap_values_FNYield_df <- as.data.frame(shap_values_FNYield)[cluster_indices, , drop = FALSE] %>%
+  shap_values_FNConc_df <- as.data.frame(shap_values_FNConc)[cluster_indices, , drop = FALSE] %>%
     mutate(id = seq_len(nrow(.)))
   
-  shap_long <- shap_values_FNYield_df %>%
+  shap_long <- shap_values_FNConc_df %>%
     pivot_longer(cols = -id, names_to = "feature", values_to = "shap_value") %>%
     left_join(cluster_long, by = c("id", "feature"))
   
-  # Add this filter to remove any rock-related features
-  shap_long <- shap_long %>% 
-    filter(!grepl("rock", feature, ignore.case = TRUE))
+  # Remove rock-related features
+  shap_long <- shap_long %>% filter(!grepl("rock", feature, ignore.case = TRUE))
   
   overall_feature_importance <- shap_long %>%
     group_by(feature) %>%
@@ -348,7 +340,7 @@ generate_shap_dot_plot_obj <- function(cluster_name, shap_values_FNYield, full_s
   shap_long$feature <- factor(shap_long$feature, levels = rev(overall_feature_importance$feature))
   
   shap_long$feature <- recode(shap_long$feature,
-                              "FNYield" = "DSi Yield",
+                              "FNConc" = "DSi Concentration",  # updated recode
                               "NOx" = "Nitrate",
                               "P" = "Phosphorous",
                               "precip" = "Precip",
@@ -359,19 +351,7 @@ generate_shap_dot_plot_obj <- function(cluster_name, shap_values_FNYield, full_s
                               "greenup_day" = "Greenup Day",
                               "permafrost" = "Permafrost",
                               "elevation" = "Elevation",
-                              "basin_slope" = "Basin Slope",
-                              "rocks_volcanic" = "Rock: Volcanic",
-                              "rocks_sedimentary" = "Rock: Sedimentary",
-                              "rocks_carbonate_evaporite" = "Rock: Carbonate & Evaporite",
-                              "rocks_metamorphic" = "Rock: Metamorphic",
-                              "rocks_plutonic" = "Rock: Plutonic",
-                              "land_tundra" = "Land: Tundra",
-                              "land_barren_or_sparsely_vegetated" = "Land: Barren & Sparsely Vegetated",
-                              "land_cropland" = "Land: Cropland",
-                              "land_shrubland_grassland" = "Land: Shrubland & Grassland",
-                              "land_urban_and_built_up_land" = "Land: Urban & Built-up",
-                              "land_wetland" = "Land: Wetland",
-                              "land_forest_all" = "Land: Forest")
+                              "basin_slope" = "Basin Slope")
   
   ggplot(shap_long, aes(x = shap_value, y = feature, fill = feature_value)) +
     geom_point(alpha = 0.6, size = 3, shape = 21, stroke = 0.1, color = "black") +
@@ -394,11 +374,11 @@ generate_shap_dot_plot_obj <- function(cluster_name, shap_values_FNYield, full_s
     )
 }
 
-global_shap_min <- min(shap_values_FNYield, na.rm = TRUE)
-global_shap_max <- max(shap_values_FNYield, na.rm = TRUE)
+global_shap_min <- min(shap_values_FNConc, na.rm = TRUE)
+global_shap_max <- max(shap_values_FNConc, na.rm = TRUE)
 
 dot_plots <- lapply(unique_clusters, function(cl) {
-  generate_shap_dot_plot_obj(cl, shap_values_FNYield, full_scaled, global_shap_min, global_shap_max)
+  generate_shap_dot_plot_obj(cl, shap_values_FNConc, full_scaled, global_shap_min, global_shap_max)
 })
 
 for(i in seq_along(dot_plots)) {
@@ -439,14 +419,14 @@ ggsave(
 print(final_combined_plot)
 
 ggsave(
-  filename = "FNYield_Yearly_Clusters.png",
-  plot = p_FNYield,
+  filename = "FNConc_Yearly_Clusters.png",
+  plot = p_FNConc,
   width = 8,
   height = 5,
   dpi = 300,
   path = output_dir
 )
-print(p_FNYield)
+print(p_FNConc)
 
 ggsave(
   filename = "Custom_Silhouette_Plot.png",
@@ -461,7 +441,7 @@ print(p_sil)
 # ***** Create the list of SHAP bar plots (plot_list_bars) *****
 unique_clusters_for_shap <- levels(full_scaled$final_cluster)
 plot_list_bars <- lapply(unique_clusters_for_shap, function(cl) {
-  plot_mean_abs_shap(cl, shap_values_FNYield, full_scaled)
+  plot_mean_abs_shap(cl, shap_values_FNConc, full_scaled)
 })
 
 ggsave(
@@ -474,6 +454,6 @@ ggsave(
 )
 print(wrap_plots(plot_list_bars, ncol = 2))
 
-save(full_scaled, cluster_boxplots, shap_values_FNYield,
+save(full_scaled, cluster_boxplots, shap_values_FNConc,
      global_shap_min, global_shap_max, plot_mean_abs_shap, generate_shap_dot_plot_obj,
-     file = "FNYield_HierClust_Workflow_Objects.RData")
+     file = "FNConc_HierClust_Workflow_Objects.RData")
