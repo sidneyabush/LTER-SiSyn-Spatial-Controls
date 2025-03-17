@@ -197,6 +197,8 @@ lulc_wide <- lulc_wide %>%
     }
   }))
 
+#write.csv(lulc_wide, "lulc_new_class.csv")
+
 # Merge the reclassified land cover data (including major_land) into tot by Stream_Name and Year
 tot <- tot %>% left_join(lulc_wide, by = c("Stream_Name", "Year"))
 

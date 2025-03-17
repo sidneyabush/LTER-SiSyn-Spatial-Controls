@@ -788,28 +788,44 @@ print(num_unique_stream_ids)
 # -----------------------------------------------------------
 # New: Incorporate Land Cover Data ----
 # -----------------------------------------------------------
-lulc <- read.csv("LULC_TempVar_GLC1000m.csv", stringsAsFactors = FALSE) %>%
-  dplyr::select(Stream_Name, Year, LandClass, prop) %>%
-  mutate(prop = if_else(is.na(prop) | prop == 0, prop, prop * 100))
+# Read in the original land cover file (with percentage values)
+lulc <- read.csv("DSi_LULC_filled_interpolated_Simple.csv", stringsAsFactors = FALSE) %>%
+  dplyr::select("Stream_Name", "Year", "Simple_Class", "LandClass_sum") %>%
+  mutate(LandClass_sum = if_else(is.na(LandClass_sum) | 
+                                   LandClass_sum == 0, LandClass_sum, LandClass_sum * 100))  # convert to percentage
 
-lulc_wide <- lulc %>%
-  pivot_wider(names_from = LandClass, 
-              values_from = prop, 
-              names_prefix = "land_")
+# Remove any existing columns that start with "land_" and the "major_land" column from tot
 tot <- tot %>% dplyr::select(-starts_with("land_"), -major_land)
-tot <- tot %>% left_join(lulc_wide, by = c("Stream_Name", "Year"))
 
-tot <- tot %>%
-  rowwise() %>%
-  mutate(
-    land_forest_all = sum(c_across(contains("forest")), na.rm = TRUE),
-    land_cropland  = sum(c_across(contains("cropland")), na.rm = TRUE),
-    land_shrubland_grassland = sum(c_across(c(contains("grassland"), 
-                                              contains("shrubland"))), na.rm = TRUE)
+# Pivot the aggregated data so each unique Simple_Class becomes its own column
+lulc_wide <- lulc %>%
+  pivot_wider(
+    names_from = Simple_Class,
+    values_from = LandClass_sum,
+    names_prefix = "land_"
   ) %>%
-  ungroup() %>%
-  dplyr::select(-contains("forest"), -contains("cropland"), -contains("grassland"), 
-                -contains("shrubland"))
+  dplyr::select(-"land_Filled_Value")
+
+# Identify all the land cover columns (i.e., columns starting with "land_")
+land_cols <- grep("^land_", names(lulc_wide), value = TRUE)
+
+# Create a new column 'major_land' that finds the class with the highest percentage in each row
+lulc_wide <- lulc_wide %>%
+  mutate(major_land = apply(select(., all_of(land_cols)), 1, function(x) {
+    if(all(is.na(x))) {
+      NA_character_
+    } else {
+      # Identify the column name with the maximum percentage
+      max_col <- names(x)[which.max(x)]
+      # Remove the "land_" prefix to get the actual land class name
+      sub("^land_", "", max_col)
+    }
+  }))
+
+#write.csv(lulc_wide, "lulc_new_class.csv")
+
+# Merge the reclassified land cover data (including major_land) into tot by Stream_Name and Year
+tot <- tot %>% left_join(lulc_wide, by = c("Stream_Name", "Year"))
 
 tot <- tot %>%
   mutate(across(where(is.list), ~ sapply(., function(x) paste(x, collapse = ","))))
@@ -870,7 +886,7 @@ drivers_df <- tot_annual %>%
   mutate(across(where(is.character), ~ na_if(., ""))) %>%
   dplyr::select(FNConc, everything()) %>%
   # Replace NAs in selected numeric columns with 0 (if desired)
-  mutate_at(vars(22:54), ~ replace(., is.na(.), 0)) %>%
+  mutate_at(vars(21:36), ~ replace(., is.na(.), 0)) %>%
   filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc) %>%
   filter(complete.cases(.))
 
