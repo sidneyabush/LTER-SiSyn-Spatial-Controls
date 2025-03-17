@@ -182,7 +182,7 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
     labs(
       x = NULL,
       y = NULL,
-      title = paste("Cluster", cl)
+      title = NULL
     ) +
     theme_classic() +
     theme(
@@ -215,147 +215,97 @@ p_FNYield <- ggplot(df, aes(x = final_cluster, y = FNYield, fill = final_cluster
   scale_fill_manual(values = my_cluster_colors_lighter) +
   scale_color_manual(values = my_cluster_colors) +
   labs(
-    x = "Cluster",
+    x = NULL,
     y = expression(DSi~Yield~(kg~m^{-2}~y^{-1}))
   ) +
   theme_classic(base_size = 16) +
   theme(legend.position = "none")
 
 ###############################################################################
-# 9. Silhouette-Like Plot with Custom ggplot (Using final_cluster)
+# 9. Silhouette Plot with Factoextra (Remove x-axis elements)
 ###############################################################################
-# Compute the silhouette using numeric cluster IDs
 sil_obj <- silhouette(
   as.numeric(scaled_data$final_cluster),
-  dist(
-    scaled_data %>% 
-      dplyr::select(rocks_volcanic, rocks_sedimentary, rocks_carbonate_evaporite,
-                    rocks_metamorphic, rocks_plutonic)
-  )
+  dist(scaled_data %>% dplyr::select(rocks_volcanic, rocks_sedimentary, 
+                                     rocks_carbonate_evaporite, rocks_metamorphic, 
+                                     rocks_plutonic))
 )
+mean_sil_value <- mean(sil_obj[, "sil_width"], na.rm = TRUE)
 
-# Use fviz_silhouette() with your palette of colors
 p_sil <- fviz_silhouette(
   sil_obj,
   label   = FALSE,
   palette = c("#AC7B32","#579C8E","#89C8A0","#C26F86","#5E88B0")
 )
-
-# After creating p_sil with fviz_silhouette() ...
-p_sil <- p_sil + guides(color = "none")
-
-# Override the legend labels with your desired cluster names
-p_sil <- p_sil +
+p_sil <- p_sil + guides(color = "none") +
   scale_fill_manual(
     name   = "Cluster",
-    values = c("1" = "#AC7B32",
-               "2" = "#579C8E",
-               "3" = "#89C8A0",
-               "4" = "#C26F86",
-               "5" = "#5E88B0"),
-    
-    labels = c("1" = "Volcanic",
-               "2" = "Sedimentary",
-               "3" = "Mixed Sedimentary",
-               "4" = "Metamorphic",
-               "5" = "Carbonate_Evaporite")
-  )
-
-# (Optional) Add additional ggplot layers (e.g., mean silhouette line) if needed
-mean_sil_value <- mean(sil_obj[, 3], na.rm = TRUE)
-p_sil <- p_sil +
-  geom_hline(
-    yintercept = mean_sil_value,
-    linetype   = "dashed",
-    color      = "gray4"
+    values = c("1"="#AC7B32", "2"="#579C8E", "3"="#89C8A0", "4"="#C26F86", "5"="#5E88B0"),
+    labels = c("1"="Volcanic", "2"="Sedimentary", "3"="Mixed Sedimentary",
+               "4"="Metamorphic", "5"="Carbonate_Evaporite")
   ) +
-  annotate(
-    "text",
-    x     = nrow(sil_obj) * 0.8,
-    y     = mean_sil_value,
-    label = paste("Mean =", round(mean_sil_value, 2)),
-    color = "gray4",
-    vjust = -0.5
-  ) +
-  labs(x = "Sites", y = "Silhouette Width") +
-  theme_classic(base_size = 16)
-
-p_sil <- p_sil +
-  # Remove the built-in plot title and subtitle from fviz_silhouette
-  labs(title = NULL, subtitle = NULL, x = NULL) + 
-  # Or: labs(title = "", subtitle = "", x = "")
+  geom_hline(yintercept = mean_sil_value, linetype = "dashed", color = "gray4") +
+  annotate("text", x = nrow(sil_obj)*0.8, y = mean_sil_value,
+           label = paste("Mean =", round(mean_sil_value,2)),
+           color = "gray4", vjust = -0.5) +
+  labs(x = NULL, y = "Silhouette Width", title = NULL, subtitle = NULL) +
   theme_classic(base_size = 16) +
-  theme(
-    # Remove x-axis text and ticks
-    axis.text.x  = element_blank(),
-    axis.ticks.x = element_blank(),
-    axis.title.x = element_blank(),
-    
-    # Remove legend title
-    legend.title = element_blank(),
-    
-    # Also remove any leftover plot title/subtitle space
-    plot.title    = element_blank(),
-    plot.subtitle = element_blank()
-  )
+  theme(axis.text.x  = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank(),
+        legend.title = element_blank(),
+        plot.title   = element_blank(),
+        plot.subtitle = element_blank())
 
 print(p_sil)
 
 ###############################################################################
-# 10. Mean Absolute SHAP Bar Plots (Using final_cluster)
+# ***** Define the function plot_mean_abs_shap for SHAP bar plots *****
 ###############################################################################
-# If shap_values_FNYield is an NxM matrix with M features
 plot_mean_abs_shap <- function(cluster_id, shap_values_FNYield, full_scaled) {
   cluster_indices <- which(full_scaled$final_cluster == cluster_id)
   shap_cluster    <- shap_values_FNYield[cluster_indices, , drop = FALSE]
-  
   mean_abs_shap <- colMeans(abs(shap_cluster), na.rm = TRUE)
+  
   df_shap <- data.frame(
     feature          = names(mean_abs_shap),
     mean_abs_shapval = as.numeric(mean_abs_shap)
   ) %>%
     arrange(desc(mean_abs_shapval)) %>%
-    # Optionally remove 'rock' features if you don't want them in the bar plot
     filter(!grepl("rock", feature, ignore.case = TRUE))
   
-  df_shap$feature <- recode(
-    df_shap$feature,
-    "NOx" = "Nitrate",
-    "P"   = "Phosphorous",
-    "precip" = "Precip",
-    "temp"   = "Temperature",
-    "snow_cover" = "Snow Cover",
-    "npp"    = "NPP",
-    "evapotrans" = "ET",
-    "greenup_day" = "Greenup Day",
-    "permafrost"  = "Permafrost",
-    "elevation"   = "Elevation",
-    "basin_slope" = "Basin Slope",
-    "FNConc"      = "DSi Concentration",
-    "rocks_volcanic" = "Rock: Volcanic",
-    "rocks_sedimentary" = "Rock: Sedimentary",
-    "rocks_carbonate_evaporite" = "Rock: Carbonate & Evaporite",
-    "rocks_metamorphic" = "Rock: Metamorphic",
-    "rocks_plutonic"    = "Rock: Plutonic",
-    "land_tundra" = "Land: Tundra",
-    "land_barren_or_sparsely_vegetated" = "Land: Barren & Sparsely Vegetated",
-    "land_cropland" = "Land: Cropland",
-    "land_shrubland_grassland" = "Land: Shrubland & Grassland",
-    "land_urban_and_built_up_land" = "Land: Urban & Built-up",
-    "land_wetland" = "Land: Wetland",
-    "land_forest_all" = "Land: Forest"
+  df_shap$feature <- recode(df_shap$feature,
+                            "NOx" = "Nitrate",
+                            "P"   = "Phosphorous",
+                            "precip" = "Precip",
+                            "temp" = "Temperature",
+                            "snow_cover" = "Snow Cover",
+                            "npp" = "NPP",
+                            "evapotrans" = "ET",
+                            "greenup_day" = "Greenup Day",
+                            "permafrost" = "Permafrost",
+                            "elevation" = "Elevation",
+                            "basin_slope" = "Basin Slope",
+                            "FNConc" = "DSi Concentration",
+                            "rocks_volcanic" = "Rock: Volcanic",
+                            "rocks_sedimentary" = "Rock: Sedimentary",
+                            "rocks_carbonate_evaporite" = "Rock: Carbonate & Evaporite",
+                            "rocks_metamorphic" = "Rock: Metamorphic",
+                            "rocks_plutonic" = "Rock: Plutonic",
+                            "land_tundra" = "Land: Tundra",
+                            "land_barren_or_sparsely_vegetated" = "Land: Barren & Sparsely Vegetated",
+                            "land_cropland" = "Land: Cropland",
+                            "land_shrubland_grassland" = "Land: Shrubland & Grassland",
+                            "land_urban_and_built_up_land" = "Land: Urban & Built-up",
+                            "land_wetland" = "Land: Wetland",
+                            "land_forest_all" = "Land: Forest"
   )
   
   ggplot(df_shap, aes(x = reorder(feature, mean_abs_shapval), y = mean_abs_shapval)) +
-    geom_bar(
-      stat  = "identity",
-      fill  = my_cluster_colors[[as.character(cluster_id)]],
-      alpha = 0.8
-    ) +
+    geom_bar(stat = "identity", fill = my_cluster_colors[[as.character(cluster_id)]], alpha = 0.8) +
     coord_flip() +
-    # Adjust limits as needed for your data
-    scale_y_continuous(limits = c(0, 6500)) +
-    labs(x = NULL, y = "Mean Absolute SHAP Value", title = paste("Cluster", cluster_id)) +
+    scale_y_continuous(limits = c(0, 1100)) +
+    labs(x = NULL, y = "Mean Absolute SHAP Value", title = NULL) +
     theme_classic(base_size = 14) +
     theme(
       plot.title  = element_text(size = 14, hjust = 0.5),
@@ -364,46 +314,129 @@ plot_mean_abs_shap <- function(cluster_id, shap_values_FNYield, full_scaled) {
     )
 }
 
-# We'll rescale the data again for shap if needed, or just re-use scaled_data
+###############################################################################
+# 10. SHAP Dot Plots (Remove Titles from Each Dot Plot)
+###############################################################################
 full_scaled <- scaled_data
 
-unique_clusters_shap <- sort(unique(full_scaled$final_cluster))
-plot_list <- lapply(unique_clusters_shap, function(cl) {
-  plot_mean_abs_shap(cl, shap_values_FNYield, full_scaled)
+global_min <- min(full_scaled %>% dplyr::select(where(is.numeric)), na.rm = TRUE)
+global_max <- max(full_scaled %>% dplyr::select(where(is.numeric)), na.rm = TRUE)
+
+generate_shap_dot_plot_obj <- function(cluster_name, shap_values_FNYield, full_scaled, global_shap_min, global_shap_max) {
+  cluster_indices <- which(full_scaled$final_cluster == cluster_name)
+  cluster_data <- full_scaled[cluster_indices, , drop = FALSE] %>% dplyr::select(where(is.numeric))
+  cluster_data$id <- seq_len(nrow(cluster_data))
+  
+  cluster_long <- cluster_data %>%
+    pivot_longer(cols = -id, names_to = "feature", values_to = "feature_value")
+  
+  shap_values_FNYield_df <- as.data.frame(shap_values_FNYield)[cluster_indices, , drop = FALSE] %>%
+    mutate(id = seq_len(nrow(.)))
+  
+  shap_long <- shap_values_FNYield_df %>%
+    pivot_longer(cols = -id, names_to = "feature", values_to = "shap_value") %>%
+    left_join(cluster_long, by = c("id", "feature"))
+  
+  # Add this filter to remove any rock-related features
+  shap_long <- shap_long %>% 
+    filter(!grepl("rock", feature, ignore.case = TRUE))
+  
+  overall_feature_importance <- shap_long %>%
+    group_by(feature) %>%
+    summarize(mean_abs_shap = mean(abs(shap_value), na.rm = TRUE)) %>%
+    arrange(desc(mean_abs_shap))
+  shap_long$feature <- factor(shap_long$feature, levels = rev(overall_feature_importance$feature))
+  
+  shap_long$feature <- recode(shap_long$feature,
+                              "FNYield" = "DSi Yield",
+                              "NOx" = "Nitrate",
+                              "P" = "Phosphorous",
+                              "precip" = "Precip",
+                              "temp" = "Temperature",
+                              "snow_cover" = "Snow Cover",
+                              "npp" = "NPP",
+                              "evapotrans" = "ET",
+                              "greenup_day" = "Greenup Day",
+                              "permafrost" = "Permafrost",
+                              "elevation" = "Elevation",
+                              "basin_slope" = "Basin Slope",
+                              "rocks_volcanic" = "Rock: Volcanic",
+                              "rocks_sedimentary" = "Rock: Sedimentary",
+                              "rocks_carbonate_evaporite" = "Rock: Carbonate & Evaporite",
+                              "rocks_metamorphic" = "Rock: Metamorphic",
+                              "rocks_plutonic" = "Rock: Plutonic",
+                              "land_tundra" = "Land: Tundra",
+                              "land_barren_or_sparsely_vegetated" = "Land: Barren & Sparsely Vegetated",
+                              "land_cropland" = "Land: Cropland",
+                              "land_shrubland_grassland" = "Land: Shrubland & Grassland",
+                              "land_urban_and_built_up_land" = "Land: Urban & Built-up",
+                              "land_wetland" = "Land: Wetland",
+                              "land_forest_all" = "Land: Forest")
+  
+  ggplot(shap_long, aes(x = shap_value, y = feature, fill = feature_value)) +
+    geom_point(alpha = 0.6, size = 3, shape = 21, stroke = 0.1, color = "black") +
+    scale_fill_gradientn(
+      colors = c("white", "gray", "black"),
+      name   = NULL,
+      limits = c(global_min, global_max)
+    ) +
+    labs(x = "SHAP Value", y = NULL, title = NULL) +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "grey30") +
+    scale_x_continuous(limits = c(global_shap_min, global_shap_max)) +
+    theme_classic() +
+    theme(
+      axis.title = element_text(size = 14, face = "bold"),
+      axis.text = element_text(size = 12),
+      legend.text = element_text(size = 12),
+      legend.title = element_text(size = 14),
+      legend.key.size = unit(1.5, "lines"),
+      plot.title = element_blank()
+    )
+}
+
+global_shap_min <- min(shap_values_FNYield, na.rm = TRUE)
+global_shap_max <- max(shap_values_FNYield, na.rm = TRUE)
+
+dot_plots <- lapply(unique_clusters, function(cl) {
+  generate_shap_dot_plot_obj(cl, shap_values_FNYield, full_scaled, global_shap_min, global_shap_max)
 })
 
-ncol <- 2
-nrow <- ceiling(length(unique_clusters_shap)/ncol)
-final_shap_grid <- wrap_plots(plot_list, ncol = ncol, nrow = nrow)
+for(i in seq_along(dot_plots)) {
+  if(i < length(dot_plots)) {
+    dot_plots[[i]] <- dot_plots[[i]] + theme(axis.title.x = element_blank(), axis.text.x = element_blank())
+  }
+}
 
 ###############################################################################
-# 11. Combine & Save Plots
+# 11. Combine Box Plots & SHAP Dot Plots with patchwork (No extra titles)
 ###############################################################################
-# Combine cluster boxplots for drivers
 left_col <- wrap_plots(cluster_boxplots, ncol = 1) & labs(y = "Scaled Value")
+right_col <- wrap_plots(dot_plots, ncol = 1)
 
-# Optionally combine with other plots, e.g., a placeholder for a SHAP dot plot
-# right_col <- some_shap_dot_plot_code
+final_combined_plot <- left_col | right_col +
+  plot_layout(guides = "collect") +
+  plot_annotation(
+    tag_levels = "A",
+    title = NULL,
+    caption = NULL,
+    theme = theme(
+      plot.tag = element_text(size = 30, face = "bold"),
+      plot.tag.position = "topleft"
+    )
+  )
 
-# final_combined_plot <- left_col | right_col +
-#   plot_layout(guides = "collect") +
-#   plot_annotation(
-#     tag_levels = "A",
-#     theme = theme(
-#       plot.tag = element_text(size = 30, face = "bold"),
-#       plot.tag.position = "topleft"
-#     )
-#   )
-
-# For demonstration, we’ll just print and save the separate objects:
+###############################################################################
+# 12. Save Final Figures
+###############################################################################
 ggsave(
-  filename = "Cluster_Boxplots_for_Drivers.png",
-  plot = left_col,
-  width = 12,
+  filename = "Combined_Cluster_Boxplot_and_SHAP_DotPlots.png",
+  plot = final_combined_plot,
+  width = 16,
   height = 18,
   dpi = 300,
   path = output_dir
 )
+print(final_combined_plot)
 
 ggsave(
   filename = "FNYield_Yearly_Clusters.png",
@@ -413,6 +446,7 @@ ggsave(
   dpi = 300,
   path = output_dir
 )
+print(p_FNYield)
 
 ggsave(
   filename = "Custom_Silhouette_Plot.png",
@@ -422,18 +456,24 @@ ggsave(
   dpi = 300,
   path = output_dir
 )
+print(p_sil)
+
+# ***** Create the list of SHAP bar plots (plot_list_bars) *****
+unique_clusters_for_shap <- levels(full_scaled$final_cluster)
+plot_list_bars <- lapply(unique_clusters_for_shap, function(cl) {
+  plot_mean_abs_shap(cl, shap_values_FNYield, full_scaled)
+})
 
 ggsave(
   filename = "MeanAbsSHAP_Grid.png",
-  plot = final_shap_grid,
+  plot = wrap_plots(plot_list_bars, ncol = 2),
   width = 12,
   height = 9,
   dpi = 300,
   path = output_dir
 )
+print(wrap_plots(plot_list_bars, ncol = 2))
 
-# Print final objects to screen
-print(left_col)
-print(p_FNYield)
-print(p_sil)
-print(final_shap_grid)
+###############################################################################
+# 13. (Optional) Done!
+###############################################################################
