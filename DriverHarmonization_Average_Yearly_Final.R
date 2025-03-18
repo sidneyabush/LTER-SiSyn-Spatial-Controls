@@ -846,7 +846,7 @@ write.csv(as.data.frame(tot),
 tot_si <- tot %>%
   dplyr::select(Stream_ID, Year, drainSqKm, NOx, P, precip, Q,
                 temp, Max_Daylength, prop_area, npp, evapotrans,
-                cycle0, permafrost_mean_m, elevation_mean_m, 
+                cycle0, permafrost_mean_m, elevation_mean_m, RBFI,
                 basin_slope_mean_degree, FNConc, FNYield, GenConc, GenYield, major_rock, major_land,
                 contains("rocks"), contains("land_")) %>%
   dplyr::rename(snow_cover = prop_area, 
@@ -958,6 +958,22 @@ print(unique_stream_id_count)
 write.csv(drivers_df, 
           sprintf("All_Drivers_Harmonized_Yearly_FNConc_FNYield_%d_years.csv", record_length), 
           row.names = FALSE)
+
+save_correlation_plot <- function(driver_cor, output_dir) {
+  png(sprintf("%s/correlation_plot_FNYield_Yearly_5_years.png", output_dir),
+      width = 10, height = 10, units = "in", res = 300)
+  corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = FALSE)
+  title("All Data")
+  dev.off()
+}
+
+drivers_numeric <- drivers_df %>%
+  dplyr::select(-Year, -contains("Gen"), -contains("FN"), -contains("major"), -Stream_ID)
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures"
+
+# numeric_drivers <- 2:24 # Change this range to reflect data frame length
+driver_cor <- cor(drivers_numeric) 
+save_correlation_plot(driver_cor, output_dir)
 
 # Create the tot_average dataframe with mean, q_5, and q_95
 tot_average <- drivers_df %>%
