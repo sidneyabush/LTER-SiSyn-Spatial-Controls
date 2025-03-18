@@ -201,8 +201,8 @@ rows_list <- lapply(seq_along(unique_clusters), function(i) {
     )
   } else {
     # LAST row => we want an x-axis label on the bar subplots for Mean SHAP
-    p_conc  <- p_conc  + labs(x = "Mean Absolute SHAP Value")
-    p_yield <- p_yield + labs(x = "Mean Absolute SHAP Value")
+    p_conc  <- p_conc  + labs(y = "Mean Absolute SHAP Value")
+    p_yield <- p_yield + labs(y = "Mean Absolute SHAP Value")
   }
   
   (p_all_vars + p_conc + p_yield) + plot_layout(ncol = 3, widths = c(1,1,1))
