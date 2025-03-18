@@ -239,7 +239,7 @@ final_grid_bar <- (y_axis_label | bar_plots_with_title) +
 ggsave(
   filename = "Combined_Grid_BarPlots.png",
   plot = final_grid_bar,
-  width = 16,
+  width = 20,
   height = 18,
   dpi = 300,
   path = output_dir
@@ -303,7 +303,7 @@ final_grid_dot <- dot_title_row / dot_plots_combined +
 ggsave(
   filename = "Combined_Grid_DotPlots.png",
   plot = final_grid_dot,
-  width = 16,
+  width = 18,
   height = 18,
   dpi = 300,
   path = output_dir
