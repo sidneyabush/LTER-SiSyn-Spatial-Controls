@@ -64,9 +64,11 @@ drivers_numeric_consolidated_lith <- drivers_combined %>%
         "sedimentary; metamorphic"
       ) ~ "Sedimentary",
       major_rock %in% c(
-        "metamorphic", 
         "plutonic", 
-        "plutonic; metamorphic", 
+        "plutonic; metamorphic"
+      ) ~ "Plutonic",
+      major_rock %in% c(
+        "metamorphic", 
         "carbonate_evaporite; metamorphic"
       ) ~ "Metamorphic",
       major_rock == "carbonate_evaporite" ~ "Carbonate_Evaporite"
@@ -83,9 +85,19 @@ drivers_numeric_consolidated_lith <- drivers_combined %>%
   # Manually order clusters
   mutate(final_cluster = factor(
     final_cluster, 
-    levels = c("Volcanic", "Sedimentary", "Mixed Sedimentary", 
+    levels = c("Volcanic", "Sedimentary", "Mixed Sedimentary", "Plutonic",
                "Metamorphic", "Carbonate_Evaporite")
   ))
+
+summary_table <- drivers_numeric_consolidated_lith %>%
+  group_by(final_cluster) %>%
+  summarise(
+    total_rows = n(),
+    unique_stream_ids = n_distinct(Stream_ID)
+  )
+
+print(summary_table)
+
 
 ###############################################################################
 # 4. Prepare Data for Further Analysis (Single Global Scaling)
