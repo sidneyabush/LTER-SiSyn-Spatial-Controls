@@ -52,26 +52,27 @@ drivers_numeric_consolidated_lith <- drivers_combined %>%
     consolidated_rock = case_when(
       major_rock %in% c(
         "volcanic", 
-        "volcanic; sedimentary; carbonate_evaporite",
-        "volcanic; carbonate_evaporite", 
-        "volcanic; plutonic", 
-        "volcanic; plutonic; metamorphic"
+        "volcanic; plutonic"
       ) ~ "Volcanic",
       major_rock %in% c(
         "sedimentary", 
+        "volcanic; sedimentary; carbonate_evaporite",
         "sedimentary; carbonate_evaporite", 
         "sedimentary; plutonic; carbonate_evaporite; metamorphic",
         "sedimentary; metamorphic"
       ) ~ "Sedimentary",
       major_rock %in% c(
         "plutonic", 
-        "plutonic; metamorphic"
+        "plutonic; metamorphic",
+        "volcanic; plutonic; metamorphic"
       ) ~ "Plutonic",
       major_rock %in% c(
         "metamorphic", 
         "carbonate_evaporite; metamorphic"
       ) ~ "Metamorphic",
-      major_rock == "carbonate_evaporite" ~ "Carbonate_Evaporite"
+      major_rock %in% c("carbonate_evaporite",
+      "volcanic; carbonate_evaporite")
+      ~ "Carbonate_Evaporite"
     )
   ) %>%
   mutate(
@@ -124,6 +125,7 @@ my_cluster_colors <- c(
   "Volcanic"            = "#AC7B32",  
   "Sedimentary"         = "#579C8E",  
   "Mixed Sedimentary"   = "#89C8A0",
+  "Plutonic" ="black",
   "Metamorphic"         = "#C26F86",  
   "Carbonate_Evaporite" = "#5E88B0"   
 )
@@ -240,12 +242,12 @@ mean_sil_value <- mean(sil_obj[, "sil_width"], na.rm = TRUE)
 p_sil <- fviz_silhouette(
   sil_obj,
   label   = FALSE,
-  palette = c("#AC7B32","#579C8E","#89C8A0","#C26F86","#5E88B0")
+  palette = c("#AC7B32","#579C8E","#89C8A0","black", "#C26F86","#5E88B0")
 )
 p_sil <- p_sil + guides(color = "none") +
   scale_fill_manual(
     name   = "Cluster",
-    values = c("1"="#AC7B32", "2"="#579C8E", "3"="#89C8A0", "4"="#C26F86", "5"="#5E88B0"),
+    values = c("1"="#AC7B32", "2"="#579C8E", "3" = "black", "4"="#89C8A0", "5"="#C26F86", "6"="#5E88B0"),
     labels = c("1"="Volcanic", "2"="Sedimentary", "3"="Mixed Sedimentary",
                "4"="Metamorphic", "5"="Carbonate_Evaporite")
   ) +

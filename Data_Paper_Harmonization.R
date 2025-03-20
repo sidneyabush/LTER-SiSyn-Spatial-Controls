@@ -10,9 +10,25 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 # -----------------------------------------------------------
 # 1. Load the Chemistry Sites Data (key file with Stream_Name) ----
 # -----------------------------------------------------------
-chemistry_sites <- read.csv("chemistry_sites_si.csv", stringsAsFactors = FALSE)
+chemistry_sites <- read.csv("chemistry_sites_si.csv", stringsAsFactors = FALSE) %>%
+  mutate(
+    Stream_Name = case_when(
+      Stream_Name == "East Fork" ~ "east fork",
+      Stream_Name == "West Fork" ~ "west fork",
+      Stream_Name == "Amazon River at Obidos" ~ "Obidos",
+      TRUE ~ Stream_Name
+    ))
+  
 ref_table <- read.csv("Site_Reference_Table - WRTDS_Reference_Table_LTER_V2.csv", 
                       stringsAsFactors = FALSE) %>%
+  mutate(
+    Stream_Name = case_when(
+      Stream_Name == "East Fork" ~ "east fork",
+      Stream_Name == "West Fork" ~ "west fork",
+      Stream_Name == "Amazon River at Obidos" ~ "Obidos",
+      TRUE ~ Stream_Name
+    )
+  ) %>%
   dplyr::select("Stream_Name", "drainSqKm")
 
 chemistry_sites <- chemistry_sites %>%
