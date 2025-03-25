@@ -116,11 +116,12 @@ p <- ggplot(MSE_df_rf1, aes(ntree, mean_MSE)) +
   scale_x_continuous(breaks = seq(100, 2000, 100)) + 
   theme(text = element_text(size = 20))
 
+dev.new()  # Open a new graphics window
 print(p)
 
 set.seed(123)
 # Manually select ntree for rf_model1 ----
-manual_ntree_rf1 <- 1800  # Replace with chosen value
+manual_ntree_rf1 <- 2000  # Replace with chosen value
 
 set.seed(123)
 # Tune mtry for rf_model1 ----
@@ -129,7 +130,7 @@ tuneRF(drivers_numeric[, 2:ncol(drivers_numeric)],
        stepFactor = 1, improve = 0.5, plot = TRUE)
 
 # Manually select mtry for rf_model1 ----
-manual_mtry_rf1 <- 7  # Replace with chosen value
+manual_mtry_rf1 <- 9  # Replace with chosen value
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
