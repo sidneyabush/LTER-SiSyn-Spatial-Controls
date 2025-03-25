@@ -192,14 +192,14 @@ si_drivers <- read.csv("all-data_si-extract_2_20250325.csv", stringsAsFactors = 
 
 si_drivers <- standardize_stream_id(si_drivers)
 
-# Identify and convert all greenup-related columns to Date format
+# Convert any greenup-related columns to day-of-year format
 greenup_cols <- grep("greenup_", colnames(si_drivers), value = TRUE)
-
-si_drivers[, greenup_cols] <- lapply(si_drivers[, greenup_cols], function(x) {
-  as.Date(x, format = "%m/%d/%y")
-})
-
-si_drivers[, greenup_cols] <- lapply(si_drivers[, greenup_cols], function(x) format(x, "%j"))
+if(length(greenup_cols) > 0){
+  si_drivers[, greenup_cols] <- lapply(si_drivers[, greenup_cols], function(x) {
+    x <- as.Date(x, format = "%Y-%m-%d")
+    as.numeric(format(x, "%j"))
+  })
+}
 
 si_drivers <- si_drivers %>%
   left_join(finn %>% dplyr::select(Stream_ID, Stream_ID2), by = "Stream_ID") %>%
@@ -1029,3 +1029,4 @@ write.csv(as.data.frame(tot_average),
           row.names = FALSE)
 
 gc()
+
