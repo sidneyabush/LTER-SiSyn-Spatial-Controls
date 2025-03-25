@@ -1,5 +1,5 @@
 # Load needed libraries
-librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr, stringr, readr)
+librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr, stringr, readr, corrplot)
 
 # Clear environment
 rm(list = ls())
@@ -174,7 +174,7 @@ tot <- tot %>%
               # Spatial Drivers----
 ## ------------------------------------------------------- ##
 # Read and preprocess spatial drivers
-si_drivers <- read.csv("all-data_si-extract_2_20250203.csv", stringsAsFactors = FALSE) %>%
+si_drivers <- read.csv("all-data_si-extract_2_20250325.csv", stringsAsFactors = FALSE) %>%
   dplyr::select(-contains("soil"), -contains("cycle1")) %>%
   dplyr::mutate(
     Stream_Name = case_when(

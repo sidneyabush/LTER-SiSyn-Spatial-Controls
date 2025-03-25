@@ -48,7 +48,7 @@ finn <- finn %>%
 # 3. Process Spatial Drivers Data ----
 # -----------------------------------------------------------
 # Read and preprocess spatial drivers data
-si_drivers <- read.csv("all-data_si-extract_2_20250203.csv", stringsAsFactors = FALSE) %>%
+si_drivers <- read.csv("all-data_si-extract_2_20250325.csv", stringsAsFactors = FALSE) %>%
   dplyr::select(-contains("cycle1")) %>%
   mutate(
     Stream_Name = case_when(
@@ -77,8 +77,8 @@ si_drivers <- standardize_stream_id(si_drivers)
 greenup_cols <- grep("greenup_", colnames(si_drivers), value = TRUE)
 if(length(greenup_cols) > 0){
   si_drivers[, greenup_cols] <- lapply(si_drivers[, greenup_cols], function(x) {
-    x <- as.Date(x, format = "%m/%d/%y")
-    format(x, "%j")
+    x <- as.Date(x, format = "%Y-%m-%d")
+    as.numeric(format(x, "%j"))
   })
 }
 
@@ -432,4 +432,31 @@ print(num_unique_stream_ids)
 write.csv(tot_average, "Chemistry_Sites_Harmonized_Wide_Average.csv", row.names = FALSE)
 
 gc()
+
+
+# Summary stats by LTER
+npp_et_summary_LTER <- chemistry_combined %>%
+  group_by(LTER) %>%
+  summarise(
+    npp_median = median(npp, na.rm = TRUE),
+    npp_sd   = sd(npp, na.rm = TRUE),
+    et_median  = median(evapotrans, na.rm = TRUE),
+    et_sd    = sd(evapotrans, na.rm = TRUE)
+  )
+print(npp_et_summary_LTER)
+
+# Summary stats by Stream_Name
+npp_et_summary_Name <- chemistry_combined %>%
+  group_by(Name) %>%
+  summarise(
+    npp_median = median(npp, na.rm = TRUE),
+    npp_sd   = sd(npp, na.rm = TRUE),
+    et_median  = median(evapotrans, na.rm = TRUE),
+    et_sd    = sd(evapotrans, na.rm = TRUE)
+  )
+print(npp_et_summary_Name)
+
+# Export summaries as CSV files
+write.csv(npp_et_summary_LTER, "NPP_ET_Summary_by_LTER.csv", row.names = FALSE)
+write.csv(npp_et_summary_Name, "NPP_ET_Summary_by_Climate.csv", row.names = FALSE)
 
