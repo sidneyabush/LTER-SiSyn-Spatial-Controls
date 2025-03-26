@@ -121,11 +121,12 @@ p <- ggplot(MSE_df_rf1, aes(ntree, mean_MSE)) +
   scale_x_continuous(breaks = seq(100, 2000, 100)) + 
   theme(text = element_text(size = 20))
 
+# dev.new()
 print(p)
 
 set.seed(123)
 # Manually select ntree for rf_model1 ----
-manual_ntree_rf1 <- 2000  # Replace with chosen value
+manual_ntree_rf1 <- 1500  # Replace with chosen value
 
 set.seed(123)
 # Tune mtry for rf_model1 ----
@@ -213,12 +214,13 @@ ggplot(MSE_df_parallel, aes(x = ntree, y = mean_MSE)) +
 # Global seed before re-tuning mtry
 set.seed(123)
 kept_drivers <- drivers_numeric[, colnames(drivers_numeric) %in% predictors(result_rfe)]
-tuneRF(kept_drivers, drivers_numeric[, 1], ntreeTry = 1400, stepFactor = 1, improve = 0.5, plot = FALSE)
+tuneRF(kept_drivers, drivers_numeric[, 1], ntreeTry = 900, 
+       stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
 rf_model2 <- randomForest(rf_formula, data = drivers_numeric, 
-                          importance = TRUE, proximity = TRUE, ntree = 1900, mtry = 6)
+                          importance = TRUE, proximity = TRUE, ntree = 900, mtry = 8)
 
 # Visualize output for rf_model2
 print(rf_model2)

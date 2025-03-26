@@ -173,9 +173,9 @@ tot <- tot %>%
 ## ------------------------------------------------------- ##
               # Spatial Drivers----
 ## ------------------------------------------------------- ##
-# Read and preprocess spatial drivers
 si_drivers <- read.csv("all-data_si-extract_2_20250325.csv", stringsAsFactors = FALSE) %>%
-  dplyr::select(-contains("soil"), -contains("cycle1")) %>%
+  dplyr::select(-contains("soil"), 
+                -contains("cycle1")) %>%
   dplyr::mutate(
     Stream_Name = case_when(
       Stream_Name == "East Fork" ~ "east fork",
@@ -183,12 +183,10 @@ si_drivers <- read.csv("all-data_si-extract_2_20250325.csv", stringsAsFactors = 
       Stream_Name == "Amazon River at Obidos" ~ "Obidos",
       TRUE ~ Stream_Name
     )) %>%
-  # Create Stream_ID first using LTER and Stream_Name
   mutate(Stream_ID = paste0(LTER, "__", Stream_Name)) %>%
-  # Remove MCM LTER (no spatial data)
   filter(!(LTER == "MCM")) %>%
-  # Remove columns with .x
-  dplyr::select(-contains(".y"), -contains(".x")) 
+  dplyr::select(-contains(".y"), -contains(".x"))
+
 
 si_drivers <- standardize_stream_id(si_drivers)
 
