@@ -383,7 +383,7 @@ tot_average <- chemistry_combined %>%
     npp = mean(npp, na.rm = TRUE),
     num_days = mean(num_days, na.rm = TRUE),
     precip = mean(precip, na.rm = TRUE),
-    prop_area = mean(prop_area, na.rm = TRUE),
+    prop_area = mean(prop_area[Year > 2001], na.rm = TRUE),    
     temp = mean(temp, na.rm = TRUE),
     elevation_median_m = mean(elevation_median_m, na.rm = TRUE),
     elevation_mean_m = mean(elevation_mean_m, na.rm = TRUE),

@@ -1,6 +1,8 @@
 ###############################################################################
-# 1. Load Packages & Clear Environment
+# COMPLETE WORKFLOW: FNYield Cluster Plotting with Dot Plots, Silhouette, & Grid
 ###############################################################################
+
+## 1. Load Packages & Clear Environment
 rm(list = ls())
 library(ggplot2)
 library(dplyr)
@@ -21,6 +23,7 @@ output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/
 ###############################################################################
 # 2. Load Data & Model
 ###############################################################################
+## 2. Load Data & Model
 load("FNYield_Yearly_rf_model2_full_new.RData")
 load("FNYield_Yearly_kept_drivers_full_new.RData")
 load("FNYield_Yearly_full_new.RData")
@@ -49,24 +52,27 @@ drivers_numeric_consolidated_lith <- drivers_combined %>%
     consolidated_rock = case_when(
       major_rock %in% c(
         "volcanic", 
-        "volcanic; sedimentary; carbonate_evaporite",
-        "volcanic; carbonate_evaporite", 
-        "volcanic; plutonic", 
-        "volcanic; plutonic; metamorphic"
+        "volcanic; plutonic"
       ) ~ "Volcanic",
       major_rock %in% c(
         "sedimentary", 
+        "volcanic; sedimentary; carbonate_evaporite",
         "sedimentary; carbonate_evaporite", 
         "sedimentary; plutonic; carbonate_evaporite; metamorphic",
         "sedimentary; metamorphic"
       ) ~ "Sedimentary",
       major_rock %in% c(
-        "metamorphic", 
         "plutonic", 
-        "plutonic; metamorphic", 
+        "plutonic; metamorphic",
+        "volcanic; plutonic; metamorphic"
+      ) ~ "Plutonic",
+      major_rock %in% c(
+        "metamorphic", 
         "carbonate_evaporite; metamorphic"
       ) ~ "Metamorphic",
-      major_rock == "carbonate_evaporite" ~ "Carbonate_Evaporite"
+      major_rock %in% c("carbonate_evaporite",
+                        "volcanic; carbonate_evaporite")
+      ~ "Carbonate Evaporite"
     )
   ) %>%
   mutate(
@@ -80,9 +86,19 @@ drivers_numeric_consolidated_lith <- drivers_combined %>%
   # Manually order clusters
   mutate(final_cluster = factor(
     final_cluster, 
-    levels = c("Volcanic", "Sedimentary", "Mixed Sedimentary", 
-               "Metamorphic", "Carbonate_Evaporite")
+    levels = c("Volcanic", "Sedimentary", "Mixed Sedimentary", "Plutonic",
+               "Metamorphic", "Carbonate Evaporite")
   ))
+
+summary_table <- drivers_numeric_consolidated_lith %>%
+  group_by(final_cluster) %>%
+  summarise(
+    total_rows = n(),
+    unique_stream_ids = n_distinct(Stream_ID)
+  )
+
+print(summary_table)
+
 
 ###############################################################################
 # 4. Prepare Data for Further Analysis (Single Global Scaling)
@@ -109,40 +125,38 @@ my_cluster_colors <- c(
   "Volcanic"            = "#AC7B32",  
   "Sedimentary"         = "#579C8E",  
   "Mixed Sedimentary"   = "#89C8A0",
+  "Plutonic"            = "#8D9A40",
   "Metamorphic"         = "#C26F86",  
-  "Carbonate_Evaporite" = "#5E88B0"   
+  "Carbonate Evaporite" = "#5E88B0"   
 )
+
 my_cluster_colors_lighter <- sapply(my_cluster_colors, function(x) lighten(x, amount = 0.3))
 
 ###############################################################################
 # 6. Create Long-format Data for Box Plots (Drivers) using final_cluster
 ###############################################################################
+# Replace references to FNYield with FNYield.
 long_data <- scaled_data %>%
-  dplyr::select(
-    -major_rock, -consolidated_rock, -major_land,
-    -Stream_ID, -Year
-  ) %>%
+  dplyr::select(-major_rock, -consolidated_rock, -major_land, -Stream_ID, -Year) %>%
   pivot_longer(-final_cluster, names_to = "Driver", values_to = "Value") %>%
   mutate(
     Driver = factor(
       Driver,
       levels = c(
-        "FNYield",
-        "elevation", "basin_slope",
-        "NOx", "P", "npp", "greenup_day", "evapotrans",
-        "precip", "temp", "snow_cover", "permafrost",
+        "FNYield", "NOx", "P", "precip", "temp", "snow_cover", "npp", "evapotrans", "greenup_day",  "permafrost",
+        "elevation", "RBFI", "basin_slope",
         "rocks_volcanic", "rocks_sedimentary", "rocks_carbonate_evaporite",
         "rocks_metamorphic", "rocks_plutonic",
-        "land_tundra", "land_barren_or_sparsely_vegetated", "land_cropland",
-        "land_shrubland_grassland", "land_urban_and_built_up_land",
-        "land_wetland", "land_forest_all"
+        "land_Bare", "land_Cropland", "land_Forest",
+        "land_Grassland_Shrubland", "land_Ice_Snow", "land_Impervious", "land_Salt_Water",
+        "land_Tidal_Wetland", "land_Water", "land_Wetland_Marsh"
       )
     ),
     Driver = recode(
       Driver,
-      "FNYield" = "DSi Yield",
+      "FNYield" = "DSi Yield",  
       "NOx" = "Nitrate",
-      "P" = "Phosphorous",
+      "P" = "P",
       "precip" = "Precip",
       "temp" = "Temperature",
       "snow_cover" = "Snow Cover",
@@ -151,19 +165,23 @@ long_data <- scaled_data %>%
       "greenup_day" = "Greenup Day",
       "permafrost" = "Permafrost",
       "elevation" = "Elevation",
+      "RBFI" = "Flashiness Index",
       "basin_slope" = "Basin Slope",
       "rocks_volcanic" = "Rock: Volcanic",
       "rocks_sedimentary" = "Rock: Sedimentary",
-      "rocks_carbonate_evaporite" = "Rock: Carbonate & Evaporite",
+      "rocks_carbonate_evaporite" = "Rock: Carbonate Evaporite",
       "rocks_metamorphic" = "Rock: Metamorphic",
       "rocks_plutonic" = "Rock: Plutonic",
-      "land_tundra" = "Land: Tundra",
-      "land_barren_or_sparsely_vegetated" = "Land: Barren & Sparsely Vegetated",
-      "land_cropland" = "Land: Cropland",
-      "land_shrubland_grassland" = "Land: Shrubland & Grassland",
-      "land_urban_and_built_up_land" = "Land: Urban & Built-up",
-      "land_wetland" = "Land: Wetland",
-      "land_forest_all" = "Land: Forest"
+      "land_Bare" = "Land: Bare", 
+      "land_Cropland" = "Land: Cropland", 
+      "land_Forest" = "Land: Forest",
+      "land_Grassland_Shrubland" = "Land: Grassland & Shrubland", 
+      "land_Ice_Snow" = "Land: Ice & Snow", 
+      "land_Impervious" = "Land: Impervious", 
+      "land_Salt_Water" = "Land: Salt Water",
+      "land_Tidal_Wetland" = "Land: Tidal Wetland", 
+      "land_Water" = "Land: Water Body", 
+      "land_Wetland_Marsh" = "Land: Wetland Marsh"
     )
   )
 
@@ -178,19 +196,14 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
     ggplot(aes(x = Driver, y = Value, fill = final_cluster)) +
     geom_boxplot() +
     scale_fill_manual(values = my_cluster_colors_lighter, guide = "none") +
-    scale_y_continuous(limits = c(0, 1)) +  # Force axis 0..1
-    labs(
-      x = NULL,
-      y = NULL,
-      title = NULL
-    ) +
+    scale_y_continuous(limits = c(0, 1)) +
+    labs(x = NULL, y = NULL, title = NULL) +  # Remove cluster title labels
     theme_classic() +
     theme(
-      plot.title  = element_text(size = 14, hjust = 0.5),
+      plot.title = element_blank(),
       axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 14),
       axis.text.y = element_text(size = 14)
     )
-  # Remove x-axis labels for all but the last plot
   if (cl != tail(unique_clusters, 1)) {
     p <- p + theme(axis.title.x = element_blank(), axis.text.x = element_blank())
   }
@@ -198,10 +211,10 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
 })
 
 ###############################################################################
-# 8. Box Plot of FNYield by Manually Assigned Cluster
+# 8. Box Plot of FNYield by Manually Assigned Cluster (Unscaled FNYield)
 ###############################################################################
 df <- drivers_numeric_consolidated_lith %>%
-  dplyr::select(Stream_ID, Year, FNYield, final_cluster)
+  dplyr::select(Stream_ID, Year, FNYield, final_cluster)  # replaced FNYield with FNYield
 
 write.csv(
   df,
@@ -214,12 +227,10 @@ p_FNYield <- ggplot(df, aes(x = final_cluster, y = FNYield, fill = final_cluster
   geom_jitter(aes(color = final_cluster), width = 0.3, alpha = 0.4, size = 2) +
   scale_fill_manual(values = my_cluster_colors_lighter) +
   scale_color_manual(values = my_cluster_colors) +
-  labs(
-    x = NULL,
-    y = expression(DSi~Yield~(kg~m^{-2}~y^{-1}))
-  ) +
+  labs(x = NULL, y = expression(DSi~Yield~(kg~m^{-2}~y^{-1}))) +
   theme_classic(base_size = 16) +
-  theme(legend.position = "none")
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 45, hjust = 1))
 
 ###############################################################################
 # 9. Silhouette Plot with Factoextra (Remove x-axis elements)
@@ -235,19 +246,27 @@ mean_sil_value <- mean(sil_obj[, "sil_width"], na.rm = TRUE)
 p_sil <- fviz_silhouette(
   sil_obj,
   label   = FALSE,
-  palette = c("#AC7B32","#579C8E","#89C8A0","#C26F86","#5E88B0")
+  palette = c(
+    "#AC7B32",  
+    "#579C8E",  
+    "#89C8A0",
+    "#8D9A40",
+    "#C26F86",  
+    "#5E88B0"   
+  )
+  
 )
 p_sil <- p_sil + guides(color = "none") +
   scale_fill_manual(
     name   = "Cluster",
-    values = c("1"="#AC7B32", "2"="#579C8E", "3"="#89C8A0", "4"="#C26F86", "5"="#5E88B0"),
+    values = c("1"="#AC7B32", "2"="#579C8E", "3" = "#89C8A0", "4"="#8D9A40", "5"="#C26F86", "6"="#5E88B0"),
     labels = c("1"="Volcanic", "2"="Sedimentary", "3"="Mixed Sedimentary",
-               "4"="Metamorphic", "5"="Carbonate_Evaporite")
+               "4"="Plutonic", "5"="Metamorphic", "6"="Carbonate Evaporite")
   ) +
   geom_hline(yintercept = mean_sil_value, linetype = "dashed", color = "gray4") +
   annotate("text", x = nrow(sil_obj)*0.8, y = mean_sil_value,
            label = paste("Mean =", round(mean_sil_value,2)),
-           color = "gray4", vjust = -0.5) +
+           color = "gray4", vjust = -0.5, hjust = 0.65) + 
   labs(x = NULL, y = "Silhouette Width", title = NULL, subtitle = NULL) +
   theme_classic(base_size = 16) +
   theme(axis.text.x  = element_blank(),
@@ -276,7 +295,7 @@ plot_mean_abs_shap <- function(cluster_id, shap_values_FNYield, full_scaled) {
   
   df_shap$feature <- recode(df_shap$feature,
                             "NOx" = "Nitrate",
-                            "P"   = "Phosphorous",
+                            "P" = "P",
                             "precip" = "Precip",
                             "temp" = "Temperature",
                             "snow_cover" = "Snow Cover",
@@ -284,31 +303,33 @@ plot_mean_abs_shap <- function(cluster_id, shap_values_FNYield, full_scaled) {
                             "evapotrans" = "ET",
                             "greenup_day" = "Greenup Day",
                             "permafrost" = "Permafrost",
+                            "RBFI" = "Flashiness Index",
                             "elevation" = "Elevation",
                             "basin_slope" = "Basin Slope",
-                            "FNConc" = "DSi Concentration",
                             "rocks_volcanic" = "Rock: Volcanic",
                             "rocks_sedimentary" = "Rock: Sedimentary",
-                            "rocks_carbonate_evaporite" = "Rock: Carbonate & Evaporite",
+                            "rocks_carbonate_evaporite" = "Rock: Carbonate Evaporite",
                             "rocks_metamorphic" = "Rock: Metamorphic",
-                            "rocks_plutonic" = "Rock: Plutonic",
-                            "land_tundra" = "Land: Tundra",
-                            "land_barren_or_sparsely_vegetated" = "Land: Barren & Sparsely Vegetated",
-                            "land_cropland" = "Land: Cropland",
-                            "land_shrubland_grassland" = "Land: Shrubland & Grassland",
-                            "land_urban_and_built_up_land" = "Land: Urban & Built-up",
-                            "land_wetland" = "Land: Wetland",
-                            "land_forest_all" = "Land: Forest"
+                            "land_Bare" = "Land: Bare", 
+                            "land_Cropland" = "Land: Cropland", 
+                            "land_Forest" = "Land: Forest",
+                            "land_Grassland_Shrubland" = "Land: Grassland & Shrubland", 
+                            "land_Ice_Snow" = "Land: Ice & Snow", 
+                            "land_Impervious" = "Land: Impervious", 
+                            "land_Salt_Water" = "Land: Salt Water",
+                            "land_Tidal_Wetland" = "Land: Tidal Wetland", 
+                            "land_Water" = "Land: Water Body", 
+                            "land_Wetland_Marsh" = "Land: Wetland Marsh"
   )
   
   ggplot(df_shap, aes(x = reorder(feature, mean_abs_shapval), y = mean_abs_shapval)) +
     geom_bar(stat = "identity", fill = my_cluster_colors[[as.character(cluster_id)]], alpha = 0.8) +
     coord_flip() +
-    scale_y_continuous(limits = c(0, 1100)) +
+    scale_y_continuous(limits = c(0, 900)) +
     labs(x = NULL, y = "Mean Absolute SHAP Value", title = NULL) +
     theme_classic(base_size = 14) +
     theme(
-      plot.title  = element_text(size = 14, hjust = 0.5),
+      plot.title = element_blank(),
       axis.text.y = element_text(size = 12),
       axis.text.x = element_text(size = 12)
     )
@@ -337,9 +358,8 @@ generate_shap_dot_plot_obj <- function(cluster_name, shap_values_FNYield, full_s
     pivot_longer(cols = -id, names_to = "feature", values_to = "shap_value") %>%
     left_join(cluster_long, by = c("id", "feature"))
   
-  # Add this filter to remove any rock-related features
-  shap_long <- shap_long %>% 
-    filter(!grepl("rock", feature, ignore.case = TRUE))
+  # Remove rock-related features
+  shap_long <- shap_long %>% filter(!grepl("rock", feature, ignore.case = TRUE))
   
   overall_feature_importance <- shap_long %>%
     group_by(feature) %>%
@@ -348,9 +368,9 @@ generate_shap_dot_plot_obj <- function(cluster_name, shap_values_FNYield, full_s
   shap_long$feature <- factor(shap_long$feature, levels = rev(overall_feature_importance$feature))
   
   shap_long$feature <- recode(shap_long$feature,
-                              "FNYield" = "DSi Yield",
+                              "FNYield" = "DSi Yield",  # updated recode
                               "NOx" = "Nitrate",
-                              "P" = "Phosphorous",
+                              "P" = "P",
                               "precip" = "Precip",
                               "temp" = "Temperature",
                               "snow_cover" = "Snow Cover",
@@ -358,20 +378,23 @@ generate_shap_dot_plot_obj <- function(cluster_name, shap_values_FNYield, full_s
                               "evapotrans" = "ET",
                               "greenup_day" = "Greenup Day",
                               "permafrost" = "Permafrost",
+                              "RBFI" = "Flashiness Index",
                               "elevation" = "Elevation",
                               "basin_slope" = "Basin Slope",
                               "rocks_volcanic" = "Rock: Volcanic",
                               "rocks_sedimentary" = "Rock: Sedimentary",
-                              "rocks_carbonate_evaporite" = "Rock: Carbonate & Evaporite",
+                              "rocks_carbonate_evaporite" = "Rock: Carbonate Evaporite",
                               "rocks_metamorphic" = "Rock: Metamorphic",
-                              "rocks_plutonic" = "Rock: Plutonic",
-                              "land_tundra" = "Land: Tundra",
-                              "land_barren_or_sparsely_vegetated" = "Land: Barren & Sparsely Vegetated",
-                              "land_cropland" = "Land: Cropland",
-                              "land_shrubland_grassland" = "Land: Shrubland & Grassland",
-                              "land_urban_and_built_up_land" = "Land: Urban & Built-up",
-                              "land_wetland" = "Land: Wetland",
-                              "land_forest_all" = "Land: Forest")
+                              "land_Bare" = "Land: Bare", 
+                              "land_Cropland" = "Land: Cropland", 
+                              "land_Forest" = "Land: Forest",
+                              "land_Grassland_Shrubland" = "Land: Grassland & Shrubland", 
+                              "land_Ice_Snow" = "Land: Ice & Snow", 
+                              "land_Impervious" = "Land: Impervious", 
+                              "land_Salt_Water" = "Land: Salt Water",
+                              "land_Tidal_Wetland" = "Land: Tidal Wetland", 
+                              "land_Water" = "Land: Water Body", 
+                              "land_Wetland_Marsh" = "Land: Wetland Marsh")
   
   ggplot(shap_long, aes(x = shap_value, y = feature, fill = feature_value)) +
     geom_point(alpha = 0.6, size = 3, shape = 21, stroke = 0.1, color = "black") +
@@ -467,8 +490,8 @@ plot_list_bars <- lapply(unique_clusters_for_shap, function(cl) {
 ggsave(
   filename = "MeanAbsSHAP_Grid.png",
   plot = wrap_plots(plot_list_bars, ncol = 2),
-  width = 12,
-  height = 9,
+  width = 15,
+  height = 16,
   dpi = 300,
   path = output_dir
 )

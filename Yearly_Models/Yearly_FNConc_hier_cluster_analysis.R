@@ -72,7 +72,7 @@ drivers_numeric_consolidated_lith <- drivers_combined %>%
       ) ~ "Metamorphic",
       major_rock %in% c("carbonate_evaporite",
       "volcanic; carbonate_evaporite")
-      ~ "Carbonate_Evaporite"
+      ~ "Carbonate Evaporite"
     )
   ) %>%
   mutate(
@@ -87,7 +87,7 @@ drivers_numeric_consolidated_lith <- drivers_combined %>%
   mutate(final_cluster = factor(
     final_cluster, 
     levels = c("Volcanic", "Sedimentary", "Mixed Sedimentary", "Plutonic",
-               "Metamorphic", "Carbonate_Evaporite")
+               "Metamorphic", "Carbonate Evaporite")
   ))
 
 summary_table <- drivers_numeric_consolidated_lith %>%
@@ -125,10 +125,11 @@ my_cluster_colors <- c(
   "Volcanic"            = "#AC7B32",  
   "Sedimentary"         = "#579C8E",  
   "Mixed Sedimentary"   = "#89C8A0",
-  "Plutonic" ="black",
+  "Plutonic"            = "#8D9A40",
   "Metamorphic"         = "#C26F86",  
-  "Carbonate_Evaporite" = "#5E88B0"   
+  "Carbonate Evaporite" = "#5E88B0"   
 )
+
 my_cluster_colors_lighter <- sapply(my_cluster_colors, function(x) lighten(x, amount = 0.3))
 
 ###############################################################################
@@ -142,22 +143,20 @@ long_data <- scaled_data %>%
     Driver = factor(
       Driver,
       levels = c(
-        "FNConc",  # changed from FNYield to FNConc
-        "elevation", "basin_slope",
-        "NOx", "P", "npp", "greenup_day", "evapotrans",
-        "precip", "temp", "snow_cover", "permafrost",
+        "FNConc", "NOx", "P", "precip", "temp", "snow_cover", "npp", "evapotrans", "greenup_day",  "permafrost",
+        "elevation", "RBFI", "basin_slope",
         "rocks_volcanic", "rocks_sedimentary", "rocks_carbonate_evaporite",
         "rocks_metamorphic", "rocks_plutonic",
-        "land_tundra", "land_barren_or_sparsely_vegetated", "land_cropland",
-        "land_shrubland_grassland", "land_urban_and_built_up_land",
-        "land_wetland", "land_forest_all"
+        "land_Bare", "land_Cropland", "land_Forest",
+        "land_Grassland_Shrubland", "land_Ice_Snow", "land_Impervious", "land_Salt_Water",
+        "land_Tidal_Wetland", "land_Water", "land_Wetland_Marsh"
       )
     ),
     Driver = recode(
       Driver,
-      "FNConc" = "DSi Concentration",  # updated recode
+      "FNConc" = "DSi Concentration",  
       "NOx" = "Nitrate",
-      "P" = "Phosphorous",
+      "P" = "P",
       "precip" = "Precip",
       "temp" = "Temperature",
       "snow_cover" = "Snow Cover",
@@ -166,19 +165,23 @@ long_data <- scaled_data %>%
       "greenup_day" = "Greenup Day",
       "permafrost" = "Permafrost",
       "elevation" = "Elevation",
+      "RBFI" = "Flashiness Index",
       "basin_slope" = "Basin Slope",
       "rocks_volcanic" = "Rock: Volcanic",
       "rocks_sedimentary" = "Rock: Sedimentary",
-      "rocks_carbonate_evaporite" = "Rock: Carbonate & Evaporite",
+      "rocks_carbonate_evaporite" = "Rock: Carbonate Evaporite",
       "rocks_metamorphic" = "Rock: Metamorphic",
       "rocks_plutonic" = "Rock: Plutonic",
-      "land_tundra" = "Land: Tundra",
-      "land_barren_or_sparsely_vegetated" = "Land: Barren & Sparsely Vegetated",
-      "land_cropland" = "Land: Cropland",
-      "land_shrubland_grassland" = "Land: Shrubland & Grassland",
-      "land_urban_and_built_up_land" = "Land: Urban & Built-up",
-      "land_wetland" = "Land: Wetland",
-      "land_forest_all" = "Land: Forest"
+      "land_Bare" = "Land: Bare", 
+      "land_Cropland" = "Land: Cropland", 
+      "land_Forest" = "Land: Forest",
+      "land_Grassland_Shrubland" = "Land: Grassland & Shrubland", 
+      "land_Ice_Snow" = "Land: Ice & Snow", 
+      "land_Impervious" = "Land: Impervious", 
+      "land_Salt_Water" = "Land: Salt Water",
+      "land_Tidal_Wetland" = "Land: Tidal Wetland", 
+      "land_Water" = "Land: Water Body", 
+      "land_Wetland_Marsh" = "Land: Wetland Marsh"
     )
   )
 
@@ -226,7 +229,8 @@ p_FNConc <- ggplot(df, aes(x = final_cluster, y = FNConc, fill = final_cluster))
   scale_color_manual(values = my_cluster_colors) +
   labs(x = NULL, y = expression(DSi~Concentration~(mg~L^{-1}))) +
   theme_classic(base_size = 16) +
-  theme(legend.position = "none")
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 45, hjust = 1))
 
 ###############################################################################
 # 9. Silhouette Plot with Factoextra (Remove x-axis elements)
@@ -242,14 +246,22 @@ mean_sil_value <- mean(sil_obj[, "sil_width"], na.rm = TRUE)
 p_sil <- fviz_silhouette(
   sil_obj,
   label   = FALSE,
-  palette = c("#AC7B32","#579C8E","#89C8A0","black", "#C26F86","#5E88B0")
+  palette = c(
+     "#AC7B32",  
+     "#579C8E",  
+     "#89C8A0",
+     "#8D9A40",
+     "#C26F86",  
+     "#5E88B0"   
+    )
+  
 )
 p_sil <- p_sil + guides(color = "none") +
   scale_fill_manual(
     name   = "Cluster",
-    values = c("1"="#AC7B32", "2"="#579C8E", "3" = "black", "4"="#89C8A0", "5"="#C26F86", "6"="#5E88B0"),
+    values = c("1"="#AC7B32", "2"="#579C8E", "3" = "#89C8A0", "4"="#8D9A40", "5"="#C26F86", "6"="#5E88B0"),
     labels = c("1"="Volcanic", "2"="Sedimentary", "3"="Mixed Sedimentary",
-               "4"="Metamorphic", "5"="Carbonate_Evaporite")
+               "4"="Plutonic", "5"="Metamorphic", "6"="Carbonate Evaporite")
   ) +
   geom_hline(yintercept = mean_sil_value, linetype = "dashed", color = "gray4") +
   annotate("text", x = nrow(sil_obj)*0.8, y = mean_sil_value,
@@ -283,7 +295,7 @@ plot_mean_abs_shap <- function(cluster_id, shap_values_FNConc, full_scaled) {
   
   df_shap$feature <- recode(df_shap$feature,
                             "NOx" = "Nitrate",
-                            "P"   = "Phosphorous",
+                            "P" = "P",
                             "precip" = "Precip",
                             "temp" = "Temperature",
                             "snow_cover" = "Snow Cover",
@@ -291,21 +303,23 @@ plot_mean_abs_shap <- function(cluster_id, shap_values_FNConc, full_scaled) {
                             "evapotrans" = "ET",
                             "greenup_day" = "Greenup Day",
                             "permafrost" = "Permafrost",
+                            "RBFI" = "Flashiness Index",
                             "elevation" = "Elevation",
                             "basin_slope" = "Basin Slope",
-                            "FNConc" = "DSi Concentration",
                             "rocks_volcanic" = "Rock: Volcanic",
                             "rocks_sedimentary" = "Rock: Sedimentary",
-                            "rocks_carbonate_evaporite" = "Rock: Carbonate & Evaporite",
+                            "rocks_carbonate_evaporite" = "Rock: Carbonate Evaporite",
                             "rocks_metamorphic" = "Rock: Metamorphic",
-                            "rocks_plutonic" = "Rock: Plutonic",
-                            "land_tundra" = "Land: Tundra",
-                            "land_barren_or_sparsely_vegetated" = "Land: Barren & Sparsely Vegetated",
-                            "land_cropland" = "Land: Cropland",
-                            "land_shrubland_grassland" = "Land: Shrubland & Grassland",
-                            "land_urban_and_built_up_land" = "Land: Urban & Built-up",
-                            "land_wetland" = "Land: Wetland",
-                            "land_forest_all" = "Land: Forest"
+                            "land_Bare" = "Land: Bare", 
+                            "land_Cropland" = "Land: Cropland", 
+                            "land_Forest" = "Land: Forest",
+                            "land_Grassland_Shrubland" = "Land: Grassland & Shrubland", 
+                            "land_Ice_Snow" = "Land: Ice & Snow", 
+                            "land_Impervious" = "Land: Impervious", 
+                            "land_Salt_Water" = "Land: Salt Water",
+                            "land_Tidal_Wetland" = "Land: Tidal Wetland", 
+                            "land_Water" = "Land: Water Body", 
+                            "land_Wetland_Marsh" = "Land: Wetland Marsh"
   )
   
   ggplot(df_shap, aes(x = reorder(feature, mean_abs_shapval), y = mean_abs_shapval)) +
@@ -356,7 +370,7 @@ generate_shap_dot_plot_obj <- function(cluster_name, shap_values_FNConc, full_sc
   shap_long$feature <- recode(shap_long$feature,
                               "FNConc" = "DSi Concentration",  # updated recode
                               "NOx" = "Nitrate",
-                              "P" = "Phosphorous",
+                              "P" = "P",
                               "precip" = "Precip",
                               "temp" = "Temperature",
                               "snow_cover" = "Snow Cover",
@@ -364,8 +378,23 @@ generate_shap_dot_plot_obj <- function(cluster_name, shap_values_FNConc, full_sc
                               "evapotrans" = "ET",
                               "greenup_day" = "Greenup Day",
                               "permafrost" = "Permafrost",
+                              "RBFI" = "Flashiness Index",
                               "elevation" = "Elevation",
-                              "basin_slope" = "Basin Slope")
+                              "basin_slope" = "Basin Slope",
+                              "rocks_volcanic" = "Rock: Volcanic",
+                              "rocks_sedimentary" = "Rock: Sedimentary",
+                              "rocks_carbonate_evaporite" = "Rock: Carbonate Evaporite",
+                              "rocks_metamorphic" = "Rock: Metamorphic",
+                              "land_Bare" = "Land: Bare", 
+                              "land_Cropland" = "Land: Cropland", 
+                              "land_Forest" = "Land: Forest",
+                              "land_Grassland_Shrubland" = "Land: Grassland & Shrubland", 
+                              "land_Ice_Snow" = "Land: Ice & Snow", 
+                              "land_Impervious" = "Land: Impervious", 
+                              "land_Salt_Water" = "Land: Salt Water",
+                              "land_Tidal_Wetland" = "Land: Tidal Wetland", 
+                              "land_Water" = "Land: Water Body", 
+                              "land_Wetland_Marsh" = "Land: Wetland Marsh")
   
   ggplot(shap_long, aes(x = shap_value, y = feature, fill = feature_value)) +
     geom_point(alpha = 0.6, size = 3, shape = 21, stroke = 0.1, color = "black") +

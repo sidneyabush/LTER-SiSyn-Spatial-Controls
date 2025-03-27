@@ -4,7 +4,7 @@
 
 # Load needed packages
 librarian::shelf(iml, ggplot2, dplyr, tidyr, reshape2, parallel, foreach, 
-                 randomForest, tibble, viridis, RColorBrewer)
+                 randomForest, tibble, viridis, RColorBrewer, scales)
 
 # Clear environment
 rm(list = ls())
@@ -12,11 +12,10 @@ rm(list = ls())
 # Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
-# Load required data and model
-load("FNConc_Yearly_rf_model2_full.RData")
-load("FNConc_Yearly_kept_drivers_full.RData")
-load("FNConc_Yearly_full.RData")
-load("FNConc_Yearly_full_stream_ids.RData")
+load("FNConc_Yearly_rf_model2_full_new.RData")
+load("FNConc_Yearly_kept_drivers__full_new.RData")
+load("FNConc_Yearly_full_new.RData")
+load("FNConc_Yearly_full_stream_ids_full_new.RData")
 
 # Load precomputed SHAP values
 load("FNConc_Yearly_shap_values_new.RData")
@@ -47,12 +46,13 @@ create_shap_plots <- function(shap_values_FNConc, kept_drivers, output_dir) {
   # Recode feature names for overall importance (and thus determine order)
   overall_feature_importance <- overall_feature_importance %>%
     mutate(feature = recode(feature,
-                            "elevation" = "Elevation",
-                            "basin_slope" = "Basin Slope",
                             "P" = "P",
-                            "rocks_volcanic" = "Volcanic Rock",
-                            "evapotrans" = "ET",
-                            "land_urban_and_built_up_land" = "Land: Urban & Built-Up"))
+                            "elevation" = "Elevation",
+                            "RBFI" = "Flashiness Index",
+                            "basin_slope" = "Basin Slope",
+                            "rocks_volcanic" = "Rock: Volcanic",
+                            "land_Impervious" = "Land: Impervious",
+                            "land_Water" = "Land: Water Body"))
   
   # Overall Feature Importance Bar Plot
   overall_importance_plot_FNConc <- ggplot(overall_feature_importance, 
@@ -98,12 +98,13 @@ create_shap_plots <- function(shap_values_FNConc, kept_drivers, output_dir) {
   # Recode feature names for display in the dot plot
   shap_long <- shap_long %>%
     mutate(feature = recode(feature,
-                            "elevation" = "Elevation",
-                            "basin_slope" = "Basin Slope",
                             "P" = "P",
-                            "rocks_volcanic" = "Volcanic Rock",
-                            "evapotrans" = "ET",
-                            "land_urban_and_built_up_land" = "Land: Urban & Built-Up"))
+                            "elevation" = "Elevation",
+                            "RBFI" = "Flashiness Index",
+                            "basin_slope" = "Basin Slope",
+                            "rocks_volcanic" = "Rock: Volcanic",
+                            "land_Impervious" = "Land: Impervious",
+                            "land_Water" = "Land: Water Body"))
   
   # Set factor levels for the dot plot based on overall feature importance order
   shap_long$feature <- factor(shap_long$feature, levels = rev(overall_feature_importance$feature))
@@ -140,3 +141,4 @@ create_shap_plots <- function(shap_values_FNConc, kept_drivers, output_dir) {
 
 # Create SHAP plots
 create_shap_plots(shap_values_FNConc, kept_drivers, output_dir)
+
