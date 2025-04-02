@@ -10,6 +10,8 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 # -----------------------------------------------------------
 # 1. Load the Chemistry Sites Data (key file with Stream_Name) ----
 # -----------------------------------------------------------
+# daily_kalman <- read_csv("Full_Results_WRTDS_kalman_daily_filtered.csv") 
+
 cols_needed <- c("LTER.x", "Stream_Name", "Date", "Q")
 daily_kalman <- read_csv("Full_Results_WRTDS_kalman_daily_filtered.csv", 
                          col_select = all_of(cols_needed)) %>%
@@ -55,5 +57,4 @@ flashiness_export <- flashiness %>%
 
 # Export the result as a CSV file
 write_csv(flashiness_export, "flashiness_by_stream_id.csv")
-
 
