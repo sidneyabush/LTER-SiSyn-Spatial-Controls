@@ -8,6 +8,17 @@
 load("FNConc_HierClust_Workflow_Objects.RData")
 load("FNYield_HierClust_Workflow_Objects.RData")
 
+my_cluster_colors <- c(
+  "Volcanic"            = "#AC7B32",  
+  "Sedimentary"         = "#579C8E",  
+  "Mixed Sedimentary"   = "#89C8A0",
+  "Plutonic"            = "#8D9A40",
+  "Metamorphic"         = "#C26F86",  
+  "Carbonate Evaporite" = "#5E88B0"   
+)
+
+# my_cluster_colors_lighter <- sapply(my_cluster_colors, function(x) lighten(x, amount = 0.3))
+
 ## 0.1 Redefine plot_mean_abs_shap() with recoding (including land types)
 plot_mean_abs_shap <- function(cluster_id, shap_values, full_scaled, y_limit = 1.3) {
   cluster_indices <- which(full_scaled$final_cluster == cluster_id)
@@ -187,10 +198,10 @@ generate_shap_dot_plot_obj <- function(
 # 3. SHAP Bar Plots (3 columns × 5 rows) + Column Titles, Single Y-Axis
 ###############################################################################
 plot_list_bars_conc <- lapply(unique_clusters, function(cl) {
-  plot_mean_abs_shap(cl, shap_values_FNConc, full_scaled, y_limit = 1.3)
+  plot_mean_abs_shap(cl, shap_values_FNConc, full_scaled, y_limit = 0.7)
 })
 plot_list_bars_yield <- lapply(unique_clusters, function(cl) {
-  plot_mean_abs_shap(cl, shap_values_FNYield, full_scaled, y_limit = 1300)
+  plot_mean_abs_shap(cl, shap_values_FNYield, full_scaled, y_limit = 850)
 })
 
 rows_list <- lapply(seq_along(unique_clusters), function(i) {
