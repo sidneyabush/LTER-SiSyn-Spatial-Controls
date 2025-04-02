@@ -425,12 +425,20 @@ chemistry_combined <- chemistry_combined %>%
 # -----------------------------------------------------------
 # 6. Export Final Data ----
 # -----------------------------------------------------------
-# Convert list columns to character strings
 chemistry_combined <- chemistry_combined %>%
-  mutate_if(is.list, ~ sapply(., toString))
+  # Convert list columns to character strings
+  mutate_if(is.list, ~ sapply(., toString)) %>%
+  # Remove all columns with names ending in ".y"
+  select(-ends_with(".y"))
+
+# Remove ".x" from column names
+names(chemistry_combined) <- gsub("\\.x", "", names(chemistry_combined))
+
+chemistry_combined <- chemistry_combined %>%
+  dplyr::select(-X, -Use_WRTDS, -basin_slope_median_degree, -basin_slope_min_degree, -basin_slope_max_degree, -contains("Coord"))
 
 # Export Final Data
-write.csv(chemistry_long, "Chemistry_Sites_Harmonized_Long.csv", row.names = FALSE)
+# write.csv(chemistry_long, "Chemistry_Sites_Harmonized_Long.csv", row.names = FALSE)
 write.csv(chemistry_combined, "Chemistry_Sites_Harmonized_Wide.csv", row.names = FALSE)
 
 gc()
@@ -499,7 +507,7 @@ gc()
 
 # Summary stats by LTER
 npp_et_summary_LTER <- chemistry_combined %>%
-  group_by(LTER.x) %>%
+  group_by(LTER) %>%
   summarise(
     npp_median = median(npp, na.rm = TRUE),
     npp_sd   = sd(npp, na.rm = TRUE),
