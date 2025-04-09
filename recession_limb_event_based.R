@@ -78,24 +78,23 @@ recession_events <- recession_days %>%
   group_modify(~ {
     n_days <- nrow(.x)
     event_start <- min(.x$Date)
-    slope <- if (n_days >= 5) {
+    slope_value <- if(n_days >= 5) {
       lm_model <- lm(recession_slope ~ Q, data = .x)
-      coef(lm_model)[2]
+      unname(coef(lm_model)[2])
     } else {
       NA_real_
     }
-    tibble(event_start = event_start, n_days = n_days, slope = slope)
+    tibble(event_start = event_start,
+           n_days = n_days,
+           slope = slope_value)
   }) %>%
   ungroup() %>%
-  filter(!is.na(slope))  # Optionally remove events without enough data
+  filter(!is.na(slope))
 
-print(recession_events)
-
-
-# If needed, further aggregate to have one unique value per (Stream_ID, event_start)
 unique_stream_date_slopes <- recession_events %>%
-  group_by(Stream_ID, event_start) %>%
-  summarise(avg_slope = mean(slope, na.rm = TRUE), .groups = "drop")
+  group_by(Stream_ID) %>%
+  dplyr::summarise(avg_slope = mean(slope, na.rm = TRUE))
+
 
 # View the result: each row is uniquely defined by Stream_ID and the event's starting Date
 print(unique_stream_date_slopes)
