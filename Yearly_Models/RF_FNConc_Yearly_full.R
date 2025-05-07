@@ -96,7 +96,6 @@ drivers_numeric <- drivers_df %>%
 driver_cor <- cor(drivers_numeric[2:24])
 save_correlation_plot(driver_cor, output_dir)
 
-
 # ---- Train Initial RF Model ----
 # Test different ntree values for rf_model1
 ntree_values <- seq(100, 2000, by = 100)  # Define ntree values
@@ -121,7 +120,7 @@ print(p)
 
 set.seed(123)
 # Manually select ntree for rf_model1 ----
-manual_ntree_rf1 <- 1900  # Replace with chosen value
+manual_ntree_rf1 <- 1800  # Replace with chosen value
 
 set.seed(123)
 # Tune mtry for rf_model1 ----
@@ -173,7 +172,6 @@ y <- drivers_numeric$FNConc
 
 sink(NULL)  # Reset output sink
 closeAllConnections()  # Close all connections
-
 
 # Run RFE to select the best features ----
 set.seed(123)
