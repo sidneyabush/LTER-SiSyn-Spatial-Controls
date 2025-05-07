@@ -30,6 +30,31 @@ daily_kalman <- read_csv("Full_Results_WRTDS_kalman_daily_filtered.csv",
   ) %>%
   filter(Date >= as.Date("2001-01-01") & Date <= as.Date("2023-12-31"))
 
+daily_Q_CJ <- read.csv("WRTDS-input_discharge.csv",
+                       stringsAsFactors = FALSE) %>%
+  # parse your Date column
+  mutate(
+    Date        = as.Date(Date, format = "%Y-%m-%d"),
+    # add fixed LTER
+    LTER        = "Catalina Jemez",
+    # extract OR_low or MG_WEIR from the Stream_ID
+    Stream_Name = str_extract(Stream_ID, "OR_low|MG_WEIR")
+  ) %>%
+  # keep only the Catalina Jemez OR_low / MG_WEIR rows
+  filter(Stream_ID %in% c("Catalina Jemez__OR_low",
+                          "Catalina Jemez__MG_WEIR")) %>%
+  # drop the "indicate" column
+  select(-indicate)
+
+# inspect
+head(daily_Q_CJ)
+  
+# — 3. Join them by Date & Stream_ID —
+daily_kalman <- bind_rows(
+  daily_kalman,
+  daily_Q_CJ
+) %>%
+  arrange(Stream_ID, Date)  # optional: sort by site & date
 
 # -----------------------------------------------------------
 # 2. Calculate Flashiness (RBFI) for Each Stream_ID ----

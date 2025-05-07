@@ -48,8 +48,16 @@ wrtds_CJ <- wrtds_CJ %>%
   ) %>%
   select(LTER, Stream_Name, chemical, DecYear, Q, FNConc, FNFlux, GenConc, GenFlux, drainSqKm, Stream_ID, Year)
 
-write_csv(wrtds_CJ,
-          "wrtds_kalman_annual_CatalinaJemez.csv")
+write_csv(wrtds_CJ, "wrtds_kalman_annual_CatalinaJemez.csv")
 
 # Now we want to import daily Q values so that we can calculate RBFI and recession curve slope as with the other sites:
+daily_Q <- read.csv("WRTDS-input_discharge.csv", stringsAsFactors = FALSE) %>%
+  mutate(
+    Date = as.Date(Date, format = "%Y-%m-%d")) %>%
+  dplyr::filter(Stream_ID %in% c("Catalina Jemez__OR_low", "Catalina Jemez__OR_WEIR")) %>%
+  dplyr::select(-indicate)
 
+write_csv(daily_Q, "daily_Q_CatalinaJemez.csv")
+
+
+    

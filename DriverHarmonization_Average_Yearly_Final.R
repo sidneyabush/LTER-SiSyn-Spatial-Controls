@@ -33,6 +33,12 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
   ) %>%
   filter(chemical == "DSi")
 
+wrtds_CJ <- read.csv("wrtds_kalman_annual_CatalinaJemez.csv") %>%
+  filter(chemical == "DSi")
+
+## NEED TO COMBINE THESE
+wrtds_df <- bind_rows(wrtds_df, wrtds_CJ) 
+
 # Standardize Stream_ID formatting in all datasets to remove extra spaces
 standardize_stream_id <- function(df) {
   df %>%
@@ -530,6 +536,13 @@ wrtds_NP <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
   # filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc)  %>%  # Remove rows where FNConc is ±50% of GenConc
   dplyr::select(-DecYear, -.groups, -LTER, -contains("FN"), -GenFlux)
 
+## Import for Catalina Jemez: 
+wrtds_NP_CJ <- read.csv("wrtds_kalman_annual_CatalinaJemez.csv") %>%
+  dplyr::select(-DecYear, -LTER, -contains("FN"), -GenFlux)
+
+## NOW COMBINE!!! 
+wrtds_NP <- bind_rows(wrtds_NP, wrtds_NP_CJ) 
+
 wrtds_NP <- wrtds_NP %>%
   filter(chemical %in% c("P", "NO3", "NOx") & GenConc > 0) %>%  # Keep only positive GenConc
   mutate(
@@ -642,8 +655,10 @@ num_unique_stream_ids <- tot %>%
 print(num_unique_stream_ids)
 
 # Standardize NOx and P column names by removing suffixes
+# drop all the “.y” columns, then strip “.x” from what remains
 tot <- tot %>%
-  rename_with(~ str_replace_all(., "\\.x$|\\.y$|\\.x.x$|\\.y.y$", ""))
+  select(-ends_with(".y")) %>%
+  rename_with(~ str_remove(., "\\.x$"))
 
 # Now generate a list of missing NOx and P sites-year combinations:
 missing_N_P_data_summary <- tot %>%

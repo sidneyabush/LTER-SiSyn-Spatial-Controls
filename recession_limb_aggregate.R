@@ -1,41 +1,62 @@
 # Load needed libraries
-librarian::shelf(dplyr, ggplot2, data.table, ggpubr, reshape2, EflowStats, zoo, lubridate, readr)
+librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr, stringr, readr)
 
 # Clear environment
 rm(list = ls())
 
-# Set working directory (adjust the path as needed)
+# Set working directory (change this path as needed)
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
-# ----------------------------------------------------------------------------
-# 1. Read and Prepare the Data; Remove Duplicate Date Entries per Stream_ID
-# ----------------------------------------------------------------------------
+# -----------------------------------------------------------
+# 1. Load the Chemistry Sites Data (key file with Stream_Name) ----
+# -----------------------------------------------------------
+# daily_kalman <- read_csv("Full_Results_WRTDS_kalman_daily_filtered.csv") 
 
-# Specify the columns needed. Note: we use backticks around LTER.x in rename
 cols_needed <- c("LTER.x", "Stream_Name", "Date", "Q")
 daily_kalman <- read_csv("Full_Results_WRTDS_kalman_daily_filtered.csv", 
                          col_select = all_of(cols_needed)) %>%
-  dplyr::rename(LTER = `LTER.x`) %>%  
-  dplyr::filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
-  dplyr::mutate(
+  rename(LTER = LTER.x) %>%
+  filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
+  mutate(
     Stream_Name = case_when(
       Stream_Name == "East Fork" ~ "east fork",
       Stream_Name == "West Fork" ~ "west fork",
       Stream_Name == "Amazon River at Obidos" ~ "Obidos",
       TRUE ~ Stream_Name
     ),
+    # Convert Date to a Date object and filter for 2001-2023
     Date = as.Date(Date),
-    Stream_ID = paste0(LTER, "__", Stream_Name),
-    Year = year(Date)
+    Stream_ID = paste0(LTER, "__", Stream_Name)
   ) %>%
-  # Remove duplicate entries if needed (if you have a unique_id column already)
-  dplyr::distinct(Stream_ID, Date, .keep_all = TRUE) %>%
-  dplyr::filter(Date >= as.Date("2001-01-01") & Date <= as.Date("2023-12-31"))
+  filter(Date >= as.Date("2001-01-01") & Date <= as.Date("2023-12-31")) %>%
+  # drop all MCM rows
+  filter(LTER != "MCM")
 
-# Optionally, inspect the unique combinations:
-unique_sites <- unique(daily_kalman %>% 
-                         dplyr::select(Stream_ID, Date, Year, Q))
-print(unique_sites)
+daily_Q_CJ <- read.csv("WRTDS-input_discharge.csv",
+                       stringsAsFactors = FALSE) %>%
+  # parse your Date column
+  mutate(
+    Date        = as.Date(Date, format = "%Y-%m-%d"),
+    # add fixed LTER
+    LTER        = "Catalina Jemez",
+    # extract OR_low or MG_WEIR from the Stream_ID
+    Stream_Name = str_extract(Stream_ID, "OR_low|MG_WEIR")
+  ) %>%
+  # keep only the Catalina Jemez OR_low / MG_WEIR rows
+  filter(Stream_ID %in% c("Catalina Jemez__OR_low",
+                          "Catalina Jemez__MG_WEIR")) %>%
+  # drop the "indicate" column
+  select(-indicate)
+
+# inspect
+head(daily_Q_CJ)
+
+# — 3. Join them by Date & Stream_ID —
+daily_kalman <- bind_rows(
+  daily_kalman,
+  daily_Q_CJ
+) %>%
+  arrange(Stream_ID, Date)  # optional: sort by site & date
 
 # ----------------------------------------------------------------------------
 # 2. Calculate Daily Differences and Identify Recession Days
@@ -62,6 +83,7 @@ recession_data <- daily_kalman %>%
 # and extract the slope coefficient.
 recession_slopes <- recession_data %>%
   dplyr::group_by(Stream_ID) %>%
+  filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
   dplyr::summarise(
     n_days = n(),
     slope = if(n_days >= 50) {
@@ -72,7 +94,7 @@ recession_slopes <- recession_data %>%
     },
     .groups = "drop"
   ) %>%
-  dplyr::filter(!is.na(slope))
+  filter(!is.na(slope), slope >= 0)
 
 # View the result (one row per Stream_ID)
 print(recession_slopes)
