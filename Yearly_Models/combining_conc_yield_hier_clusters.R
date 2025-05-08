@@ -88,7 +88,7 @@ library(grid)        # For textGrob()
 
 # Set your working directory & output directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model"
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures"
 
 unique_clusters <- levels(full_scaled$final_cluster)
 
@@ -266,10 +266,10 @@ final_grid_bar <- (y_axis_label | bar_plots_with_title) +
   plot_layout(widths = c(0.06, 1))
 
 ggsave(
-  filename = "Combined_Grid_BarPlots.png",
+  filename = "Fig4_Combined_Grid_BarPlots.png",
   plot = final_grid_bar,
-  width = 20,
-  height = 24,
+  width = 22,
+  height = 25,
   dpi = 300,
   path = output_dir
 )
@@ -329,12 +329,12 @@ dot_title_row <- (dot_title1 + dot_title2) + plot_layout(ncol = 2, widths = c(1,
 final_grid_dot <- dot_title_row / dot_plots_combined +
   plot_layout(heights = c(0.8, 10), guides = "collect")
 
-ggsave(
-  filename = "Combined_Grid_DotPlots.png",
-  plot = final_grid_dot,
-  width = 20,
-  height = 24,
-  dpi = 300,
-  path = output_dir
-)
-print(final_grid_dot)
+# ggsave(
+#   filename = "Combined_Grid_DotPlots.png",
+#   plot = final_grid_dot,
+#   width = 20,
+#   height = 24,
+#   dpi = 300,
+#   path = output_dir
+# )
+# print(final_grid_dot)

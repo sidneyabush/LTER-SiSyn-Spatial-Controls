@@ -18,7 +18,7 @@ library(factoextra)  # fviz_silhouette() - used earlier, but we'll do custom now
 
 # Set working directory and output directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model/FNYield"
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures"
 
 ###############################################################################
 # 2. Load Data & Model
@@ -452,7 +452,7 @@ final_combined_plot <- left_col | right_col +
 # 12. Save Final Figures
 ###############################################################################
 ggsave(
-  filename = "Combined_Cluster_Boxplot_and_SHAP_DotPlots.png",
+  filename = "Fig6_FNYield_Cluster_Boxplot_SHAP_DotPlots.png",
   plot = final_combined_plot,
   width = 16,
   height = 18,
@@ -462,7 +462,7 @@ ggsave(
 print(final_combined_plot)
 
 ggsave(
-  filename = "FNYield_Yearly_Clusters.png",
+  filename = "Fig7_FNYield_Yearly_Clusters.png",
   plot = p_FNYield,
   width = 8,
   height = 5,
@@ -472,7 +472,7 @@ ggsave(
 print(p_FNYield)
 
 ggsave(
-  filename = "Custom_Silhouette_Plot.png",
+  filename = "FigSX_Yield_Sil.png",
   plot = p_sil,
   width = 10,
   height = 6,
@@ -488,7 +488,7 @@ plot_list_bars <- lapply(unique_clusters_for_shap, function(cl) {
 })
 
 ggsave(
-  filename = "MeanAbsSHAP_Grid.png",
+  filename = "FigSX_FNYield_MeanAbsSHAP_Grid.png",
   plot = wrap_plots(plot_list_bars, ncol = 2),
   width = 15,
   height = 16,

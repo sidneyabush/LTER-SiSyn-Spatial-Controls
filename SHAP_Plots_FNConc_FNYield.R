@@ -7,6 +7,20 @@
 librarian::shelf(iml, ggplot2, dplyr, tidyr, reshape2, parallel, foreach, 
                  randomForest, tibble, viridis, RColorBrewer, patchwork, scales)
 
+library(ggplot2)
+
+#––– set a base theme for all of your plots –––#
+theme_set(
+  theme_classic(base_size = 14) +
+    theme(
+      panel.background = element_rect(fill   = "white", colour = NA),
+      plot.background  = element_rect(fill   = "white", colour = NA),
+      legend.background= element_rect(fill   = "white", colour = NA),
+      legend.key       = element_rect(fill   = "white", colour = NA)
+    )
+)
+
+
 # Clear environment
 rm(list = ls())
 
@@ -39,7 +53,7 @@ shap_values_FNYield <- shap_values_FNYield
 
 # Set global seed and output directory
 set.seed(123)
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model/FNConc"
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures"
 
 ###############################################################################
 # Create ggplot LM Plots for predicted vs. observed for Concentration and Yield
@@ -200,15 +214,15 @@ create_shap_plots <- function(shap_values, kept_drivers, output_dir) {
       plot.title       = element_text(size = 14)
     )
   
-  # Save overall plot if desired
-  ggsave(
-    filename = sprintf("%s/SHAP_FNConc_Ave_Overall_Variable_Importance.png", output_dir),
-    plot     = overall_importance_plot,
-    width    = 9,
-    height   = 8,
-    dpi      = 300
-  )
-  
+  # # Save overall plot if desired
+  # ggsave(
+  #   filename = sprintf("%s/SHAP_FNConc_Ave_Overall_Variable_Importance.png", output_dir),
+  #   plot     = overall_importance_plot,
+  #   width    = 9,
+  #   height   = 8,
+  #   dpi      = 300
+  # )
+  # 
   # Scale kept_drivers using rescale()
   kept_drivers_scaled <- kept_drivers %>%
     mutate(across(everything(), ~ rescale(., to = c(0,1))))
@@ -366,10 +380,10 @@ final_grid <- plot_grid(
 ##############################
 print(final_grid)
 ggsave(
-  filename = "Final_Grid_FNConc_FNYield.png",
+  filename = "Fig3_Global_Grid_FNConc_FNYield.png",
   plot     = final_grid,
-  width    = 12,
-  height   = 12,
+  width    = 15,
+  height   = 13,
   dpi      = 300,
   path     = output_dir
 )
@@ -384,7 +398,7 @@ final_overall_grid <- overall_plot_FNConc | overall_plot_FNYield
 final_overall_grid_labeled <- final_overall_grid + plot_annotation(tag_levels = "A")
 
 # Save the labeled overall grid
-ggsave(filename = "Final_Overall_FNConc_FNYield.png", 
+ggsave(filename = "FigSX_Final_Overall_FNConc_FNYield.png", 
        plot = final_overall_grid_labeled,
        width = 11, height = 6, dpi = 300, path = output_dir)
 
