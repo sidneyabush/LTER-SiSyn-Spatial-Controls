@@ -21,7 +21,7 @@ save_correlation_plot <- function(driver_cor, output_dir) {
 # Save RF Variable Importance Plot
 save_rf_importance_plot <- function(rf_model, output_dir) {
   pdf(sprintf("%s/RF_variable_importance_FNYield_Yearly_5_years.pdf", output_dir), width = 8, height = 6)
-  randomForest::varImpPlot(rf_model, main = "rf_model2 - Ave FNYield", col = "darkblue")
+  randomForest::varImpPlot(rf_model, main = "rf_model2 - Yearly FNYield", col = "darkblue")
   dev.off()
 }
 
@@ -126,7 +126,7 @@ print(p)
 
 set.seed(123)
 # Manually select ntree for rf_model1 ----
-manual_ntree_rf1 <- 1500  # Replace with chosen value
+manual_ntree_rf1 <- 1700  # Replace with chosen value
 
 set.seed(123)
 # Tune mtry for rf_model1 ----
@@ -134,7 +134,7 @@ tuneRF(drivers_numeric[, 2:ncol(drivers_numeric)], drivers_numeric[, 1],
        ntreeTry = manual_ntree_rf1, stepFactor = 1, improve = 0.5, plot = TRUE)
 
 # Manually select mtry for rf_model1 ----
-manual_mtry_rf1 <- 7  # Replace with chosen value
+manual_mtry_rf1 <- 9  # Replace with chosen value
 
 # Run initial RF using tuned parameters ----
 set.seed(123)
@@ -214,13 +214,13 @@ ggplot(MSE_df_parallel, aes(x = ntree, y = mean_MSE)) +
 # Global seed before re-tuning mtry
 set.seed(123)
 kept_drivers <- drivers_numeric[, colnames(drivers_numeric) %in% predictors(result_rfe)]
-tuneRF(kept_drivers, drivers_numeric[, 1], ntreeTry = 900, 
+tuneRF(kept_drivers, drivers_numeric[, 1], ntreeTry = 1800, 
        stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(123)
 rf_model2 <- randomForest(rf_formula, data = drivers_numeric, 
-                          importance = TRUE, proximity = TRUE, ntree = 900, mtry = 8)
+                          importance = TRUE, proximity = TRUE, ntree = 1800, mtry = 9)
 
 # Visualize output for rf_model2
 print(rf_model2)

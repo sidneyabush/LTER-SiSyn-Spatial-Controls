@@ -21,7 +21,7 @@ save_correlation_plot <- function(driver_cor, output_dir) {
 # Save RF Variable Importance Plot
 save_rf_importance_plot <- function(rf_model, output_dir) {
   pdf(sprintf("%s/RF_variable_importance_FNConc_Yearly_5_years.pdf", output_dir), width = 8, height = 6)
-  randomForest::varImpPlot(rf_model, main = "rf_model2 - Ave FNConc", col = "darkblue")
+  randomForest::varImpPlot(rf_model, main = "rf_model2 - Yearly FNConc", col = "darkblue")
   dev.off()
 }
 
