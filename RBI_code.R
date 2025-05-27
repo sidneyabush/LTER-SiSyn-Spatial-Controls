@@ -57,9 +57,9 @@ daily_kalman <- bind_rows(
   arrange(Stream_ID, Date)  # optional: sort by site & date
 
 # -----------------------------------------------------------
-# 2. Calculate Flashiness (RBFI) for Each Stream_ID ----
+# 2. Calculate Flashiness (RBI) for Each Stream_ID ----
 # -----------------------------------------------------------
-# For each stream, calculate daily discharge changes and compute RBFI.
+# For each stream, calculate daily discharge changes and compute RBI.
 flashiness <- daily_kalman %>%
   group_by(Stream_ID) %>%
   arrange(Date) %>%                     # Ensure dates are in order for each stream
@@ -69,16 +69,16 @@ flashiness <- daily_kalman %>%
   summarise(
     total_discharge = sum(Q, na.rm = TRUE),         # Total discharge over the period
     total_change = sum(abs_dQ, na.rm = TRUE),         # Total absolute change
-    RBFI = total_change / total_discharge           # Richards-Baker Flashiness Index
+    RBI = total_change / total_discharge           # Richards-Baker Flashiness Index
   ) %>%
   ungroup()
 
-# View the flashiness data frame with RBFI values for each Stream_ID
+# View the flashiness data frame with RBI values for each Stream_ID
 print(flashiness)
 
-# Keep only the Stream_ID and RBFI columns
+# Keep only the Stream_ID and RBI columns
 flashiness_export <- flashiness %>%
-  select(Stream_ID, RBFI)
+  select(Stream_ID, RBI)
 
 # Export the result as a CSV file
 write_csv(flashiness_export, "flashiness_by_stream_id.csv")
