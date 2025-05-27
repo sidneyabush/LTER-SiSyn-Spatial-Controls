@@ -87,7 +87,7 @@ recession_slopes <- recession_data %>%
   dplyr::summarise(
     n_days = n(),
     slope = if(n_days >= 50) {
-      lm_model <- lm(recession_slope ~ Q, data = cur_data())
+      lm_model <- lm(log(recession_slope) ~ log(Q), data = cur_data())
       unname(coef(lm_model)[2])
     } else {
       NA_real_

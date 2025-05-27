@@ -50,7 +50,7 @@ wrtds_CJ <- wrtds_CJ %>%
 
 write_csv(wrtds_CJ, "wrtds_kalman_annual_CatalinaJemez.csv")
 
-# Now we want to import daily Q values so that we can calculate RBFI and recession curve slope as with the other sites:
+# Now we want to import daily Q values so that we can calculate RBI and recession curve slope as with the other sites:
 daily_Q <- read.csv("WRTDS-input_discharge.csv", stringsAsFactors = FALSE) %>%
   mutate(
     Date = as.Date(Date, format = "%Y-%m-%d")) %>%
