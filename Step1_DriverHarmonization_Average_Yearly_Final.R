@@ -116,6 +116,42 @@ print(unique_stream_ids_with_na)
 
 gc()
 
+
+# -----------------------------------------------------------
+# Import Recession Curve Slope Data and Merge with tot ----
+# -----------------------------------------------------------
+# Import the recession_slope CSV that contains Stream_ID and RBI
+recession_slope <- read_csv("Recession_Slopes_by_StreamID_Aggregate.csv") %>%
+  dplyr::rename(recession_slope = slope) %>%
+  dplyr::select(-'...1', -n_days)
+
+# Merge the recession_slope data into the tot dataset by Stream_ID
+tot <- tot %>% 
+  left_join(recession_slope, by = "Stream_ID") 
+
+num_unique_stream_ids <- tot %>%
+  pull(Stream_ID) %>%
+  n_distinct()
+
+print(num_unique_stream_ids)
+
+# Identify unique Stream_IDs with NA values
+unique_stream_ids_with_na <- tot %>%
+  filter(if_any(everything(), is.na)) %>%
+  distinct(Stream_ID) %>%
+  pull(Stream_ID)
+
+# Count the number of unique Stream_IDs with NA
+num_unique_stream_ids_with_na <- length(unique_stream_ids_with_na)
+
+# Print results
+print(num_unique_stream_ids_with_na)
+print(unique_stream_ids_with_na)
+
+gc()
+
+
+
 ## ------------------------------------------------------- ##
             # Add in KG Classifications ----
 ## ------------------------------------------------------- ##
@@ -859,7 +895,7 @@ write.csv(as.data.frame(tot),
 tot_si <- tot %>%
   dplyr::select(Stream_ID, Year, drainSqKm, NOx, P, precip, Q,
                 temp, Max_Daylength, prop_area, npp, evapotrans,
-                cycle0, permafrost_mean_m, elevation_mean_m, RBI,
+                cycle0, permafrost_mean_m, elevation_mean_m, RBI, recession_slope,
                 basin_slope_mean_degree, FNConc, FNYield, GenConc, GenYield, major_rock, major_land,
                 contains("rocks"), contains("land_")) %>%
   dplyr::rename(snow_cover = prop_area, 

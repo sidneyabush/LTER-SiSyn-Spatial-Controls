@@ -93,7 +93,7 @@ drivers_numeric <- drivers_df %>%
 
 # Plot and save correlation matrix ----
 # numeric_drivers <- 2:24 # Change this range to reflect data frame length
-driver_cor <- cor(drivers_numeric[2:24])
+driver_cor <- cor(drivers_numeric[2:29])
 save_correlation_plot(driver_cor, output_dir)
 
 # ---- Train Initial RF Model ----
