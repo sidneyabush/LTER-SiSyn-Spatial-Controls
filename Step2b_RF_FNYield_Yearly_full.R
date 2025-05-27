@@ -126,7 +126,7 @@ print(p)
 
 set.seed(123)
 # Manually select ntree for rf_model1 ----
-manual_ntree_rf1 <- 1700  # Replace with chosen value
+manual_ntree_rf1 <- 1000  # Replace with chosen value
 
 set.seed(123)
 # Tune mtry for rf_model1 ----
