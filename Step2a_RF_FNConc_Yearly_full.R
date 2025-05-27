@@ -7,7 +7,7 @@ librarian::shelf(remotes, RRF, caret, randomForest, DAAG, party, rpart, rpart.pl
 rm(list = ls())
 
 # Global seed setting to ensure consistency across the whole workflow
-set.seed(123)
+set.seed(666)
 
 # Load Functions ----
 # Function to save correlation matrix as PDF
@@ -45,7 +45,7 @@ test_numtree_parallel <- function(ntree_list, formula, data) {
   
   # Collect results
   MSE <- foreach(ntree = ntree_list, .combine = 'c', .packages = 'randomForest') %dopar% {
-    set.seed(123)
+    set.seed(666)
     rf_model <- randomForest(formula, data = data, importance = TRUE, proximity = TRUE, ntree = ntree)
     mean(rf_model$mse)  # Return the mean of the MSE vector
   }
@@ -64,7 +64,7 @@ test_numtree_parallel_optimized <- function(ntree_list, formula, data) {
   
   # Run models in parallel using foreach
   MSE <- foreach(ntree = ntree_list, .combine = 'c', .packages = 'randomForest') %dopar% {
-    set.seed(123)
+    set.seed(666)
     rf_model <- randomForest(formula, data = data, importance = TRUE, proximity = TRUE, ntree = ntree)
     mean(rf_model$mse)  # Return the mean MSE for each ntree
   }
@@ -98,7 +98,7 @@ save_correlation_plot(driver_cor, output_dir)
 # ---- Train Initial RF Model ----
 # Test different ntree values for rf_model1
 ntree_values <- seq(100, 2000, by = 100)  # Define ntree values
-set.seed(123)
+set.seed(666)
 MSE_list_rf1 <- test_numtree_parallel(ntree_values, FNConc ~ ., drivers_numeric)
 
 # Visualize MSE results for rf_model1 ----
@@ -117,11 +117,11 @@ p <- ggplot(MSE_df_rf1, aes(ntree, mean_MSE)) +
 # dev.new()  # Open a new graphics window
 print(p)
 
-set.seed(123)
+set.seed(666)
 # Manually select ntree for rf_model1 ----
-manual_ntree_rf1 <- 800  # Replace with chosen value
+manual_ntree_rf1 <- 1000  # Replace with chosen value
 
-set.seed(123)
+set.seed(666)
 # Tune mtry for rf_model1 ----
 tuneRF(drivers_numeric[, 2:ncol(drivers_numeric)], 
        drivers_numeric[, 1], ntreeTry = manual_ntree_rf1, 
@@ -131,7 +131,7 @@ tuneRF(drivers_numeric[, 2:ncol(drivers_numeric)],
 manual_mtry_rf1 <- 9  # Replace with chosen value
 
 # Run initial RF using tuned parameters ----
-set.seed(123)
+set.seed(666)
 rf_model1 <- randomForest(FNConc ~ ., data = drivers_numeric, 
                           importance = TRUE, proximity = TRUE,
                           ntree = manual_ntree_rf1, mtry = manual_mtry_rf1)
@@ -173,7 +173,7 @@ sink(NULL)  # Reset output sink
 closeAllConnections()  # Close all connections
 
 # Run RFE to select the best features ----
-set.seed(123)
+set.seed(666)
 result_rfe <- rfe(x = x, y = y, sizes = c(1:size), rfeControl = control)
 
 # Print RFE results
@@ -187,7 +187,7 @@ rf_formula <- formula(paste("FNConc ~", new_rf_input))
 
 # Test different ntree values 
 ntree_values <- seq(100, 2000, by = 100)  
-set.seed(123)
+set.seed(666)
 MSE_list_parallel <- test_numtree_parallel_optimized(ntree_values, rf_formula, drivers_numeric)
 
 # Create a data frame for visualization
@@ -205,13 +205,13 @@ ggplot(MSE_df_parallel, aes(x = ntree, y = mean_MSE)) +
   theme(text = element_text(size = 20))
 
 # Global seed before re-tuning mtry
-set.seed(123)
+set.seed(666)
 kept_drivers <- drivers_numeric[, colnames(drivers_numeric) %in% predictors(result_rfe)]
-tuneRF(kept_drivers, drivers_numeric[, 1], ntreeTry = 1600, 
+tuneRF(kept_drivers, drivers_numeric[, 1], ntreeTry = 1000, 
        stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
-set.seed(123)
+set.seed(666)
 rf_model2 <- randomForest(rf_formula, data = drivers_numeric, 
                           importance = TRUE, proximity = TRUE, ntree = 1600, mtry = 2)
 

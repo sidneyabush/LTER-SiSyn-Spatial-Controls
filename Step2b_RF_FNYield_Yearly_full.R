@@ -98,7 +98,6 @@ drivers_numeric <- drivers_df %>%
   dplyr::select(-Stream_ID, -Year)
 
 # Plot and save correlation matrix ----
-# numeric_drivers <- 2:24 # Change this range to reflect data frame length
 driver_cor <- cor(drivers_numeric)
 save_correlation_plot(driver_cor, output_dir)
 
@@ -126,7 +125,7 @@ print(p)
 
 set.seed(123)
 # Manually select ntree for rf_model1 ----
-manual_ntree_rf1 <- 1700  # Replace with chosen value
+manual_ntree_rf1 <- 700  # Replace with chosen value
 
 set.seed(123)
 # Tune mtry for rf_model1 ----
