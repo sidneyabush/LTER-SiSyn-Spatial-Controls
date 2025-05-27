@@ -88,7 +88,7 @@ tot <- wrtds_df %>%
 # -----------------------------------------------------------
 # Import Flashiness Data and Merge with tot ----
 # -----------------------------------------------------------
-# Import the flashiness CSV that contains Stream_ID and RBFI
+# Import the flashiness CSV that contains Stream_ID and RBI
 flashiness <- read_csv("flashiness_by_stream_id.csv")
 
 # Merge the flashiness data into the tot dataset by Stream_ID
@@ -859,7 +859,7 @@ write.csv(as.data.frame(tot),
 tot_si <- tot %>%
   dplyr::select(Stream_ID, Year, drainSqKm, NOx, P, precip, Q,
                 temp, Max_Daylength, prop_area, npp, evapotrans,
-                cycle0, permafrost_mean_m, elevation_mean_m, RBFI,
+                cycle0, permafrost_mean_m, elevation_mean_m, RBI,
                 basin_slope_mean_degree, FNConc, FNYield, GenConc, GenYield, major_rock, major_land,
                 contains("rocks"), contains("land_")) %>%
   dplyr::rename(snow_cover = prop_area, 
