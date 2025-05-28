@@ -2,15 +2,17 @@
 librarian::shelf(remotes, RRF, caret, randomForest, DAAG, party, rpart, rpart.plot, mlbench, pROC, tree, dplyr,
                  plot.matrix, reshape2, rcartocolor, arsenal, googledrive, data.table, ggplot2, corrplot, pdp, 
                  iml, tidyr, viridis, parallel, doParallel, foreach)
+
 # Clear environment
 rm(list = ls())
+
 # Global seed setting to ensure consistency across the whole workflow
 set.seed(123)
 
 # Load Functions ----
 # Function to save correlation matrix as PDF
 save_correlation_plot <- function(driver_cor, output_dir) {
-  pdf(sprintf("%s/correlation_plot_FNConc_Yearly_5_years_testseed123.pdf", output_dir), width = 10, height = 10)
+  pdf(sprintf("%s/correlation_plot_FNConc_Yearly_5_years.pdf", output_dir), width = 10, height = 10)
   corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = FALSE)
   title("All Data Yearly FNConc")
   dev.off()
@@ -18,14 +20,14 @@ save_correlation_plot <- function(driver_cor, output_dir) {
 
 # Save RF Variable Importance Plot
 save_rf_importance_plot <- function(rf_model, output_dir) {
-  pdf(sprintf("%s/RF_variable_importance_FNConc_Yearly_5_years_testseed123.pdf", output_dir), width = 8, height = 6)
+  pdf(sprintf("%s/RF_variable_importance_FNConc_Yearly_5_years.pdf", output_dir), width = 8, height = 6)
   randomForest::varImpPlot(rf_model, main = "rf_model2 - Yearly FNConc", col = "darkblue")
   dev.off()
 }
 
 # Save Linear Model (LM) Plot
 save_lm_plot <- function(rf_model2, observed, output_dir) {
-  pdf(sprintf("%s/RF2_lm_plot_FNConc_Yearly_5_years_drivers_df_testseed123.pdf", output_dir), width = 8, height = 8)
+  pdf(sprintf("%s/RF2_lm_plot_FNConc_Yearly_5_years_drivers_df.pdf", output_dir), width = 8, height = 8)
   plot(rf_model2$predicted, observed, pch = 16, cex = 1.5,
        xlab = "Predicted", ylab = "Observed", main = "RF Model 2 Full Data Ave FNConc",
        cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5)
@@ -72,43 +74,34 @@ test_numtree_parallel_optimized <- function(ntree_list, formula, data) {
   return(MSE)
 }
 
-# NEW FUNCTION: Random Forest Stability Selection
-rf_stability_selection <- function(x, y, n_bootstrap = 100, threshold = 0.6, 
-                                   ntree = 500, mtry = NULL, importance_threshold = 0) {
+# RF Stability Selection Function
+rf_stability_selection_parallel <- function(x, y, n_bootstrap = 100, threshold = 0.7, 
+                                            ntree = 500, mtry = NULL, importance_threshold = 0) {
   feature_scores <- rep(0, ncol(x))
   names(feature_scores) <- colnames(x)
   
-  cat("Running RF stability selection with", n_bootstrap, "bootstrap samples...\n")
+  # Set up parallel backend
+  num_cores <- parallel::detectCores() - 1
+  cl <- parallel::makeCluster(num_cores)
+  registerDoParallel(cl)
   
-  for(i in 1:n_bootstrap) {
-    if(i %% 20 == 0) cat("Bootstrap run:", i, "/", n_bootstrap, "\n")
-    
-    # Bootstrap sample
+  selection_matrix <- foreach(i = 1:n_bootstrap, .combine = rbind, .packages = 'randomForest') %dopar% {
+    set.seed(123 + i)
     boot_indices <- sample(nrow(x), replace = TRUE)
     x_boot <- x[boot_indices, ]
     y_boot <- y[boot_indices]
-    
-    # Fit Random Forest with different seed for each bootstrap
-    set.seed(123 + i)
     rf_model <- randomForest(x_boot, y_boot, ntree = ntree, mtry = mtry, importance = TRUE)
-    
-    # Get feature importance scores
     importance_scores <- importance(rf_model)[, "%IncMSE"]
-    
-    # Select features with positive importance above threshold
-    selected_features <- names(importance_scores[importance_scores > importance_threshold])
-    
-    # Count selections
-    feature_scores[selected_features] <- feature_scores[selected_features] + 1
+    selected_features <- as.numeric(importance_scores > importance_threshold)
+    selected_features
   }
   
-  # Convert to selection frequencies
-  selection_frequencies <- feature_scores / n_bootstrap
+  stopCluster(cl)
   
-  # Sort by frequency
+  # Calculate selection frequency
+  selection_frequencies <- colMeans(selection_matrix)
+  names(selection_frequencies) <- colnames(x)
   sorted_frequencies <- sort(selection_frequencies, decreasing = TRUE)
-  
-  # Select stable features above threshold
   stable_features <- names(selection_frequencies[selection_frequencies >= threshold])
   
   cat("\nStability Selection Results:\n")
@@ -165,7 +158,7 @@ print(p)
 
 set.seed(123)
 # Manually select ntree for rf_model1 ----
-manual_ntree_rf1 <- 1200  # Replace with chosen value
+manual_ntree_rf1 <- 1000  # Replace with chosen value
 
 set.seed(123)
 # Tune mtry for rf_model1 ----
@@ -195,30 +188,35 @@ lm_plot <- plot(rf_model1$predicted, drivers_numeric$FNConc, pch = 16, cex = 1.5
 legend("topleft", bty = "n", cex = 1.5, legend = paste("R2 =", format(mean(rf_model1$rsq), digits = 3)))
 legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(rf_model1$mse), digits = 3)))
 
-# Start Tuning with RF Stability Selection and 2nd RF Model ----
-# REPLACE RFE WITH STABILITY SELECTION ----
+# Extract tuned parameters from rf_model1 for automatic use ----
+rf1_ntree <- rf_model1$ntree
+rf1_mtry <- rf_model1$mtry
 
+cat("Automatically extracted parameters from rf_model1:\n")
+cat("ntree =", rf1_ntree, "\n")
+cat("mtry =", rf1_mtry, "\n")
+
+# Start Tuning with Stability Selection and 2nd RFModel ----
 # Divide data into predictor variables (x) and response variable (y)
 x <- drivers_numeric[, !(colnames(drivers_numeric) == "FNConc")]
 y <- drivers_numeric$FNConc
 
-# Run RF Stability Selection instead of RFE ----
+# Run Stability Selection using automatically extracted parameters ----
 set.seed(123)
-result_stability <- rf_stability_selection(
+result_stability <- rf_stability_selection_parallel(
   x = x, 
   y = y, 
   n_bootstrap = 100,           # Number of bootstrap samples
   threshold = 0.7,             # Features must be selected in 70% of runs
-  ntree = manual_ntree_rf1,    # Use tuned parameters from rf_model1
-  mtry = manual_mtry_rf1,
+  ntree = rf1_ntree,           # Automatically use ntree from rf_model1
+  mtry = rf1_mtry,             # Automatically use mtry from rf_model1
   importance_threshold = 0     # Include all features with positive importance
 )
 
 # Print stability selection results
-print("Selected stable features:")
-print(result_stability$features)
+print(result_stability)
 
-# Put selected features into variable (same as RFE workflow)
+# Put selected features into variable
 new_rf_input <- paste(result_stability$features, collapse = "+")
 
 # Format those features into a formula for the optimized random forest model
@@ -262,12 +260,18 @@ randomForest::varImpPlot(rf_model2)
 save_rf_importance_plot(rf_model2, output_dir)
 save_lm_plot(rf_model2, drivers_numeric$FNConc, output_dir)
 
+# Optional: Export selection frequencies for publication transparency
+write.csv(
+  data.frame(Feature=names(result_stability$frequencies), Frequency=result_stability$frequencies),
+  file = "FNConc_Yearly_stability_frequencies.csv", row.names = FALSE
+)
+
 # Save model and required objects for SHAP analysis
-save(rf_model2, file = "FNConc_Yearly_rf_model2_full_new_testseed123.RData")
+save(rf_model2, file = "FNConc_Yearly_rf_model2_full_stability.RData")
 kept_drivers <- drivers_numeric[, colnames(drivers_numeric) %in% result_stability$features]
-save(kept_drivers, file = "FNConc_Yearly_kept_drivers__full_new_testseed123.RData")
-save(drivers_df, file = "FNConc_Yearly_full_stream_ids_full_new_testseed123.RData")
-save(drivers_numeric, file = "FNConc_Yearly_full_new_testseed123.RData")
+save(kept_drivers, file = "FNConc_Yearly_kept_drivers__full_stability.RData")
+save(drivers_df, file = "FNConc_Yearly_full_stream_ids_full_stability.RData")
+save(drivers_numeric, file = "FNConc_Yearly_full_stability.RData")
 
 # Optional: Save stability selection results
-save(result_stability, file = "FNConc_Yearly_stability_results_testseed123.RData")
+save(result_stability, file = "FNConc_Yearly_stability_results.RData")
