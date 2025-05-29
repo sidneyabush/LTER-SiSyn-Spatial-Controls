@@ -191,7 +191,7 @@ set.seed(123)
 result_stability <- rf_stability_selection_parallel(
   x = x, 
   y = y, 
-  n_bootstrap = 100,           
+  n_bootstrap = 200,           
   threshold = 0.7,            
   ntree = rf1_ntree,           
   mtry = rf1_mtry,            
