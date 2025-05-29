@@ -9,7 +9,6 @@ rm(list = ls())
 # Global seed setting to ensure consistency across the whole workflow
 set.seed(123)
 
-# Load Functions ----
 # Function to save correlation matrix as PDF
 save_correlation_plot <- function(driver_cor, output_dir) {
   pdf(sprintf("%s/correlation_plot_FNConc_Yearly_5_years.pdf", output_dir), width = 10, height = 10)
@@ -43,7 +42,6 @@ test_numtree_parallel <- function(ntree_list, formula, data) {
   cl <- parallel::makeCluster(num_cores)
   doParallel::registerDoParallel(cl)
   
-  # Collect results
   MSE <- foreach(ntree = ntree_list, .combine = 'c', .packages = 'randomForest') %dopar% {
     set.seed(123)
     rf_model <- randomForest(formula, data = data, importance = TRUE, proximity = TRUE, ntree = ntree)
@@ -54,38 +52,18 @@ test_numtree_parallel <- function(ntree_list, formula, data) {
   return(MSE)
 }
 
-# Adjusted function for testing different numbers of trees (ntree) using parallel processing
-test_numtree_parallel_optimized <- function(ntree_list, formula, data) {
-  # Detect the number of available cores
-  num_cores <- parallel::detectCores() - 1
-  # Initialize parallel cluster
-  cl <- parallel::makeCluster(num_cores)
-  doParallel::registerDoParallel(cl)
-  
-  # Run models in parallel using foreach
-  MSE <- foreach(ntree = ntree_list, .combine = 'c', .packages = 'randomForest') %dopar% {
-    set.seed(123)
-    rf_model <- randomForest(formula, data = data, importance = TRUE, proximity = TRUE, ntree = ntree)
-    mean(rf_model$mse)  # Return the mean MSE for each ntree
-  }
-  
-  # Stop parallel cluster
-  stopCluster(cl)
-  return(MSE)
-}
-
-# RF Stability Selection Function
+# RF Stability Selection Function (with OOB MSE tracking)
 rf_stability_selection_parallel <- function(x, y, n_bootstrap = 100, threshold = 0.7, 
                                             ntree = 500, mtry = NULL, importance_threshold = 0) {
   feature_scores <- rep(0, ncol(x))
   names(feature_scores) <- colnames(x)
   
-  # Set up parallel backend
   num_cores <- parallel::detectCores() - 1
   cl <- parallel::makeCluster(num_cores)
   registerDoParallel(cl)
   
-  selection_matrix <- foreach(i = 1:n_bootstrap, .combine = rbind, .packages = 'randomForest') %dopar% {
+  # List to store OOB MSE for each bootstrap
+  selection_and_mse <- foreach(i = 1:n_bootstrap, .combine = rbind, .packages = 'randomForest') %dopar% {
     set.seed(123 + i)
     boot_indices <- sample(nrow(x), replace = TRUE)
     x_boot <- x[boot_indices, ]
@@ -93,10 +71,14 @@ rf_stability_selection_parallel <- function(x, y, n_bootstrap = 100, threshold =
     rf_model <- randomForest(x_boot, y_boot, ntree = ntree, mtry = mtry, importance = TRUE)
     importance_scores <- importance(rf_model)[, "%IncMSE"]
     selected_features <- as.numeric(importance_scores > importance_threshold)
-    selected_features
+    c(selected_features, mean(rf_model$mse))
   }
   
   stopCluster(cl)
+  
+  # Last column is MSE
+  selection_matrix <- selection_and_mse[, 1:ncol(x)]
+  mse_vec <- selection_and_mse[, ncol(selection_and_mse)]
   
   # Calculate selection frequency
   selection_frequencies <- colMeans(selection_matrix)
@@ -112,11 +94,12 @@ rf_stability_selection_parallel <- function(x, y, n_bootstrap = 100, threshold =
   return(list(
     features = stable_features,
     frequencies = selection_frequencies,
-    sorted_frequencies = sorted_frequencies
+    sorted_frequencies = sorted_frequencies,
+    mse_vec = mse_vec
   ))
 }
 
-# Set the output directory path for saving PDFs
+# Set output directory
 output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model/FNConc"
 
 # Define record length (1, 5, 10, 20... years)
@@ -198,20 +181,41 @@ rf1_mtry <- rf_model1$mtry
 x <- drivers_numeric[, !(colnames(drivers_numeric) == "FNConc")]
 y <- drivers_numeric$FNConc
 
-# Run Stability Selection using automatically extracted parameters ----
+# Calculate 75th percentile importance for threshold
+rf_test <- randomForest(x, y, ntree = rf1_ntree, mtry = rf1_mtry, importance = TRUE)
+imp_vals <- importance(rf_test)[, "%IncMSE"]
+importance_threshold_75th <- as.numeric(quantile(imp_vals[imp_vals > 0], 0.75))
+
+# Run Stability Selection using 75th percentile importance and 70% selection freq ----
 set.seed(123)
 result_stability <- rf_stability_selection_parallel(
   x = x, 
   y = y, 
-  n_bootstrap = 100,           # Number of bootstrap samples
-  threshold = 0.7,             # Features must be selected in 70% of runs
-  ntree = rf1_ntree,           # Automatically use ntree from rf_model1
-  mtry = rf1_mtry,             # Automatically use mtry from rf_model1
-  importance_threshold = 0     # Include all features with positive importance
+  n_bootstrap = 100,           
+  threshold = 0.7,            
+  ntree = rf1_ntree,           
+  mtry = rf1_mtry,            
+  importance_threshold = importance_threshold_75th    
 )
 
 # Print stability selection results
 print(result_stability)
+
+# Plot OOB MSE convergence across bootstraps
+mse_df <- data.frame(
+  Bootstrap = 1:length(result_stability$mse_vec),
+  OOB_MSE = result_stability$mse_vec
+)
+ggplot(mse_df, aes(x = Bootstrap, y = OOB_MSE)) +
+  geom_line(color = "#3399CC") +
+  geom_point(size = 1.1, color = "#3399CC", alpha = 0.7) +
+  theme_classic(base_size = 16) +
+  labs(
+    title = "OOB MSE Across Bootstraps (RF Stability Selection)",
+    x = "Bootstrap Iteration",
+    y = "Out-of-Bag MSE"
+  )
+
 
 # Put selected features into variable
 new_rf_input <- paste(result_stability$features, collapse = "+")
