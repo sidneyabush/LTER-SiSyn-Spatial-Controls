@@ -11,22 +11,24 @@ set.seed(666)
 
 # Function to save correlation matrix as PDF
 save_correlation_plot <- function(driver_cor, output_dir) {
-  pdf(sprintf("%s/correlation_plot_FNConc_Yearly_5_years.pdf", output_dir), width = 10, height = 10)
+  png(filename = sprintf("%s/FNConc_Yearly_5yrs_corrplot.png", output_dir), width = 1000, height = 1000, res = 300)
   corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = FALSE)
   title("All Data Yearly FNConc")
   dev.off()
 }
 
+
 # Save RF Variable Importance Plot
 save_rf_importance_plot <- function(rf_model, output_dir) {
-  pdf(sprintf("%s/RF_variable_importance_FNConc_Yearly_5_years.pdf", output_dir), width = 8, height = 6)
+  png(filename = sprintf("%s/RF_variable_importance_FNConc_Yearly_5_years.png", output_dir), width = 800, height = 600, res = 300)
   randomForest::varImpPlot(rf_model, main = "rf_model2 - Yearly FNConc", col = "darkblue")
   dev.off()
 }
 
+
 # Save Linear Model (LM) Plot
 save_lm_plot <- function(rf_model2, observed, output_dir) {
-  pdf(sprintf("%s/RF2_lm_plot_FNConc_Yearly_5_years_drivers_df.pdf", output_dir), width = 8, height = 8)
+  png(filename = sprintf("%s/RF2_lm_plot_FNConc_Yearly_5_years_drivers_df.png", output_dir), width = 800, height = 800, res = 300)
   plot(rf_model2$predicted, observed, pch = 16, cex = 1.5,
        xlab = "Predicted", ylab = "Observed", main = "RF Model 2 Full Data Ave FNConc",
        cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5)
@@ -35,6 +37,7 @@ save_lm_plot <- function(rf_model2, observed, output_dir) {
   legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(rf_model2$mse), digits = 3)))
   dev.off()
 }
+
 
 # Parallelized function to test ntree
 test_numtree_parallel <- function(ntree_list, formula, data) {
@@ -48,6 +51,26 @@ test_numtree_parallel <- function(ntree_list, formula, data) {
     mean(rf_model$mse)  # Return the mean of the MSE vector
   }
   
+  stopCluster(cl)
+  return(MSE)
+}
+
+# Adjusted function for testing different numbers of trees (ntree) using parallel processing
+test_numtree_parallel_optimized <- function(ntree_list, formula, data) {
+  # Detect the number of available cores
+  num_cores <- parallel::detectCores() - 1
+  # Initialize parallel cluster
+  cl <- parallel::makeCluster(num_cores)
+  doParallel::registerDoParallel(cl)
+  
+  # Run models in parallel using foreach
+  MSE <- foreach(ntree = ntree_list, .combine = 'c', .packages = 'randomForest') %dopar% {
+    set.seed(666)
+    rf_model <- randomForest(formula, data = data, importance = TRUE, proximity = TRUE, ntree = ntree)
+    mean(rf_model$mse)  # Return the mean MSE for each ntree
+  }
+  
+  # Stop parallel cluster
   stopCluster(cl)
   return(MSE)
 }
@@ -100,7 +123,7 @@ rf_stability_selection_parallel <- function(x, y, n_bootstrap = 100, threshold =
 }
 
 # Set output directory
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model/FNConc"
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Models"
 
 # Define record length (1, 5, 10, 20... years)
 record_length <- 5
@@ -207,7 +230,8 @@ mse_df <- data.frame(
   OOB_MSE = result_stability$mse_vec
 )
 
-ggplot(mse_df, aes(x = Bootstrap, y = OOB_MSE)) +
+# OOB MSE convergence plot for stability selection
+oob_mse_plot <- ggplot(mse_df, aes(x = Bootstrap, y = OOB_MSE)) +
   geom_line(color = "#3399CC") +
   geom_point(size = 1.1, color = "#3399CC", alpha = 0.7) +
   theme_classic(base_size = 16) +
@@ -216,6 +240,8 @@ ggplot(mse_df, aes(x = Bootstrap, y = OOB_MSE)) +
     x = "Bootstrap Iteration",
     y = "Out-of-Bag MSE"
   )
+
+ggsave(filename = sprintf("%s/FNConc_OOB_MSE_Stability_Selection.png", output_dir), plot = oob_mse_plot, width = 8, height = 6, dpi = 300)
 
 # Put selected features into variable
 new_rf_input <- paste(result_stability$features, collapse = "+")
@@ -261,18 +287,14 @@ randomForest::varImpPlot(rf_model2)
 save_rf_importance_plot(rf_model2, output_dir)
 save_lm_plot(rf_model2, drivers_numeric$FNConc, output_dir)
 
-# Optional: Export selection frequencies for publication transparency
 write.csv(
   data.frame(Feature=names(result_stability$frequencies), Frequency=result_stability$frequencies),
   file = "FNConc_Yearly_stability_frequencies.csv", row.names = FALSE
 )
 
 # Save model and required objects for SHAP analysis
-save(rf_model2, file = "FNConc_Yearly_rf_model2_full_stability.RData")
+save(rf_model2, file = "FNConc_Yearly_rf_model2.RData")
 kept_drivers <- drivers_numeric[, colnames(drivers_numeric) %in% result_stability$features]
-save(kept_drivers, file = "FNConc_Yearly_kept_drivers__full_stability.RData")
-save(drivers_df, file = "FNConc_Yearly_full_stream_ids_full_stability.RData")
-save(drivers_numeric, file = "FNConc_Yearly_full_stability.RData")
-
-# Optional: Save stability selection results
-save(result_stability, file = "FNConc_Yearly_stability_results.RData")
+save(kept_drivers, file = "FNConc_Yearly_kept_drivers.RData")
+save(drivers_df, file = "FNConc_Yearly_stream_ids.RData")
+save(drivers_numeric, file = "FNConc_Yearly_numeric.RData")
