@@ -11,7 +11,7 @@ set.seed(666)
 
 # Function to save correlation matrix as PDF
 save_correlation_plot <- function(driver_cor, output_dir) {
-  png(filename = sprintf("%s/FNConc_Yearly_5yrs_corrplot.png", output_dir), width = 1000, height = 1000, res = 300)
+  png(filename = sprintf("%s/FNConc_Yearly_5yrs_corrplot.png", output_dir), width = 2500, height = 2500, res = 300)
   corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = FALSE)
   title("All Data Yearly FNConc")
   dev.off()
@@ -20,7 +20,7 @@ save_correlation_plot <- function(driver_cor, output_dir) {
 
 # Save RF Variable Importance Plot
 save_rf_importance_plot <- function(rf_model, output_dir) {
-  png(filename = sprintf("%s/RF_variable_importance_FNConc_Yearly_5_years.png", output_dir), width = 800, height = 600, res = 300)
+  png(filename = sprintf("%s/RF_variable_importance_FNConc_Yearly_5_years.png", output_dir), width = 1600, height = 1200, res = 300)
   randomForest::varImpPlot(rf_model, main = "rf_model2 - Yearly FNConc", col = "darkblue")
   dev.off()
 }
@@ -28,7 +28,7 @@ save_rf_importance_plot <- function(rf_model, output_dir) {
 
 # Save Linear Model (LM) Plot
 save_lm_plot <- function(rf_model2, observed, output_dir) {
-  png(filename = sprintf("%s/RF2_lm_plot_FNConc_Yearly_5_years_drivers_df.png", output_dir), width = 800, height = 800, res = 300)
+  png(filename = sprintf("%s/RF2_lm_plot_FNConc_Yearly_5_years_drivers_df.png", output_dir), width = 1500, height = 1500, res = 300)
   plot(rf_model2$predicted, observed, pch = 16, cex = 1.5,
        xlab = "Predicted", ylab = "Observed", main = "RF Model 2 Full Data Ave FNConc",
        cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5)
