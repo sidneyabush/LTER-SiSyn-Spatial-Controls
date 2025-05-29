@@ -159,7 +159,7 @@ print(p)
 
 set.seed(123)
 # Manually select ntree for rf_model1 ----
-manual_ntree_rf1 <- 1000  # Replace with chosen value
+manual_ntree_rf1 <- 1200  # Replace with chosen value
 
 set.seed(123)
 # Tune mtry for rf_model1 ----
@@ -192,10 +192,6 @@ legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(
 # Extract tuned parameters from rf_model1 for automatic use ----
 rf1_ntree <- rf_model1$ntree
 rf1_mtry <- rf_model1$mtry
-
-cat("Automatically extracted parameters from rf_model1:\n")
-cat("ntree =", rf1_ntree, "\n")
-cat("mtry =", rf1_mtry, "\n")
 
 # Start Tuning with Stability Selection and 2nd RFModel ----
 # Divide data into predictor variables (x) and response variable (y)
