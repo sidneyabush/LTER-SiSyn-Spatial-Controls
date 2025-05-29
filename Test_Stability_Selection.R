@@ -154,6 +154,7 @@ p <- ggplot(MSE_df_rf1, aes(ntree, mean_MSE)) +
   theme_classic() + 
   scale_x_continuous(breaks = seq(100, 2000, 100)) + 
   theme(text = element_text(size = 20))
+
 print(p)
 
 set.seed(123)
