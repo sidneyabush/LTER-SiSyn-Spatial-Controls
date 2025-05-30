@@ -1,4 +1,4 @@
- # Load needed packages
+# Load needed packages
 librarian::shelf(remotes, RRF, caret, randomForest, DAAG, party, rpart, rpart.plot, mlbench, pROC, tree, dplyr,
                  plot.matrix, reshape2, rcartocolor, arsenal, googledrive, data.table, ggplot2, corrplot, pdp, 
                  iml, tidyr, viridis, parallel, doParallel, foreach)
@@ -9,25 +9,26 @@ rm(list = ls())
 # Global seed setting to ensure consistency across the whole workflow
 set.seed(666)
 
-# Load Functions ----
 # Function to save correlation matrix as PDF
 save_correlation_plot <- function(driver_cor, output_dir) {
-  pdf(sprintf("%s/correlation_plot_FNConc_Yearly_5_years.pdf", output_dir), width = 10, height = 10)
+  png(filename = sprintf("%s/FNConc_Yearly_5yrs_corrplot.png", output_dir), width = 2500, height = 2500, res = 300)
   corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = FALSE)
   title("All Data Yearly FNConc")
   dev.off()
 }
 
+
 # Save RF Variable Importance Plot
 save_rf_importance_plot <- function(rf_model, output_dir) {
-  pdf(sprintf("%s/RF_variable_importance_FNConc_Yearly_5_years.pdf", output_dir), width = 8, height = 6)
+  png(filename = sprintf("%s/RF_variable_importance_FNConc_Yearly_5_years.png", output_dir), width = 1600, height = 1200, res = 300)
   randomForest::varImpPlot(rf_model, main = "rf_model2 - Yearly FNConc", col = "darkblue")
   dev.off()
 }
 
+
 # Save Linear Model (LM) Plot
 save_lm_plot <- function(rf_model2, observed, output_dir) {
-  pdf(sprintf("%s/RF2_lm_plot_FNConc_Yearly_5_years_drivers_df.pdf", output_dir), width = 8, height = 8)
+  png(filename = sprintf("%s/RF2_lm_plot_FNConc_Yearly_5_years_drivers_df.png", output_dir), width = 1500, height = 1500, res = 300)
   plot(rf_model2$predicted, observed, pch = 16, cex = 1.5,
        xlab = "Predicted", ylab = "Observed", main = "RF Model 2 Full Data Ave FNConc",
        cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5)
@@ -37,13 +38,13 @@ save_lm_plot <- function(rf_model2, observed, output_dir) {
   dev.off()
 }
 
+
 # Parallelized function to test ntree
 test_numtree_parallel <- function(ntree_list, formula, data) {
   num_cores <- parallel::detectCores() - 1
   cl <- parallel::makeCluster(num_cores)
   doParallel::registerDoParallel(cl)
   
-  # Collect results
   MSE <- foreach(ntree = ntree_list, .combine = 'c', .packages = 'randomForest') %dopar% {
     set.seed(666)
     rf_model <- randomForest(formula, data = data, importance = TRUE, proximity = TRUE, ntree = ntree)
@@ -74,15 +75,61 @@ test_numtree_parallel_optimized <- function(ntree_list, formula, data) {
   return(MSE)
 }
 
-# Set the output directory path for saving PDFs
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures/Yearly_Model/FNConc"
+# RF Stability Selection Function (with OOB MSE tracking)
+rf_stability_selection_parallel <- function(x, y, n_bootstrap = 100, threshold = 0.7, 
+                                            ntree = 500, mtry = NULL, importance_threshold = 0) {
+  feature_scores <- rep(0, ncol(x))
+  names(feature_scores) <- colnames(x)
+  
+  num_cores <- parallel::detectCores() - 1
+  cl <- parallel::makeCluster(num_cores)
+  registerDoParallel(cl)
+  
+  # List to store OOB MSE for each bootstrap
+  selection_and_mse <- foreach(i = 1:n_bootstrap, .combine = rbind, .packages = 'randomForest') %dopar% {
+    set.seed(123 + i)
+    boot_indices <- sample(nrow(x), replace = TRUE)
+    x_boot <- x[boot_indices, ]
+    y_boot <- y[boot_indices]
+    rf_model <- randomForest(x_boot, y_boot, ntree = ntree, mtry = mtry, importance = TRUE)
+    importance_scores <- importance(rf_model)[, "%IncMSE"]
+    selected_features <- as.numeric(importance_scores > importance_threshold)
+    c(selected_features, mean(rf_model$mse))
+  }
+  
+  stopCluster(cl)
+  
+  # Last column is MSE
+  selection_matrix <- selection_and_mse[, 1:ncol(x)]
+  mse_vec <- selection_and_mse[, ncol(selection_and_mse)]
+  
+  # Calculate selection frequency
+  selection_frequencies <- colMeans(selection_matrix)
+  names(selection_frequencies) <- colnames(x)
+  sorted_frequencies <- sort(selection_frequencies, decreasing = TRUE)
+  stable_features <- names(selection_frequencies[selection_frequencies >= threshold])
+  
+  cat("\nStability Selection Results:\n")
+  cat("Features selected above", threshold, "threshold:", length(stable_features), "\n")
+  cat("\nAll features by selection frequency:\n")
+  print(sorted_frequencies)
+  
+  return(list(
+    features = stable_features,
+    frequencies = selection_frequencies,
+    sorted_frequencies = sorted_frequencies,
+    mse_vec = mse_vec
+  ))
+}
+
+# Set output directory
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Models"
 
 # Define record length (1, 5, 10, 20... years)
 record_length <- 5
 
 # Read in and tidy data ----
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
-
 drivers_df <- read.csv(sprintf("All_Drivers_Harmonized_Yearly_FNConc_FNYield_%d_years.csv", record_length)) %>%
   dplyr::select(-contains("Yield"), -contains("Gen"), -contains("major"), 
                 -Max_Daylength, -Q, -drainage_area) %>%
@@ -114,7 +161,6 @@ p <- ggplot(MSE_df_rf1, aes(ntree, mean_MSE)) +
   scale_x_continuous(breaks = seq(100, 2000, 100)) + 
   theme(text = element_text(size = 20))
 
-# dev.new()  # Open a new graphics window
 print(p)
 
 set.seed(666)
@@ -149,38 +195,56 @@ lm_plot <- plot(rf_model1$predicted, drivers_numeric$FNConc, pch = 16, cex = 1.5
 legend("topleft", bty = "n", cex = 1.5, legend = paste("R2 =", format(mean(rf_model1$rsq), digits = 3)))
 legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(rf_model1$mse), digits = 3)))
 
-# Start Tuning with RFE and 2nd RFModel ----
-# Global seed for RFE ----
-size <- ncol(drivers_numeric) - 1  # This is the number of predictor variables
-cv_repeats <- 5
-cv_number <- 5
-total_repeats <- (cv_repeats * cv_number) + 1
+# Extract tuned parameters from rf_model1 for automatic use ----
+rf1_ntree <- rf_model1$ntree
+rf1_mtry <- rf_model1$mtry
 
-seeds <- vector(mode = "list", length = total_repeats)
-for (i in 1:(cv_repeats * cv_number)) {
-  seeds[[i]] <- rep(123, size)
-}
-seeds[[total_repeats]] <- 123
-
-control <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = cv_repeats, 
-                      number = cv_number, verbose = TRUE, allowParallel = FALSE)
-
+# Start Tuning with Stability Selection and 2nd RFModel ----
 # Divide data into predictor variables (x) and response variable (y)
 x <- drivers_numeric[, !(colnames(drivers_numeric) == "FNConc")]
 y <- drivers_numeric$FNConc
 
-sink(NULL)  # Reset output sink
-closeAllConnections()  # Close all connections
+# Calculate 75th percentile importance for threshold
+rf_test <- randomForest(x, y, ntree = rf1_ntree, mtry = rf1_mtry, importance = TRUE)
+imp_vals <- importance(rf_test)[, "%IncMSE"]
+importance_threshold_75th <- as.numeric(quantile(imp_vals[imp_vals > 0], 0.75))
 
-# Run RFE to select the best features ----
+# Run Stability Selection using 75th percentile importance and 70% selection freq ----
 set.seed(666)
-result_rfe <- rfe(x = x, y = y, sizes = c(1:size), rfeControl = control)
+result_stability <- rf_stability_selection_parallel(
+  x = x, 
+  y = y, 
+  n_bootstrap = 100,           
+  threshold = 0.7,            
+  ntree = rf1_ntree,           
+  mtry = rf1_mtry,            
+  importance_threshold = importance_threshold_75th    
+)
 
-# Print RFE results
-print(result_rfe)
+# Print stability selection results
+print(result_stability)
+
+# Plot OOB MSE convergence across bootstraps
+mse_df <- data.frame(
+  Bootstrap = 1:length(result_stability$mse_vec),
+  OOB_MSE = result_stability$mse_vec
+)
+
+# OOB MSE convergence plot for stability selection
+oob_mse_plot <- ggplot(mse_df, aes(x = Bootstrap, y = OOB_MSE)) +
+  geom_line(color = "#3399CC") +
+  geom_point(size = 1.1, color = "#3399CC", alpha = 0.7) +
+  theme_classic(base_size = 16) +
+  labs(
+    title = "OOB MSE Across Bootstraps (RF Stability Selection)",
+    x = "Bootstrap Iteration",
+    y = "Out-of-Bag MSE"
+  )
+
+ggsave(filename = sprintf("%s/FNConc_OOB_MSE_Stability_Selection.png", output_dir), plot = oob_mse_plot, width = 8, height = 6, dpi = 300)
 
 # Put selected features into variable
-new_rf_input <- paste(predictors(result_rfe), collapse = "+")
+new_rf_input <- paste(result_stability$features, collapse = "+")
 
 # Format those features into a formula for the optimized random forest model
 rf_formula <- formula(paste("FNConc ~", new_rf_input))
@@ -206,7 +270,7 @@ ggplot(MSE_df_parallel, aes(x = ntree, y = mean_MSE)) +
 
 # Global seed before re-tuning mtry
 set.seed(666)
-kept_drivers <- drivers_numeric[, colnames(drivers_numeric) %in% predictors(result_rfe)]
+kept_drivers <- drivers_numeric[, colnames(drivers_numeric) %in% result_stability$features]
 tuneRF(kept_drivers, drivers_numeric[, 1], ntreeTry = 1200, 
        stepFactor = 1, improve = 0.5, plot = FALSE)
 
@@ -223,11 +287,14 @@ randomForest::varImpPlot(rf_model2)
 save_rf_importance_plot(rf_model2, output_dir)
 save_lm_plot(rf_model2, drivers_numeric$FNConc, output_dir)
 
+write.csv(
+  data.frame(Feature=names(result_stability$frequencies), Frequency=result_stability$frequencies),
+  file = "FNConc_Yearly_stability_frequencies.csv", row.names = FALSE
+)
+
 # Save model and required objects for SHAP analysis
-save(rf_model2, file = "FNConc_Yearly_rf_model2_full_new.RData")
-kept_drivers <- drivers_numeric[, colnames(drivers_numeric) %in% predictors(result_rfe)]
-save(kept_drivers, file = "FNConc_Yearly_kept_drivers__full_new.RData")
-save(drivers_df, file = "FNConc_Yearly_full_stream_ids_full_new.RData")
-save(drivers_numeric, file = "FNConc_Yearly_full_new.RData")
-
-
+save(rf_model2, file = "FNConc_Yearly_rf_model2.RData")
+kept_drivers <- drivers_numeric[, colnames(drivers_numeric) %in% result_stability$features]
+save(kept_drivers, file = "FNConc_Yearly_kept_drivers.RData")
+save(drivers_df, file = "FNConc_Yearly_stream_ids.RData")
+save(drivers_numeric, file = "FNConc_Yearly_numeric.RData")
