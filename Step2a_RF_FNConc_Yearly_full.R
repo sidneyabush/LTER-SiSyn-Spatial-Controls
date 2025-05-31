@@ -207,15 +207,15 @@ y <- drivers_numeric$FNConc
 # Calculate 75th percentile importance for threshold
 rf_test <- randomForest(x, y, ntree = rf1_ntree, mtry = rf1_mtry, importance = TRUE)
 imp_vals <- importance(rf_test)[, "%IncMSE"]
-importance_threshold_75th <- as.numeric(quantile(imp_vals[imp_vals > 0], 0.75))
+importance_threshold_75th <- as.numeric(quantile(imp_vals[imp_vals > 0], 0.50))
 
 # Run Stability Selection using 75th percentile importance and 70% selection freq ----
 set.seed(666)
 result_stability <- rf_stability_selection_parallel(
   x = x, 
   y = y, 
-  n_bootstrap = 100,           
-  threshold = 0.7,            
+  n_bootstrap = 1000,           
+  threshold = 0.6,            
   ntree = rf1_ntree,           
   mtry = rf1_mtry,            
   importance_threshold = importance_threshold_75th    
