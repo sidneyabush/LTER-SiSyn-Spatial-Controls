@@ -16,18 +16,21 @@ library(colorspace)
 library(cluster)     # silhouette()
 library(factoextra)  # fviz_silhouette() - used earlier, but we'll do custom now
 
+# 2. Clear environment
+rm(list = ls())
+
 # Set working directory and output directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures"
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures"
 
 ###############################################################################
 # 2. Load Data & Model
 ###############################################################################
 ## 2. Load Data & Model
-load("FNConc_Yearly_rf_model2_full_new.RData")
-load("FNConc_Yearly_kept_drivers__full_new.RData")
-load("FNConc_Yearly_full_new.RData")
-load("FNConc_Yearly_full_stream_ids_full_new.RData")
+load("FNConc_Yearly_rf_model2.RData")
+load("FNConc_Yearly_kept_drivers.RData")
+load("FNConc_Yearly_numeric.RData")
+load("FNConc_Yearly_stream_ids.RData")
 
 # Load precomputed SHAP values
 load("FNConc_Yearly_shap_values_new.RData")
@@ -90,12 +93,22 @@ drivers_numeric_consolidated_lith <- drivers_combined %>%
                "Metamorphic", "Carbonate Evaporite")
   ))
 
-summary_table <- drivers_numeric_consolidated_lith %>%
-  group_by(final_cluster) %>%
-  summarise(
-    total_rows = n(),
-    unique_stream_ids = n_distinct(Stream_ID)
+# 1. Make sure it’s a tibble to avoid other masks
+drivers_numeric_consolidated_lith <- as_tibble(drivers_numeric_consolidated_lith)
+
+# 2. Use dplyr::count() explicitly
+row_counts <- dplyr::count(drivers_numeric_consolidated_lith, final_cluster, name = "total_rows")
+
+# 3. Use dplyr::summarise() explicitly for unique Stream_ID
+stream_counts <- drivers_numeric_consolidated_lith %>%
+  dplyr::group_by(final_cluster) %>%
+  dplyr::summarise(
+    unique_stream_ids = dplyr::n_distinct(Stream_ID),
+    .groups = "drop"
   )
+
+# 4. Join them
+summary_table <- dplyr::left_join(row_counts, stream_counts, by = "final_cluster")
 
 print(summary_table)
 
