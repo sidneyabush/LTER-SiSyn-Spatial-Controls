@@ -271,13 +271,13 @@ ggplot(MSE_df_parallel, aes(x = ntree, y = mean_MSE)) +
 # Global seed before re-tuning mtry
 set.seed(666)
 kept_drivers <- drivers_numeric[, colnames(drivers_numeric) %in% result_stability$features]
-tuneRF(kept_drivers, drivers_numeric[, 1], ntreeTry = 1200, 
+tuneRF(kept_drivers, drivers_numeric[, 1], ntreeTry = 1000, 
        stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(666)
 rf_model2 <- randomForest(rf_formula, data = drivers_numeric, 
-                          importance = TRUE, proximity = TRUE, ntree = 1200, mtry = 2)
+                          importance = TRUE, proximity = TRUE, ntree = 1000, mtry = 4)
 
 # Visualize output for rf_model2
 print(rf_model2)
