@@ -26,17 +26,49 @@ save_rf_importance_plot <- function(rf_model, output_dir) {
 }
 
 
-# Save Linear Model (LM) Plot
+# Save Linear Model (LM) Plot, but with RMSE instead of MSE
 save_lm_plot <- function(rf_model2, observed, output_dir) {
-  png(filename = sprintf("%s/RF2_lm_plot_FNConc_Yearly_5_years_drivers_df.png", output_dir), width = 1500, height = 1500, res = 300)
-  plot(rf_model2$predicted, observed, pch = 16, cex = 1.5,
-       xlab = "Predicted", ylab = "Observed", main = "RF Model 2 Full Data Ave FNConc",
-       cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5)
+  # calculate RMSE from predicted vs observed
+  preds <- rf_model2$predicted
+  rmse  <- sqrt(mean((preds - observed)^2))
+  rsq   <- mean(rf_model2$rsq)
+  
+  png(
+    filename = sprintf("%s/RF2_lm_plot_FNYield_Yearly_5_years_drivers_df.png", output_dir),
+    width    = 1500,
+    height   = 1500,
+    res      = 300
+  )
+  
+  plot(
+    preds, observed,
+    pch   = 16,
+    cex   = 1.5,
+    xlab  = "Predicted",
+    ylab  = "Observed",
+    main  = "RF Model 2 Full Data Ave FNYield",
+    cex.lab  = 1.5,
+    cex.axis = 1.5,
+    cex.main = 1.5
+  )
   abline(a = 0, b = 1, col = "#6699CC", lwd = 3, lty = 2)
-  legend("topleft", bty = "n", cex = 1.5, legend = paste("R² =", format(mean(rf_model2$rsq), digits = 3)))
-  legend("bottomright", bty = "n", cex = 1.5, legend = paste("MSE =", format(mean(rf_model2$mse), digits = 3)))
+  
+  legend(
+    "topleft",
+    bty = "n",
+    cex = 1.5,
+    legend = paste("R² =", format(rsq, digits = 3))
+  )
+  legend(
+    "bottomright",
+    bty = "n",
+    cex = 1.5,
+    legend = paste("RMSE =", format(rmse, digits = 3))
+  )
+  
   dev.off()
 }
+
 
 
 # Parallelized function to test ntree
@@ -214,8 +246,8 @@ set.seed(666)
 result_stability <- rf_stability_selection_parallel(
   x = x, 
   y = y, 
-  n_bootstrap = 1000,           
-  threshold = 0.6,            
+  n_bootstrap = 500,           
+  threshold = 0.8,            
   ntree = rf1_ntree,           
   mtry = rf1_mtry,            
   importance_threshold = importance_threshold_75th    
@@ -224,24 +256,37 @@ result_stability <- rf_stability_selection_parallel(
 # Print stability selection results
 print(result_stability)
 
-# Plot OOB MSE convergence across bootstraps
+# After you run rf_stability_selection_parallel(), you get:
+mse_vec <- result_stability$mse_vec
+
+# Compute RMSE:
+rmse_vec <- sqrt(mse_vec)
+
+# Then plot RMSE instead of MSE:
 mse_df <- data.frame(
-  Bootstrap = 1:length(result_stability$mse_vec),
-  OOB_MSE = result_stability$mse_vec
+  Bootstrap = seq_along(rmse_vec),
+  OOB_RMSE  = rmse_vec
 )
 
-# OOB MSE convergence plot for stability selection
-oob_mse_plot <- ggplot(mse_df, aes(x = Bootstrap, y = OOB_MSE)) +
+oob_rmse_plot <- ggplot(mse_df, aes(x = Bootstrap, y = OOB_RMSE)) +
   geom_line(color = "#3399CC") +
   geom_point(size = 1.1, color = "#3399CC", alpha = 0.7) +
   theme_classic(base_size = 16) +
   labs(
-    title = "OOB MSE Across Bootstraps (RF Stability Selection)",
+    title = "OOB RMSE Across Bootstraps (RF Stability Selection)",
     x = "Bootstrap Iteration",
-    y = "Out-of-Bag MSE"
+    y = "Out-of-Bag RMSE"
   )
 
-ggsave(filename = sprintf("%s/FNConc_OOB_MSE_Stability_Selection.png", output_dir), plot = oob_mse_plot, width = 8, height = 6, dpi = 300)
+
+ggsave(
+  filename = sprintf("%s/FNConc_OOB_RMSE_Stability_Selection.png", output_dir),
+  plot     = oob_rmse_plot,
+  width    = 8,
+  height   = 6,
+  dpi      = 300
+)
+
 
 # Put selected features into variable
 new_rf_input <- paste(result_stability$features, collapse = "+")
