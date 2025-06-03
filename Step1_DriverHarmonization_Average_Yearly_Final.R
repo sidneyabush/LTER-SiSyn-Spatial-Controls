@@ -12,11 +12,11 @@ record_length <- 5
 # ## ------------------------------------------------------- ##
 
 ## Set working directory
-setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files")
 
 # Read and clean WRTDS data this is filtered data
 wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
-  rename(LTER = LTER.x) %>%
+  dplyr::rename(LTER = LTER.x) %>%
   filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
   # filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc) %>%
   dplyr::select(-Conc, -Flux, -PeriodLong, -PeriodStart, -LTER.y, -contains("date"),
@@ -34,7 +34,7 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
   filter(chemical == "DSi")
 
 wrtds_CJ <- read.csv("wrtds_kalman_annual_CatalinaJemez.csv") %>%
-  filter(chemical == "DSi")
+  dplyr::filter(chemical == "DSi")
 
 ## NEED TO COMBINE THESE
 wrtds_df <- bind_rows(wrtds_df, wrtds_CJ) 
@@ -49,12 +49,12 @@ standardize_stream_id <- function(df) {
 # Count number of years per site and filter for sites with at least 1 years of data
 site_year_counts <- wrtds_df %>%
   dplyr::group_by(Stream_ID) %>%
-  summarise(year_count = n_distinct(Year)) %>%
-  filter(year_count >= record_length)
+  dplyr::summarise(year_count = n_distinct(Year)) %>%
+  dplyr::filter(year_count >= record_length)
 
 # Filter the main dataset to only include sites with sufficient data
 wrtds_df <- wrtds_df %>%
-  filter(Stream_ID %in% site_year_counts$Stream_ID)
+  dplyr::filter(Stream_ID %in% site_year_counts$Stream_ID)
 
 ## Need to tidy the Finnish site names:
 finn <- read.csv("FinnishSites.csv")
@@ -72,7 +72,7 @@ wrtds_df <- wrtds_df %>%
 # Calculate Yields ----
 ## ------------------------------------------------------- ##
 yields <- wrtds_df %>%
-  mutate(FNYield = (FNFlux * 365) / drainSqKm,
+  dplyr::mutate(FNYield = (FNFlux * 365) / drainSqKm,
          GenYield = (GenFlux * 365) / drainSqKm) %>%
   dplyr::select(-FNFlux, -GenFlux)
 
@@ -316,7 +316,7 @@ drivers_cast <- drivers_cropped %>%
   # Remove duplicates based on relevant columns
   distinct(Stream_Name, year, driver, value, .keep_all = TRUE) %>%
   # Rename 'year' to 'Year'
-  rename(Year = year) %>%
+  dplyr::rename(Year = year) %>%
   # Convert 'Year' to numeric
   mutate(Year = as.numeric(Year)) %>%
   # Remove unwanted columns
@@ -551,7 +551,7 @@ write.csv(missing_elev_slope_data_summary,
 # ## ------------------------------------------------------- ##
 # Filter for relevant chemicals (N and P) and simplify NO3/NOx to NOx
 wrtds_NP <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
-  rename(LTER = LTER.x) %>%
+  dplyr::rename(LTER = LTER.x) %>%
   dplyr::select(-Conc, -Flux, -PeriodLong, -PeriodStart, -LTER.y, -contains("date"),
                 -contains("month"), -min_year, -max_year, -duration) %>%
   dplyr::mutate(
@@ -588,7 +588,7 @@ wrtds_NP <- wrtds_NP %>%
 # Handle duplicates by taking the median
 wrtds_NP <- wrtds_NP %>%
   dplyr::group_by(Stream_ID, Year, chemical) %>%  # Group by unique combinations
-  summarise(
+  dplyr::summarise(
     GenConc = median(GenConc, na.rm = TRUE),  # Take the median if duplicates exist
     .groups = "drop"  # Ungroup after summarizing
   )
@@ -609,63 +609,74 @@ raw_NP <- read.csv("converted_raw_NP.csv")
 
 # Step 1: Filter, create Stream_ID, simplify solutes, and calculate median
 raw_NP_median <- raw_NP %>%
-  mutate(
+  dplyr::mutate(
     Year = as.integer(year(as.Date(date, format = "%Y-%m-%d"))),  # Extract Year from date
     Stream_ID = paste(LTER, Stream_Name, sep = "__"),              # Create Stream_ID by combining LTER and Stream_Name
-    solute_simplified = case_when(  # Simplify solutes into NOx and P categories
+    solute_simplified = dplyr::case_when(  # Simplify solutes into NOx and P categories
       variable %in% c("NOx", "NO3") ~ "NOx",
       variable %in% c("SRP", "PO4") ~ "P",
       TRUE ~ NA_character_
     )
   ) %>%
-  filter(!is.na(solute_simplified)) %>%  # Keep only relevant solutes (NOx, P)
+  dplyr::filter(!is.na(solute_simplified)) %>%  # Keep only relevant solutes (NOx, P)
   dplyr::group_by(Stream_ID, Year, solute_simplified) %>%  # Group by Stream_ID, year, and solute
-  summarise(
-    median_value = median(value, na.rm = TRUE),  # Calculate median value
-    .groups = "drop"  # Ungroup after summarizing
+  dplyr::summarise(
+    median_value = median(value, na.rm = TRUE),
+    .groups = "drop"
   )
 
 # Step 2: Reshape the data to wide format
 raw_NP_wide <- raw_NP_median %>%
-  pivot_wider(
+  tidyr::pivot_wider(
     names_from = solute_simplified,  # Create columns for NOx and P
     values_from = median_value,      # Populate these columns with the median values
+    values_fn = mean,                # Handle any duplicates by taking mean
     values_fill = list(median_value = NA)  # Fill missing combinations with NA
   )
 
 # ## ------------------------------------------------------- ##
 #           # Combine WRTDS and RAW Data ---- 
 # ## ------------------------------------------------------- ##
+
+# First fix the WRTDS wide data to prevent list columns
+wrtds_NP_wide <- wrtds_NP %>%
+  tidyr::pivot_wider(
+    id_cols = c(Stream_ID, Year),
+    names_from = chemical,
+    values_from = GenConc,
+    values_fn = mean,  # Handle duplicates by taking mean
+    values_fill = list(GenConc = NA)
+  )
+
 # Perform a full outer join to combine `wrtds_NP_wide` and `raw_NP_wide`
-combined_NP <- full_join(wrtds_NP_wide, raw_NP_wide, by = c("Stream_ID", "Year"))
+combined_NP <- dplyr::full_join(wrtds_NP_wide, raw_NP_wide, by = c("Stream_ID", "Year"))
 
 # Fill gaps in WRTDS data with raw data where necessary
 combined_NP <- combined_NP %>%
   # Rename columns so that we have source identifiers
-  rename(
+  dplyr::rename(
     P_wrtds = P.x,      # P from WRTDS
     NOx_wrtds = NOx.x,  # NOx from WRTDS
     P_raw = P.y,        # P from raw data
     NOx_raw = NOx.y     # NOx from raw data
   ) %>%
   # Create source indicator columns
-  mutate(
-    P_source = if_else(is.na(P_wrtds), "raw", "WRTDS"),
-    NOx_source = if_else(is.na(NOx_wrtds), "raw", "WRTDS")
+  dplyr::mutate(
+    P_source = dplyr::if_else(is.na(P_wrtds), "raw", "WRTDS"),
+    NOx_source = dplyr::if_else(is.na(NOx_wrtds), "raw", "WRTDS")
   ) %>%
   # Fill gaps: if WRTDS is missing, use raw data
-  mutate(
-    P = if_else(is.na(P_wrtds), P_raw, P_wrtds),
-    NOx = if_else(is.na(NOx_wrtds), NOx_raw, NOx_wrtds)
+  dplyr::mutate(
+    P = dplyr::coalesce(P_wrtds, P_raw),
+    NOx = dplyr::coalesce(NOx_wrtds, NOx_raw)
   ) %>%
   # Drop the intermediate columns
   dplyr::select(-P_wrtds, -NOx_wrtds, -P_raw, -NOx_raw)
 
 streams_gapfill <- combined_NP %>%
-  filter(P_source == "raw" | NOx_source == "raw") %>%
-  distinct(Stream_ID) %>%
-  pull(Stream_ID)
-
+  dplyr::filter(P_source == "raw" | NOx_source == "raw") %>%
+  dplyr::distinct(Stream_ID) %>%
+  dplyr::pull(Stream_ID)
 print(streams_gapfill)
 
 # ## ------------------------------------------------------- ##
@@ -673,8 +684,8 @@ print(streams_gapfill)
 # ## ------------------------------------------------------- ##
 # Merge the combined dataset with `tot`
 tot <- tot %>%
-  left_join(combined_NP, by = c("Stream_ID", "Year")) %>%
-  mutate(
+  dplyr::left_join(combined_NP, by = c("Stream_ID", "Year")) %>%
+  dplyr::mutate(
     permafrost_mean_m = replace_na(as.numeric(permafrost_mean_m), 0),
     prop_area = replace_na(as.numeric(prop_area), 0)) 
   # %>%
@@ -693,16 +704,16 @@ print(num_unique_stream_ids)
 # Standardize NOx and P column names by removing suffixes
 # drop all the “.y” columns, then strip “.x” from what remains
 tot <- tot %>%
-  select(-ends_with(".y")) %>%
-  rename_with(~ str_remove(., "\\.x$"))
+  dplyr::select(-ends_with(".y")) %>%
+  dplyr::rename_with(~ str_remove(., "\\.x$"))
 
 # Now generate a list of missing NOx and P sites-year combinations:
 missing_N_P_data_summary <- tot %>%
-  filter(Year > 2000 & Year <= 2024) %>%  # Filter for years within range
+  dplyr::filter(Year > 2000 & Year <= 2024) %>%  # Filter for years within range
   dplyr::select(Stream_ID, Year, NOx, P) %>%
-  distinct(Stream_ID, Year, across(starts_with("NOx")), across(starts_with("P"))) %>%  # Ensure no duplicates
+  dplyr::distinct(Stream_ID, Year, across(starts_with("NOx")), across(starts_with("P"))) %>%  # Ensure no duplicates
   pivot_longer(cols = starts_with("NOx") | starts_with("P"), names_to = "Variable", values_to = "Value") %>%  # Reshape
-  filter(is.na(Value)) %>%  # Keep only missing values
+  dplyr::filter(is.na(Value)) %>%  # Keep only missing values
   dplyr::select(-Value)  # Remove the actual value column
 
 # Export missing data summary with dynamic filename
@@ -738,7 +749,7 @@ num_unique_stream_ids <- tot %>%
 print(num_unique_stream_ids)
 
 ## ------------------------------------------------------- ##
-              #  Silicate Weathering ----
+#  Silicate Weathering ----
 ## ------------------------------------------------------- ##
 # Read and prepare data
 mapped_lithologies <- fread("mapped_lithologies.csv")
@@ -750,6 +761,50 @@ setDT(mapped_lithologies)
 # Ensure compatibility in the major_rock column for merging
 tot[, major_rock := as.character(major_rock)]
 mapped_lithologies[, major_rock := as.character(major_rock)]
+
+###############################################################################
+# EARLY FILTERING: Remove sites without valid major rock type
+###############################################################################
+print("\n=== APPLYING EARLY FILTERING FOR MAJOR_ROCK ===")
+
+# Check what will be filtered out
+rows_before <- nrow(tot)
+missing_major_rock <- sum(is.na(tot$major_rock))
+blank_major_rock <- sum(trimws(tot$major_rock) == "", na.rm = TRUE)
+zero_major_rock <- sum(tot$major_rock == "0", na.rm = TRUE)
+total_to_filter <- missing_major_rock + blank_major_rock + zero_major_rock
+
+print(paste("Rows with missing major_rock:", missing_major_rock))
+print(paste("Rows with blank major_rock:", blank_major_rock))
+print(paste("Rows with '0' major_rock:", zero_major_rock))
+print(paste("Total rows to be filtered out:", total_to_filter))
+print(paste("Rows that will remain:", rows_before - total_to_filter))
+
+# Apply the early filtering - REMOVE SITES WITH major_rock = "0", NA, or blank
+tot <- tot[!is.na(major_rock) & 
+             trimws(major_rock) != "" & 
+             major_rock != "0"]
+
+print(paste("Actual rows after filtering:", nrow(tot)))
+
+# Verify filtering worked as expected
+if(nrow(tot) == (rows_before - total_to_filter)) {
+  print("✓ Early filtering successful!")
+} else {
+  print("✗ Filtering didn't work as expected")
+}
+
+# Report which Stream_IDs were removed (if any)
+if(total_to_filter > 0) {
+  print("Sites removed due to invalid major_rock:")
+  # This would require the original data to show what was removed
+  # Just report that filtering occurred
+  print(paste("Successfully removed", total_to_filter, "observations"))
+}
+
+###############################################################################
+# Continue with weathering analysis on filtered data
+###############################################################################
 
 # Perform the merge and filter out NA values in mapped_lithology
 weathering <- merge(tot[, .(Stream_ID, Year, major_rock, Q, temp, drainSqKm)],
@@ -827,12 +882,12 @@ tryCatch({
 # Clean up memory
 gc()
 
-# Verify the number of unique Stream_IDs
+# Verify the number of unique Stream_IDs after filtering
 num_unique_stream_ids <- tot %>%
   pull(Stream_ID) %>%
   n_distinct()
+print(paste("Unique Stream_IDs after early filtering:", num_unique_stream_ids))
 
-print(num_unique_stream_ids)
 
 # -----------------------------------------------------------
 # New: Incorporate Land Cover Data ----
@@ -840,11 +895,18 @@ print(num_unique_stream_ids)
 # Read in the original land cover file (with percentage values)
 lulc <- read.csv("DSi_LULC_filled_interpolated_Simple.csv", stringsAsFactors = FALSE) %>%
   dplyr::select("Stream_Name", "Year", "Simple_Class", "LandClass_sum") %>%
-  mutate(LandClass_sum = if_else(is.na(LandClass_sum) | 
+  dplyr::mutate(
+    Stream_Name = case_when(
+      Stream_Name == "East Fork" ~ "east fork",
+      Stream_Name == "West Fork" ~ "west fork",
+      Stream_Name == "Amazon River at Obidos" ~ "Obidos",
+      TRUE ~ Stream_Name
+    ),
+    LandClass_sum = if_else(is.na(LandClass_sum) | 
                                    LandClass_sum == 0, LandClass_sum, LandClass_sum * 100))  # convert to percentage
 
 # Remove any existing columns that start with "land_" and the "major_land" column from tot
-tot <- tot %>% dplyr::select(-starts_with("land_"), -major_land)
+tot <- tot %>% dplyr::select(-dplyr::starts_with("land_"), -dplyr::any_of("major_land"))
 
 # Pivot the aggregated data so each unique Simple_Class becomes its own column
 lulc_wide <- lulc %>%
@@ -860,7 +922,7 @@ land_cols <- grep("^land_", names(lulc_wide), value = TRUE)
 
 # Create a new column 'major_land' that finds the class with the highest percentage in each row
 lulc_wide <- lulc_wide %>%
-  mutate(major_land = apply(select(., all_of(land_cols)), 1, function(x) {
+  dplyr::mutate(major_land = apply(dplyr::select(., all_of(land_cols)), 1, function(x) {
     if(all(is.na(x))) {
       NA_character_
     } else {
@@ -1018,7 +1080,8 @@ save_correlation_plot <- function(driver_cor, output_dir) {
 
 drivers_numeric <- drivers_df %>%
   dplyr::select(-Year, -contains("Gen"), -contains("FN"), -contains("major"), -Stream_ID)
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures"
+
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures"
 
 # numeric_drivers <- 2:24 # Change this range to reflect data frame length
 driver_cor <- cor(drivers_numeric) 
@@ -1027,7 +1090,7 @@ save_correlation_plot(driver_cor, output_dir)
 # Create the tot_average dataframe with mean, q_5, and q_95
 tot_average <- drivers_df %>%
   dplyr::group_by(Stream_ID) %>%
-  summarise(
+  dplyr::summarise(
     # Numerical variables: calculate the mean across all years
     drainage_area = mean(drainage_area, na.rm = TRUE),
     NOx = mean(NOx, na.rm = TRUE),
@@ -1054,8 +1117,8 @@ tot_average <- drivers_df %>%
     q_95 = quantile(Q, 0.95, na.rm = TRUE),
 
     # Categorical variables: grab the first value
-    across(contains("rocks"), ~ first(.)),
-    across(contains("land_"), ~ first(.))
+    dplyr::across(contains("rocks"), ~ first(.)),
+    dplyr::across(contains("land_"), ~ first(.))
   ) %>%
   ungroup() %>%
   # Replace NaN with NA in all columns
