@@ -34,7 +34,7 @@ save_lm_plot <- function(rf_model2, observed, output_dir) {
   rsq   <- mean(rf_model2$rsq)
   
   png(
-    filename = sprintf("%s/RF2_lm_plot_FNYield_Yearly_5_years_drivers_df.png", output_dir),
+    filename = sprintf("%s/RF2_lm_plot_FNConc_Yearly_5_years_drivers_df.png", output_dir),
     width    = 1500,
     height   = 1500,
     res      = 300
@@ -46,7 +46,7 @@ save_lm_plot <- function(rf_model2, observed, output_dir) {
     cex   = 1.5,
     xlab  = "Predicted",
     ylab  = "Observed",
-    main  = "RF Model 2 Full Data Ave FNYield",
+    main  = "RF Model 2 Full Data Ave FNConc",
     cex.lab  = 1.5,
     cex.axis = 1.5,
     cex.main = 1.5
@@ -277,7 +277,6 @@ oob_rmse_plot <- ggplot(mse_df, aes(x = Bootstrap, y = OOB_RMSE)) +
     x = "Bootstrap Iteration",
     y = "Out-of-Bag RMSE"
   )
-
 
 ggsave(
   filename = sprintf("%s/FNConc_OOB_RMSE_Stability_Selection.png", output_dir),
