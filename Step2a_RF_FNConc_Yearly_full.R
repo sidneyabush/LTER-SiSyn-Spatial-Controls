@@ -241,7 +241,7 @@ rf_test <- randomForest(x, y, ntree = rf1_ntree, mtry = rf1_mtry, importance = T
 imp_vals <- importance(rf_test)[, "%IncMSE"]
 importance_threshold_75th <- as.numeric(quantile(imp_vals[imp_vals > 0], 0.50))
 
-# Run Stability Selection using 75th percentile importance and 70% selection freq ----
+# Run Stability Selection using 50th percentile importance and 80% selection freq ----
 set.seed(666)
 result_stability <- rf_stability_selection_parallel(
   x = x, 

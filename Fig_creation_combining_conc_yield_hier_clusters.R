@@ -88,7 +88,7 @@ library(grid)        # For textGrob()
 
 # Set your working directory & output directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures"
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures"
 
 unique_clusters <- levels(full_scaled$final_cluster)
 

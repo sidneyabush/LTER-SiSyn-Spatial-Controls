@@ -21,7 +21,7 @@ library(forcats)      # fct_recode()
 rm(list = ls())
 
 ## 3. Set working and output directories
-setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/")
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures"
 
 ###############################################################################
@@ -29,20 +29,22 @@ output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/
 ###############################################################################
 load("FNConc_Yearly_rf_model2.RData")
 load("FNConc_Yearly_kept_drivers.RData")
-load("FNConc_Yearly_numeric.RData")
+#load("FNConc_Yearly_numeric.RData")
 load("FNConc_Yearly_stream_ids.RData")
 
 # Load precomputed SHAP values
 load("FNConc_Yearly_shap_values_new.RData")
 
-drivers_full <- read.csv("All_Drivers_Harmonized_Yearly_FNConc_FNYield_5_years.csv")
+drivers_full <- read.csv("harmonization_files/All_Drivers_Harmonized_Yearly_FNConc_FNYield_5_years.csv")
 
-# Join 'major_rock' and 'major_land' onto 'drivers_df'
 drivers_combined <- drivers_df %>%
-  left_join(
-    drivers_full %>% dplyr::select(Stream_ID, Year, major_rock, major_land),
+  inner_join(
+    drivers_full %>% 
+      dplyr::select(Stream_ID, Year, major_rock, major_land),
     by = c("Stream_ID", "Year")
-  )
+  ) %>%
+  filter(!is.na(major_rock))
+
 
 ###############################################################################
 # 3. Consolidate Lithology Categories & Manually Assign Clusters
@@ -120,9 +122,8 @@ print(summary_table)
 # 4. Prepare Data for Further Analysis (Single Global Scaling)
 ###############################################################################
 # Identify numeric columns to scale (exclude "cluster" if it exists)
-# Use select_if for compatibility with older dplyr versions
 numeric_cols <- setdiff(
-  names(drivers_numeric_consolidated_lith %>% select_if(is.numeric)),
+  names(dplyr::select(drivers_numeric_consolidated_lith, where(is.numeric))),
   "cluster"
 )
 
@@ -150,65 +151,72 @@ my_cluster_colors <- c(
 my_cluster_colors_lighter <- sapply(my_cluster_colors, function(x) lighten(x, amount = 0.3))
 
 ###############################################################################
-# FIXED: Identify variables available in SHAP data (excluding rocks)
-###############################################################################
-# Your exact SHAP variables (excluding rocks and FNConc)
-analysis_vars <- c("P", "precip", "elevation", "RBI", "recession_slope", 
-                   "basin_slope", "land_Cropland", "land_Forest", 
-                   "land_Grassland_Shrubland", "land_Impervious", "land_Water")
-
-print("Variables for analysis:")
-print(analysis_vars)
-
-###############################################################################
-# 6. FIXED: Create Long-format Data for Box Plots (only use SHAP variables)
+# 6. Create Long-format Data for Box Plots (exclude FNConc & rocks*)
 ###############################################################################
 long_data <- scaled_data %>%
-  dplyr::select(all_of(analysis_vars), final_cluster) %>%
+  dplyr::select(-major_rock, -consolidated_rock, -major_land, -Stream_ID, -Year) %>%
   pivot_longer(
     cols       = -final_cluster,
     names_to   = "Driver",
     values_to  = "Value"
   ) %>%
-  mutate(
-    # Create properly recoded names
-    Driver_recoded = case_when(
-      Driver == "P" ~ "P",
-      Driver == "precip" ~ "Precip", 
-      Driver == "elevation" ~ "Elevation",
-      Driver == "RBI" ~ "Flashiness Index",
-      Driver == "recession_slope" ~ "Recession Curve Slope",
-      Driver == "basin_slope" ~ "Basin Slope",
-      Driver == "land_Cropland" ~ "Land: Cropland",
-      Driver == "land_Forest" ~ "Land: Forest", 
-      Driver == "land_Grassland_Shrubland" ~ "Land: Grassland & Shrubland",
-      Driver == "land_Impervious" ~ "Land: Impervious",
-      Driver == "land_Water" ~ "Land: Water Body",
-      TRUE ~ Driver  # Keep original if not in our list
-    )
+  # FILTER OUT "FNConc" and anything starting with "rocks"
+  filter(
+    Driver != "FNConc",
+    !grepl("^rocks", Driver, ignore.case = TRUE)
   ) %>%
-  # Set factor levels for proper ordering
   mutate(
-    Driver_recoded = factor(
-      Driver_recoded,
+    # First convert "Driver" to a factor with a specified order (including "recession_slope")
+    Driver = factor(
+      Driver,
       levels = c(
-        "P", "Precip", "Elevation", "Flashiness Index", 
-        "Recession Curve Slope", "Basin Slope",
-        "Land: Cropland", "Land: Forest", "Land: Grassland & Shrubland",
-        "Land: Impervious", "Land: Water Body"
+        "NOx", "P", "precip", "temp", "snow_cover", "npp", "evapotrans",
+        "greenup_day", "permafrost", "elevation", "RBFI", "basin_slope",
+        "recession_slope",
+        "land_Bare", "land_Cropland", "land_Forest",
+        "land_Grassland_Shrubland", "land_Ice_Snow", "land_Impervious",
+        "land_Salt_Water", "land_Tidal_Wetland", "land_Water", "land_Wetland_Marsh"
       )
+    ),
+    # Then recode to human-readable labels, leaving anything not specified unchanged
+    Driver = fct_recode(
+      Driver,
+      "Nitrate"                     = "NOx",
+      "P"                           = "P",
+      "Precip"                      = "precip",
+      "Temperature"                 = "temp",
+      "Snow Cover"                  = "snow_cover",
+      "NPP"                         = "npp",
+      "ET"                          = "evapotrans",
+      "Greenup Day"                 = "greenup_day",
+      "Permafrost"                  = "permafrost",
+      "Elevation"                   = "elevation",
+      "Flashiness Index"            = "RBFI",
+      "Basin Slope"                 = "basin_slope",
+      "Recession Curve Slope"       = "recession_slope",
+      "Land: Bare"                  = "land_Bare", 
+      "Land: Cropland"              = "land_Cropland", 
+      "Land: Forest"                = "land_Forest",
+      "Land: Grassland & Shrubland" = "land_Grassland_Shrubland", 
+      "Land: Ice & Snow"            = "land_Ice_Snow", 
+      "Land: Impervious"            = "land_Impervious", 
+      "Land: Salt Water"            = "land_Salt_Water",
+      "Land: Tidal Wetland"         = "land_Tidal_Wetland", 
+      "Land: Water Body"            = "land_Water", 
+      "Land: Wetland Marsh"         = "land_Wetland_Marsh"
+      # any level not mentioned here remains unchanged
     )
   )
 
 ###############################################################################
-# 7. FIXED: Generate Box Plots for Each Cluster using recoded names
+# 7. Generate Box Plots for Each Cluster (Drivers) using final_cluster
 ###############################################################################
 unique_clusters <- levels(long_data$final_cluster)
 
 cluster_boxplots <- lapply(unique_clusters, function(cl) {
   p <- long_data %>%
     filter(final_cluster == cl) %>%
-    ggplot(aes(x = Driver_recoded, y = Value, fill = final_cluster)) +
+    ggplot(aes(x = Driver, y = Value, fill = final_cluster)) +
     geom_boxplot() +
     scale_fill_manual(values = my_cluster_colors_lighter, guide = "none") +
     scale_y_continuous(limits = c(0, 1)) +
@@ -314,12 +322,12 @@ p_sil <- p_sil + guides(color = "none") +
 print(p_sil)
 
 ###############################################################################
-# FIXED: Define the function plot_mean_abs_shap for SHAP bar plots
+# ***** Define the function plot_mean_abs_shap for SHAP bar plots *****
 ###############################################################################
 plot_mean_abs_shap <- function(cluster_id, shap_values_FNConc, full_scaled) {
   # Subset SHAP rows for this cluster
   cluster_indices <- which(full_scaled$final_cluster == cluster_id)
-  shap_cluster    <- shap_values_FNConc[cluster_indices, analysis_vars, drop = FALSE]
+  shap_cluster    <- shap_values_FNConc[cluster_indices, , drop = FALSE]
   
   # Compute mean(|SHAP|) per feature
   mean_abs_shap <- colMeans(abs(shap_cluster), na.rm = TRUE)
@@ -330,24 +338,33 @@ plot_mean_abs_shap <- function(cluster_id, shap_values_FNConc, full_scaled) {
     mean_abs_shapval = as.numeric(mean_abs_shap),
     stringsAsFactors = FALSE
   ) %>%
-    arrange(desc(mean_abs_shapval))
+    arrange(desc(mean_abs_shapval)) %>%
+    # REMOVE "FNConc" and anything starting with "rocks"
+    filter(
+      feature != "FNConc",
+      !grepl("^rocks", feature, ignore.case = TRUE)
+    )
   
-  # Apply recoding using the same scheme as box plots
+  # FIXED: Use the same recoding approach
+  feature_recode_map <- c(
+    "NOx" = "Nitrate", "P" = "P", "precip" = "Precip", "temp" = "Temperature",
+    "snow_cover" = "Snow Cover", "npp" = "NPP", "evapotrans" = "ET",
+    "greenup_day" = "Greenup Day", "permafrost" = "Permafrost",
+    "elevation" = "Elevation", "RBFI" = "Flashiness Index", "RBI" = "Flashiness Index",
+    "basin_slope" = "Basin Slope", "recession_slope" = "Recession Curve Slope",
+    "land_Bare" = "Land: Bare", "land_Cropland" = "Land: Cropland", 
+    "land_Forest" = "Land: Forest", "land_Grassland_Shrubland" = "Land: Grassland & Shrubland",
+    "land_Ice_Snow" = "Land: Ice & Snow", "land_Impervious" = "Land: Impervious",
+    "land_Salt_Water" = "Land: Salt Water", "land_Tidal_Wetland" = "Land: Tidal Wetland",
+    "land_Water" = "Land: Water Body", "land_Wetland_Marsh" = "Land: Wetland Marsh"
+  )
+  
   df_shap <- df_shap %>%
     mutate(
-      feature_recoded = case_when(
-        feature == "P" ~ "P",
-        feature == "precip" ~ "Precip",
-        feature == "elevation" ~ "Elevation", 
-        feature == "RBI" ~ "Flashiness Index",
-        feature == "recession_slope" ~ "Recession Curve Slope",
-        feature == "basin_slope" ~ "Basin Slope",
-        feature == "land_Cropland" ~ "Land: Cropland",
-        feature == "land_Forest" ~ "Land: Forest",
-        feature == "land_Grassland_Shrubland" ~ "Land: Grassland & Shrubland", 
-        feature == "land_Impervious" ~ "Land: Impervious",
-        feature == "land_Water" ~ "Land: Water Body",
-        TRUE ~ feature
+      feature_recoded = ifelse(
+        feature %in% names(feature_recode_map),
+        feature_recode_map[feature],
+        feature
       ),
       feature_recoded = factor(feature_recoded, levels = feature_recoded)
     )
@@ -366,38 +383,40 @@ plot_mean_abs_shap <- function(cluster_id, shap_values_FNConc, full_scaled) {
     )
 }
 
+
 ###############################################################################
-# 10. FIXED: SHAP Dot Plots using exact variable matching
+# 10. SHAP Dot Plots (Remove Titles from Each Dot Plot; include recession_slope)
 ###############################################################################
 full_scaled <- scaled_data
 
-global_shap_min <- min(shap_values_FNConc, na.rm = TRUE)
-global_shap_max <- max(shap_values_FNConc, na.rm = TRUE)
+global_min <- min(full_scaled %>% dplyr::select(where(is.numeric)), na.rm = TRUE)
+global_max <- max(full_scaled %>% dplyr::select(where(is.numeric)), na.rm = TRUE)
 
 generate_shap_dot_plot_obj <- function(cluster_name, shap_values_FNConc, full_scaled,
                                        global_shap_min, global_shap_max) {
-  
-  # Get cluster indices
+  # (1) Subset to this cluster
   cluster_indices <- which(full_scaled$final_cluster == cluster_name)
-  
-  # Use only the analysis variables (the 11 we identified)
-  cluster_data <- full_scaled[cluster_indices, analysis_vars, drop = FALSE]
+  cluster_data    <- full_scaled[cluster_indices, , drop = FALSE] %>%
+    dplyr::select(where(is.numeric))
   cluster_data$id <- seq_len(nrow(cluster_data))
   
-  # Pivot feature values long
+  # (2) Pivot feature values long
   cluster_long <- cluster_data %>%
     pivot_longer(
       cols      = -id,
-      names_to  = "feature", 
+      names_to  = "feature",
       values_to = "feature_value"
     )
   
-  # Create SHAP values data - only use the analysis variables
-  shap_subset <- as.data.frame(shap_values_FNConc)[cluster_indices, analysis_vars, drop = FALSE]
-  shap_subset$id <- seq_len(nrow(shap_subset))
+  # (3) Pivot SHAP values long - FIXED: Make sure column names match
+  shap_values_FNConc_df <- as.data.frame(shap_values_FNConc)[cluster_indices, , drop = FALSE] %>%
+    mutate(id = seq_len(nrow(.)))
   
-  # Pivot SHAP values long
-  shap_long <- shap_subset %>%
+  # DEBUG: Print column names to verify
+  cat("SHAP columns:", colnames(shap_values_FNConc_df), "\n")
+  cat("Cluster data columns:", colnames(cluster_data), "\n")
+  
+  shap_long <- shap_values_FNConc_df %>%
     pivot_longer(
       cols      = -id,
       names_to  = "feature",
@@ -405,40 +424,87 @@ generate_shap_dot_plot_obj <- function(cluster_name, shap_values_FNConc, full_sc
     ) %>%
     left_join(cluster_long, by = c("id", "feature"))
   
-  # Apply the same recoding as in box plots
+  # (4) Remove any "rocks…" features and FNConc
   shap_long <- shap_long %>%
-    mutate(
-      feature_recoded = case_when(
-        feature == "P" ~ "P",
-        feature == "precip" ~ "Precip",
-        feature == "elevation" ~ "Elevation", 
-        feature == "RBI" ~ "Flashiness Index",
-        feature == "recession_slope" ~ "Recession Curve Slope",
-        feature == "basin_slope" ~ "Basin Slope",
-        feature == "land_Cropland" ~ "Land: Cropland",
-        feature == "land_Forest" ~ "Land: Forest",
-        feature == "land_Grassland_Shrubland" ~ "Land: Grassland & Shrubland", 
-        feature == "land_Impervious" ~ "Land: Impervious",
-        feature == "land_Water" ~ "Land: Water Body",
-        TRUE ~ feature
-      )
+    filter(
+      !grepl("^rocks", feature, ignore.case = TRUE),
+      feature != "FNConc"
     )
   
-  # Compute importance and reorder
+  # DEBUG: Check for NAs before recoding
+  cat("Features before recoding:", unique(shap_long$feature), "\n")
+  cat("Any NAs in shap_value?", any(is.na(shap_long$shap_value)), "\n")
+  cat("Any NAs in feature_value?", any(is.na(shap_long$feature_value)), "\n")
+  
+  # (5) Compute overall importance ordering
   overall_feature_importance <- shap_long %>%
-    group_by(feature_recoded) %>%
+    group_by(feature) %>%
     summarize(mean_abs_shap = mean(abs(shap_value), na.rm = TRUE), .groups = "drop") %>%
     arrange(desc(mean_abs_shap))
   
+  # (6) Turn feature into a factor in that order
   shap_long <- shap_long %>%
     mutate(
-      feature_recoded = factor(
-        feature_recoded,
-        levels = rev(overall_feature_importance$feature_recoded)
-      )
+      feature = factor(feature, levels = rev(overall_feature_importance$feature))
     )
   
-  # Create the plot
+  # ===== FIXED RECODING BLOCK =====
+  # Create a named vector for recoding
+  feature_recode_map <- c(
+    # Climate/Environmental
+    "NOx" = "Nitrate",
+    "P" = "P",
+    "precip" = "Precip", 
+    "temp" = "Temperature",
+    "snow_cover" = "Snow Cover",
+    "npp" = "NPP",
+    "evapotrans" = "ET",
+    "greenup_day" = "Greenup Day",
+    "permafrost" = "Permafrost",
+    
+    # Topographic/Hydrologic
+    "elevation" = "Elevation",
+    "RBFI" = "Flashiness Index",  # Note: Check if this is RBFI or RBI in your data!
+    "RBI" = "Flashiness Index",   # Alternative name
+    "basin_slope" = "Basin Slope",
+    "recession_slope" = "Recession Curve Slope",
+    
+    # Land Cover
+    "land_Bare" = "Land: Bare",
+    "land_Cropland" = "Land: Cropland", 
+    "land_Forest" = "Land: Forest",
+    "land_Grassland_Shrubland" = "Land: Grassland & Shrubland",
+    "land_Ice_Snow" = "Land: Ice & Snow",
+    "land_Impervious" = "Land: Impervious",
+    "land_Salt_Water" = "Land: Salt Water",
+    "land_Tidal_Wetland" = "Land: Tidal Wetland",
+    "land_Water" = "Land: Water Body",
+    "land_Wetland_Marsh" = "Land: Wetland Marsh"
+  )
+  
+  # Apply recoding using ifelse to avoid NAs
+  shap_long <- shap_long %>%
+    mutate(
+      feature_recoded = ifelse(
+        as.character(feature) %in% names(feature_recode_map),
+        feature_recode_map[as.character(feature)],
+        as.character(feature)  # Keep original name if not in map
+      )
+    ) %>%
+    # Reorder based on importance but with new names
+    mutate(
+      feature_recoded = factor(feature_recoded, 
+                               levels = rev(unique(feature_recoded)))
+    )
+  
+  # DEBUG: Check recoding results
+  cat("Original vs Recoded features:\n")
+  print(data.frame(
+    original = levels(shap_long$feature),
+    recoded = levels(shap_long$feature_recoded)
+  ))
+  
+  # (7) Draw the dot plot using the recoded feature names
   ggplot(shap_long, aes(x = shap_value, y = feature_recoded, fill = feature_value)) +
     geom_point(
       alpha = 0.6, size = 3, shape = 21, stroke = 0.1, color = "black"
@@ -446,7 +512,7 @@ generate_shap_dot_plot_obj <- function(cluster_name, shap_values_FNConc, full_sc
     scale_fill_gradientn(
       colors = c("white", "gray", "black"),
       name   = NULL,
-      limits = c(0, 1)  # Use 0-1 since data is scaled
+      limits = c(global_shap_min, global_shap_max)
     ) +
     labs(x = "SHAP Value", y = NULL, title = NULL) +
     geom_vline(xintercept = 0, linetype = "dashed", color = "grey30") +
@@ -462,7 +528,10 @@ generate_shap_dot_plot_obj <- function(cluster_name, shap_values_FNConc, full_sc
     )
 }
 
-# Create all dot plots
+
+global_shap_min <- min(shap_values_FNConc, na.rm = TRUE)
+global_shap_max <- max(shap_values_FNConc, na.rm = TRUE)
+
 dot_plots <- lapply(unique_clusters, function(cl) {
   generate_shap_dot_plot_obj(
     cl,
@@ -503,7 +572,7 @@ final_combined_plot <- left_col | right_col +
 # 12. Save Final Figures
 ###############################################################################
 ggsave(
-  filename = "Fig4_FNConc_Cluster_Boxplot_SHAP_DotPlots_FIXED.png",
+  filename = "Fig4_FNConc_Cluster_Boxplot_SHAP_DotPlots.png",
   plot     = final_combined_plot,
   width    = 16,
   height   = 18,
@@ -539,7 +608,7 @@ plot_list_bars <- lapply(unique_clusters_for_shap, function(cl) {
 })
 
 ggsave(
-  filename = "FigSX_FNConc_MeanAbsSHAP_Grid_FIXED.png",
+  filename = "FigSX_FNConc_MeanAbsSHAP_Grid.png",
   plot     = wrap_plots(plot_list_bars, ncol = 2),
   width    = 12,
   height   = 9,
@@ -557,21 +626,5 @@ save(
   global_shap_max,
   plot_mean_abs_shap,
   generate_shap_dot_plot_obj,
-  analysis_vars,
-  file = "FNConc_HierClust_Workflow_Objects_FIXED.RData"
+  file = "FNConc_HierClust_Workflow_Objects.RData"
 )
-
-###############################################################################
-# VERIFICATION: Print summary of what we're plotting
-###############################################################################
-print("=== FINAL VERIFICATION ===")
-print(paste("Total variables used:", length(analysis_vars)))
-print("Variables used in all plots:")
-print(analysis_vars)
-print("Recoded variable names:")
-recoded_names <- c("P", "Precip", "Elevation", "Flashiness Index", 
-                   "Recession Curve Slope", "Basin Slope",
-                   "Land: Cropland", "Land: Forest", "Land: Grassland & Shrubland",
-                   "Land: Impervious", "Land: Water Body")
-print(recoded_names)
-print("All plots should now work correctly with consistent variable names!")
