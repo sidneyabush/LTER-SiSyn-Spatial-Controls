@@ -161,8 +161,9 @@ output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/
 record_length <- 5
 
 # Read in and tidy data ----
-setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn") 
-drivers_df <- read.csv(sprintf("All_Drivers_Harmonized_Yearly_FNConc_FNYield_%d_years.csv", record_length)) %>%
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files") 
+drivers_df <- read.csv(sprintf("All_Drivers_Harmonized_Yearly_FNConc_FNYield_%d_years.csv", 
+                               record_length)) %>%
   dplyr::select(-contains("Conc"), -contains("Gen"), -contains("major"), 
                 -Max_Daylength, -Q, -drainage_area) %>%
   mutate(greenup_day = as.numeric(greenup_day)) 
@@ -314,13 +315,13 @@ ggplot(MSE_df_parallel, aes(x = ntree, y = mean_MSE)) +
 # Global seed before re-tuning mtry
 set.seed(666)
 kept_drivers <- drivers_numeric[, colnames(drivers_numeric) %in% result_stability$features]
-tuneRF(kept_drivers, drivers_numeric[, 1], ntreeTry = 2000, 
+tuneRF(kept_drivers, drivers_numeric[, 1], ntreeTry = 1000, 
        stepFactor = 1, improve = 0.5, plot = FALSE)
 
 # Run optimized random forest model, with re-tuned ntree and mtry parameters ----
 set.seed(666)
 rf_model2 <- randomForest(rf_formula, data = drivers_numeric, 
-                          importance = TRUE, proximity = TRUE, ntree = 2000, mtry = 4)
+                          importance = TRUE, proximity = TRUE, ntree = 1000, mtry = 3)
 
 # Visualize output for rf_model2
 print(rf_model2)

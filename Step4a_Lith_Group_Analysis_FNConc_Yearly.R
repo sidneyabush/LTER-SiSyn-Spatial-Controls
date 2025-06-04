@@ -21,7 +21,7 @@ library(forcats)      # fct_recode()
 rm(list = ls())
 
 ## 3. Set working and output directories
-setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/")
 output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures"
 
 ###############################################################################
