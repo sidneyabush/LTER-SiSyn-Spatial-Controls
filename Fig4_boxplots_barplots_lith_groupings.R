@@ -3,7 +3,8 @@
 #                 Land Recoding, Separate X-Axis Scaling for Dot Plots,
 #                 Combined Legend for Dot Plots, Patchwork Layout
 #                 (jitter removed, lighter boxplot fills, subtle group shading;
-#                  each row now has a vertical cluster‐name label on the left)
+#                  cluster name printed inside each “All Variables” plot,
+#                  vertically centered on the y-axis)
 ###############################################################################
 
 ## 0. Load Pre‐saved Workflow Objects and Rebuild "All Variables" Boxplots
@@ -36,7 +37,7 @@ unique_clusters <- levels(full_scaled$final_cluster)
 #     (for the boxplots and bar plots)
 # ------------------------------------------------------------------------------
 
-# 1) “Old” column names in the order you want them to appear:
+# 1) Specify the “old” column names in the order you want them to appear:
 var_order <- c(
   "NOx",
   "P",
@@ -67,7 +68,7 @@ var_order <- c(
   "land_Wetland_Marsh"
 )
 
-# 2) “Pretty” labels (same length/order as var_order):
+# 2) Provide “pretty” labels (same length/order as var_order):
 var_labels <- c(
   "NOx",
   "P",
@@ -98,7 +99,7 @@ var_labels <- c(
   "Land: Wetland Marsh"
 )
 
-# 3) Named vector to recode “old” → “pretty”:
+# 3) Create a named vector for recoding all “old” → “pretty” names
 recode_map_box <- setNames(var_labels, var_order)
 
 # 4) Precompute numeric positions for each group’s shading in the discrete scale:
@@ -122,7 +123,7 @@ prod_fill   <- "white"
 prod_text   <- "black"
 
 clim_fill  <- "#f7f7f7"    # very light gray
-clim_text  <- "#404040"    # dark gray
+clim_text  <- "#404040"    # darker gray
 
 topo_fill  <- "#e0e0e0"    # light gray
 topo_text  <- "#404040"
@@ -130,13 +131,13 @@ topo_text  <- "#404040"
 disc_fill  <- "#d3d3d3"    # medium-light gray
 disc_text  <- "#404040"
 
-lulc_fill   <- "#f0f0f0"   # a slightly darker pale gray
+lulc_fill   <- "#f0f0f0"   # slightly darker pale gray
 lulc_text   <- "black"
 
 ###############################################################################
 # 0.2 Create "All Variables" boxplot for each cluster 
 #     (jitter removed, lighter boxplot fills, subtle group shading;
-#      “LULC” block is now light gray, no border)
+#      cluster name printed at x=0, y=0.5 inside the same plot but pushed left)
 ###############################################################################
 cluster_boxplots <- lapply(unique_clusters, function(cl) {
   df_long <- full_scaled %>%
@@ -155,7 +156,7 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
     )
   
   cluster_col <- my_cluster_colors[[cl]]
-  # Lighter fill for boxplot so medians stand out clearly:
+  # Lighter fill for boxplot so medians remain visible:
   box_fill  <- adjustcolor(cluster_col, alpha.f = 0.3)
   box_color <- cluster_col
   
@@ -198,7 +199,7 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
       color = topo_text, fontface = "bold",
       vjust = 2, size = 3.5, inherit.aes = FALSE
     ) +
-    # 4) Shaded background for Discharge (Q) block (very light, alpha 0.3)
+    # 4) Shaded background for Discharge (Q) block (very light, alpha=0.3)
     annotate(
       "rect",
       xmin = disc_start, xmax = disc_end,
@@ -213,7 +214,7 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
       color = disc_text, fontface = "bold",
       vjust = 2, size = 3.5, inherit.aes = FALSE
     ) +
-    # 5) Shaded background for LULC block (light gray, alpha 0.3, no border)
+    # 5) Shaded background for LULC block (light gray, alpha=0.3, no border)
     annotate(
       "rect",
       xmin = land_start_index, xmax = land_end_index,
@@ -228,7 +229,21 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
       color = lulc_text, fontface = "bold",
       vjust = 2, size = 3.5, inherit.aes = FALSE
     ) +
-    # 6) Actual boxplot with lighter fill so median is clearly visible
+    # 6) Print cluster name at x = 0, y = 0.5 (vertical), but expand left space so it's outside ticks
+    annotate(
+      "text",
+      x = 0,               # will lie to the left of the first category
+      y = 0.5,             # center of y‐range (0→1 scaled values)
+      label = cl,
+      angle = 90,
+      fontface = "bold",
+      size = 4,
+      color = "#404040",
+      hjust = 0.5,
+      vjust = 0.5,
+      inherit.aes = FALSE
+    ) +
+    # 7) The actual boxplot with lighter fill:
     geom_boxplot(
       outlier.shape = NA,
       fill  = box_fill,
@@ -236,14 +251,21 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
       width = 0.7
     ) +
     labs(x = NULL, y = "Scaled Value") +
-    # 7) Force discrete x‐axis ordering
-    scale_x_discrete(limits = var_labels) +
+    # 8) Force discrete x‐axis ordering, and add extra left “expansion” 
+    #    so that x = 0 really sits left of the first tick label
+    scale_x_discrete(
+      limits = var_labels,
+      expand = expansion(add = c(1.5, 0))
+    ) +
+    coord_cartesian(clip = "off") +   # allow that label to draw outside panel area
     theme_classic(base_size = 10) +
     theme(
-      axis.text.x     = element_text(angle = 90, vjust = 0.5, hjust = 1),
+      plot.margin = ggplot2::margin(t = 10, r = 5, b = 5, l = 40),
+      axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
       legend.position = "none"
     )
 })
+
 
 ###############################################################################
 # 0.3 Define plot_mean_abs_shap() with recoding & ordering for bar plots
@@ -308,8 +330,8 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures"
 
 ###############################################################################
-# 2. SHAP Bar Plots (3 columns × N rows) + Column Titles, Single Y-Axis Label,
-#    with an extra “Cluster Label” column on the left.
+# 2. SHAP Bar Plots (3 columns × N rows) + Column Titles, Single Y-Axis Label
+#    (each row still has 3 panels: [All Variables], [Concentration], [Yield])
 ###############################################################################
 plot_list_bars_conc <- lapply(unique_clusters, function(cl) {
   plot_mean_abs_shap(cl, shap_values_FNConc, full_scaled, y_limit = 0.7)
@@ -319,49 +341,40 @@ plot_list_bars_yield <- lapply(unique_clusters, function(cl) {
 })
 
 rows_list <- lapply(seq_along(unique_clusters), function(i) {
-  cl            <- unique_clusters[i]
-  p_label       <- wrap_elements(
-    full = textGrob(cl, rot = 90, x = 0.5, hjust = 0.5,
-                    gp = gpar(fontsize = 14))
-  )
-  p_all_vars    <- cluster_boxplots[[i]] + labs(y = NULL)
-  p_conc        <- plot_list_bars_conc[[i]]
-  p_yield       <- plot_list_bars_yield[[i]]
+  p_all_vars <- cluster_boxplots[[i]] + labs(y = NULL)
+  p_conc     <- plot_list_bars_conc[[i]]
+  p_yield    <- plot_list_bars_yield[[i]]
   
-  # Suppress x‐axis on non‐final rows
+  # If not the last row, suppress x-axis on all three subplots
   if (i < length(unique_clusters)) {
     p_all_vars <- p_all_vars + theme(
       axis.title.x = element_blank(),
       axis.text.x  = element_blank(),
       axis.ticks.x = element_blank()
     )
-    p_conc     <- p_conc     + theme(
+    p_conc <- p_conc + theme(
       axis.title.x = element_blank(),
       axis.text.x  = element_blank(),
       axis.ticks.x = element_blank()
     )
-    p_yield    <- p_yield    + theme(
+    p_yield <- p_yield + theme(
       axis.title.x = element_blank(),
       axis.text.x  = element_blank(),
       axis.ticks.x = element_blank()
     )
   } else {
-    # Last row => add y‐axis labels for Mean Absolute SHAP
-    p_conc     <- p_conc     + labs(y = "Mean Absolute SHAP Value")
-    p_yield    <- p_yield    + labs(y = "Mean Absolute SHAP Value")
+    # Last row => add y-axis label for “Mean Absolute SHAP Value”
+    p_conc  <- p_conc  + labs(y = "Mean Absolute SHAP Value")
+    p_yield <- p_yield + labs(y = "Mean Absolute SHAP Value")
   }
   
-  # Arrange: [Label] | [All Vars] | [Concentration] | [Yield]
-  (p_label | p_all_vars | p_conc | p_yield) +
-    plot_layout(ncol = 4, widths = c(0.15, 1, 1, 1))
+  # Arrange three panels side by side
+  (p_all_vars | p_conc | p_yield) + plot_layout(ncol = 3, widths = c(1, 1, 1))
 })
 
 bar_plots_combined <- wrap_plots(rows_list, ncol = 1)
 
-# Create column titles (skip the “Label” column, so these occupy 3 wide columns)
-title_cluster <- wrap_elements(
-  full = textGrob("", x = 0.5, hjust = 0.5)  # blank placeholder
-)
+# Column titles (skip any “cluster label” column now; just 3 titles)
 title_all_vars <- wrap_elements(
   full = textGrob("All Variables", x = 0.5, hjust = 0.5,
                   gp = gpar(fontsize = 16, fontface = "bold"))
@@ -374,10 +387,8 @@ title_yield <- wrap_elements(
   full = textGrob("Yield", x = 0.5, hjust = 0.5,
                   gp = gpar(fontsize = 16, fontface = "bold"))
 )
-
-# Combine titles with matching widths (4 columns total)
-title_row <- (title_cluster | title_all_vars | title_conc | title_yield) +
-  plot_layout(ncol = 4, widths = c(0.15, 1, 1, 1))
+title_row <- (title_all_vars + title_conc + title_yield) +
+  plot_layout(ncol = 3, widths = c(1, 1, 1))
 
 # Single y-axis label on the far left
 y_axis_label <- wrap_elements(
@@ -389,7 +400,7 @@ y_axis_label <- wrap_elements(
 bar_plots_with_title <- title_row / bar_plots_combined +
   plot_layout(heights = c(0.6, 10))
 
-# Put the "Scaled Value" label on the far left outside everything
+# Place "Scaled Value" label on far left
 final_grid_bar <- (y_axis_label | bar_plots_with_title) +
   plot_layout(widths = c(0.06, 0.94))
 
