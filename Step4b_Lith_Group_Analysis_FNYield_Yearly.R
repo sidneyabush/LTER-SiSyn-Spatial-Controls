@@ -312,7 +312,7 @@ plot_mean_abs_shap <- function(cluster_id, shap_values_FNYield, full_scaled) {
   ggplot(df_shap, aes(x = reorder(feature_recoded, mean_abs_shapval), y = mean_abs_shapval)) +
     geom_bar(stat = "identity", fill = my_cluster_colors[[as.character(cluster_id)]], alpha = 0.8) +
     coord_flip() +
-    #scale_y_continuous(limits = c(0, 1.3)) +
+    scale_y_continuous(limits = c(0, 1000)) +
     labs(
       x     = NULL,
       y     = "Mean Absolute SHAP Value",
@@ -360,16 +360,3 @@ ggsave(
 )
 print(barplot_grid)
 
-###############################################################################
-# 12. Save workspace objects (if needed)
-###############################################################################
-save(
-  scaled_data,
-  shap_values_FNYield,
-  plot_mean_abs_shap,
-  file = "FNYield_HierClust_Workflow_NoFigure4.RData"
-)
-
-###############################################################################
-# END OF SCRIPT
-###############################################################################
