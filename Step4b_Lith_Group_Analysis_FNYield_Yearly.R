@@ -22,18 +22,28 @@ rm(list = ls())
 
 ## 3. Set working and output directories
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures"
+output_dir        <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures"
+final_models_dir  <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Models"
 
 ###############################################################################
-# 2. Load Data & Model
+# 2. Load Data & Model (from Final_Models)
 ###############################################################################
-load("FNYield_Yearly_rf_model2.RData")
-load("FNYield_Yearly_kept_drivers.RData")
-#load("FNYield_Yearly_numeric.RData")
-load("FNYield_Yearly_stream_ids.RData")
+load(file.path(final_models_dir, "FNConc_Yearly_rf_model2.RData"))
+rf_model2_FNConc <- rf_model2
 
-# Load precomputed SHAP values
-load("FNYield_Yearly_shap_values_new.RData")
+load(file.path(final_models_dir, "FNConc_Yearly_kept_drivers.RData"))
+kept_drivers_FNConc <- kept_drivers
+
+# (If you need the numeric data:)
+# load(file.path(final_models_dir, "FNConc_Yearly_numeric.RData"))
+# drivers_numeric_FNConc <- drivers_numeric
+
+load(file.path(final_models_dir, "FNConc_Yearly_stream_ids.RData"))
+drivers_df <- drivers_df
+
+# Load precomputed SHAP values from Final_Models
+load(file.path(final_models_dir, "FNConc_Yearly_shap_values_new.RData"))
+shap_values_FNConc <- shap_values_FNConc
 
 drivers_full <- read.csv("harmonization_files/All_Drivers_Harmonized_Yearly_FNConc_FNYield_5_years.csv")
 
@@ -44,7 +54,6 @@ drivers_combined <- drivers_df %>%
     by = c("Stream_ID", "Year")
   ) %>%
   filter(!is.na(major_rock))
-
 
 ###############################################################################
 # 3. Consolidate Lithology Categories & Manually Assign Clusters

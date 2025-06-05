@@ -1,5 +1,6 @@
 ###############################################################################
-# COMPLETE WORKFLOW: FNConc Cluster Plotting with Dot Plots, Silhouette, & GRID
+# COMPLETE WORKFLOW: FNConc Cluster Plotting with Faceted Box & Dot Plots,
+# Silhouette, & SHAP Bar‐Plot Grid
 ###############################################################################
 
 ## 1. Load Packages & Clear Environment
@@ -8,10 +9,10 @@ library(ggplot2)
 library(dplyr)
 library(tidyr)
 library(scales)
-library(patchwork)    # For wrap_plots(), plot_annotation()
+library(patchwork)    # For wrap_plots()
 library(fastshap)
 library(RColorBrewer)
-library(grid)         # For textGrob() if needed
+library(grid)         # For textGrob(), if needed
 library(colorspace)
 library(cluster)      # silhouette()
 library(factoextra)   # fviz_silhouette()
@@ -22,18 +23,28 @@ rm(list = ls())
 
 ## 3. Set working and output directories
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures"
+output_dir       <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures"
+final_models_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Models"
 
 ###############################################################################
-# 2. Load Data & Model
+# 4. Load Data & Model (from Final_Models)
 ###############################################################################
-load("FNConc_Yearly_rf_model2.RData")
-load("FNConc_Yearly_kept_drivers.RData")
-#load("FNConc_Yearly_numeric.RData")
-load("FNConc_Yearly_stream_ids.RData")
+load(file.path(final_models_dir, "FNConc_Yearly_rf_model2.RData"))
+rf_model2_FNConc <- rf_model2
+
+load(file.path(final_models_dir, "FNConc_Yearly_kept_drivers.RData"))
+kept_drivers_FNConc <- kept_drivers
+
+# (Optional) numeric data if needed:
+# load(file.path(final_models_dir, "FNConc_Yearly_numeric.RData"))
+# drivers_numeric_FNConc <- drivers_numeric
+
+load(file.path(final_models_dir, "FNConc_Yearly_stream_ids.RData"))
+drivers_df <- drivers_df
 
 # Load precomputed SHAP values
-load("FNConc_Yearly_shap_values_new.RData")
+load(file.path(final_models_dir, "FNConc_Yearly_shap_values_new.RData"))
+shap_values_FNConc <- shap_values_FNConc
 
 drivers_full <- read.csv("harmonization_files/All_Drivers_Harmonized_Yearly_FNConc_FNYield_5_years.csv")
 
@@ -45,40 +56,26 @@ drivers_combined <- drivers_df %>%
   ) %>%
   filter(!is.na(major_rock))
 
-
 ###############################################################################
-# 3. Consolidate Lithology Categories & Manually Assign Clusters
+# 5. Consolidate Lithology Categories & Manually Assign Clusters
 ###############################################################################
 drivers_numeric_consolidated_lith <- drivers_combined %>%
   # Remove rows with missing, blank, or "0" in major_rock
   filter(!is.na(major_rock) & trimws(major_rock) != "" & major_rock != "0") %>%
   mutate(
-    # Group various string combos into one of four categories
+    # Group string combos into categories
     consolidated_rock = case_when(
+      major_rock %in% c("volcanic", "volcanic; plutonic") ~ "Volcanic",
       major_rock %in% c(
-        "volcanic", 
-        "volcanic; plutonic"
-      ) ~ "Volcanic",
-      major_rock %in% c(
-        "sedimentary", 
+        "sedimentary",
         "volcanic; sedimentary; carbonate_evaporite",
-        "sedimentary; carbonate_evaporite", 
+        "sedimentary; carbonate_evaporite",
         "sedimentary; plutonic; carbonate_evaporite; metamorphic",
         "sedimentary; metamorphic"
       ) ~ "Sedimentary",
-      major_rock %in% c(
-        "plutonic", 
-        "plutonic; metamorphic",
-        "volcanic; plutonic; metamorphic"
-      ) ~ "Plutonic",
-      major_rock %in% c(
-        "metamorphic", 
-        "carbonate_evaporite; metamorphic"
-      ) ~ "Metamorphic",
-      major_rock %in% c(
-        "carbonate_evaporite",
-        "volcanic; carbonate_evaporite"
-      ) ~ "Carbonate Evaporite"
+      major_rock %in% c("plutonic", "plutonic; metamorphic", "volcanic; plutonic; metamorphic") ~ "Plutonic",
+      major_rock %in% c("metamorphic", "carbonate_evaporite; metamorphic") ~ "Metamorphic",
+      major_rock %in% c("carbonate_evaporite", "volcanic; carbonate_evaporite") ~ "Carbonate Evaporite"
     )
   ) %>%
   mutate(
@@ -100,34 +97,28 @@ drivers_numeric_consolidated_lith <- drivers_combined %>%
     )
   )
 
-# Ensure it's a tibble
 drivers_numeric_consolidated_lith <- as_tibble(drivers_numeric_consolidated_lith)
 
-# Count rows per cluster
-row_counts <- dplyr::count(drivers_numeric_consolidated_lith, final_cluster, name = "total_rows")
+# Summary table (fixed count syntax)
+row_counts <- drivers_numeric_consolidated_lith %>%
+  count(final_cluster) %>%
+  rename(total_rows = n)
 
-# Count unique Stream_IDs per cluster
 stream_counts <- drivers_numeric_consolidated_lith %>%
-  dplyr::group_by(final_cluster) %>%
-  dplyr::summarise(
-    unique_stream_ids = dplyr::n_distinct(Stream_ID),
-    .groups = "drop"
-  )
+  group_by(final_cluster) %>%
+  summarise(unique_stream_ids = n_distinct(Stream_ID), .groups = "drop")
 
-# Join counts for summary
-summary_table <- dplyr::left_join(row_counts, stream_counts, by = "final_cluster")
+summary_table <- left_join(row_counts, stream_counts, by = "final_cluster")
 print(summary_table)
 
 ###############################################################################
-# 4. Prepare Data for Further Analysis (Single Global Scaling)
+# 6. Prepare Data for Further Analysis (Global Scaling)
 ###############################################################################
-# Identify numeric columns to scale (exclude "cluster" if it exists)
 numeric_cols <- setdiff(
-  names(dplyr::select(drivers_numeric_consolidated_lith, where(is.numeric))),
+  names(select(drivers_numeric_consolidated_lith, where(is.numeric))),
   "cluster"
 )
 
-# Scale all numeric columns across the entire dataset
 scaled_data <- drivers_numeric_consolidated_lith %>%
   mutate(
     across(
@@ -137,48 +128,56 @@ scaled_data <- drivers_numeric_consolidated_lith %>%
   )
 
 ###############################################################################
-# 5. Define Cluster Colors (Using New Naming & Order)
+# 7. Define Cluster Colors (Using New Naming & Order)
 ###############################################################################
 my_cluster_colors <- c(
-  "Volcanic"            = "#AC7B32",  
-  "Sedimentary"         = "#579C8E",  
+  "Volcanic"            = "#AC7B32",
+  "Sedimentary"         = "#579C8E",
   "Mixed Sedimentary"   = "#89C8A0",
   "Plutonic"            = "#8D9A40",
-  "Metamorphic"         = "#C26F86",  
-  "Carbonate Evaporite" = "#5E88B0"   
+  "Metamorphic"         = "#C26F86",
+  "Carbonate Evaporite" = "#5E88B0"
 )
 
 my_cluster_colors_lighter <- sapply(my_cluster_colors, function(x) lighten(x, amount = 0.3))
 
 ###############################################################################
-# 6. Create Long-format Data for Box Plots (exclude FNConc & rocks*)
+# 8. Create Long-format Data for Box Plots 
+#    (exclude FNConc & anything starting with "rocks")
+#    BUT recode "evapotrans" → "ET" *before* factoring
 ###############################################################################
 long_data <- scaled_data %>%
-  dplyr::select(-major_rock, -consolidated_rock, -major_land, -Stream_ID, -Year) %>%
+  select(-major_rock, -consolidated_rock, -major_land, -Stream_ID, -Year) %>%
   pivot_longer(
-    cols       = -final_cluster,
-    names_to   = "Driver",
-    values_to  = "Value"
+    cols      = -final_cluster,
+    names_to  = "Driver",
+    values_to = "Value"
   ) %>%
-  # FILTER OUT "FNConc" and anything starting with "rocks"
+  # Drop FNConc and all "rocks_..." columns
   filter(
     Driver != "FNConc",
     !grepl("^rocks", Driver, ignore.case = TRUE)
   ) %>%
+  # FIRST: recode the raw "evapotrans" text to "ET"
   mutate(
-    # First convert "Driver" to a factor with a specified order (including "recession_slope")
+    Driver = ifelse(Driver == "evapotrans", "ET", Driver)
+  ) %>%
+  # THEN turn Driver into a factor that actually includes "ET"
+  mutate(
     Driver = factor(
       Driver,
       levels = c(
-        "NOx", "P", "precip", "temp", "snow_cover", "npp", "evapotrans",
-        "greenup_day", "permafrost", "elevation", "RBFI", "basin_slope",
+        "NOx", "P", "precip", "temp", "snow_cover", "npp", "ET",        # <-- "ET" here
+        "greenup_day", "permafrost", "elevation", "RBI", "basin_slope",
         "recession_slope",
         "land_Bare", "land_Cropland", "land_Forest",
         "land_Grassland_Shrubland", "land_Ice_Snow", "land_Impervious",
         "land_Salt_Water", "land_Tidal_Wetland", "land_Water", "land_Wetland_Marsh"
       )
-    ),
-    # Then recode to human-readable labels, leaving anything not specified unchanged
+    )
+  ) %>%
+  # Finally, recode the other names to human‐readable text
+  mutate(
     Driver = fct_recode(
       Driver,
       "Nitrate"                     = "NOx",
@@ -187,11 +186,11 @@ long_data <- scaled_data %>%
       "Temperature"                 = "temp",
       "Snow Cover"                  = "snow_cover",
       "NPP"                         = "npp",
-      "ET"                          = "evapotrans",
+      # "ET" is already ET, so no need to recode that one
       "Greenup Day"                 = "greenup_day",
       "Permafrost"                  = "permafrost",
       "Elevation"                   = "elevation",
-      "Flashiness Index"            = "RBFI",
+      "Flashiness Index"            = "RBI",
       "Basin Slope"                 = "basin_slope",
       "Recession Curve Slope"       = "recession_slope",
       "Land: Bare"                  = "land_Bare", 
@@ -204,15 +203,14 @@ long_data <- scaled_data %>%
       "Land: Tidal Wetland"         = "land_Tidal_Wetland", 
       "Land: Water Body"            = "land_Water", 
       "Land: Wetland Marsh"         = "land_Wetland_Marsh"
-      # any level not mentioned here remains unchanged
     )
   )
 
-###############################################################################
-# 7. Generate Box Plots for Each Cluster (Drivers) using final_cluster
-###############################################################################
 unique_clusters <- levels(long_data$final_cluster)
 
+###############################################################################
+# 9. Generate Individual Box Plots (for reference if needed)
+###############################################################################
 cluster_boxplots <- lapply(unique_clusters, function(cl) {
   p <- long_data %>%
     filter(final_cluster == cl) %>%
@@ -234,18 +232,18 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
 })
 
 ###############################################################################
-# 8. Box Plot of FNConc by Manually Assigned Cluster (Unscaled FNConc)
+# 10. Box Plot of FNConc by Manually Assigned Cluster (Unscaled FNConc)
 ###############################################################################
-df <- drivers_numeric_consolidated_lith %>%
+df_unscaled <- drivers_numeric_consolidated_lith %>%
   dplyr::select(Stream_ID, Year, FNConc, final_cluster)
 
 write.csv(
-  df,
+  df_unscaled,
   file = file.path(output_dir, "FNConc_Stream_ID_Year_Cluster.csv"),
   row.names = FALSE
 )
 
-p_FNConc <- ggplot(df, aes(x = final_cluster, y = FNConc, fill = final_cluster)) +
+p_FNConc <- ggplot(df_unscaled, aes(x = final_cluster, y = FNConc, fill = final_cluster)) +
   geom_boxplot(outlier.shape = NA, color = "black") +
   geom_jitter(aes(color = final_cluster), width = 0.3, alpha = 0.4, size = 2) +
   scale_fill_manual(values = my_cluster_colors_lighter) +
@@ -258,13 +256,13 @@ p_FNConc <- ggplot(df, aes(x = final_cluster, y = FNConc, fill = final_cluster))
   )
 
 ###############################################################################
-# 9. Silhouette Plot with Factoextra (Remove x-axis elements)
+# 11. Silhouette Plot with Factoextra (Remove x-axis elements)
 ###############################################################################
 sil_obj <- silhouette(
   as.numeric(scaled_data$final_cluster),
   dist(scaled_data %>% dplyr::select(
-    rocks_volcanic, rocks_sedimentary, 
-    rocks_carbonate_evaporite, rocks_metamorphic, 
+    rocks_volcanic, rocks_sedimentary,
+    rocks_carbonate_evaporite, rocks_metamorphic,
     rocks_plutonic
   ))
 )
@@ -274,15 +272,15 @@ p_sil <- fviz_silhouette(
   sil_obj,
   label   = FALSE,
   palette = c(
-    "#AC7B32",  
-    "#579C8E",  
+    "#AC7B32",
+    "#579C8E",
     "#89C8A0",
     "#8D9A40",
-    "#C26F86",  
-    "#5E88B0"   
+    "#C26F86",
+    "#5E88B0"
   )
-)
-p_sil <- p_sil + guides(color = "none") +
+) +
+  guides(color = "none") +
   scale_fill_manual(
     name   = "Cluster",
     values = c(
@@ -311,48 +309,43 @@ p_sil <- p_sil + guides(color = "none") +
   ) +
   theme_classic(base_size = 16) +
   theme(
-    axis.text.x  = element_blank(),
-    axis.ticks.x = element_blank(),
-    axis.title.x = element_blank(),
-    legend.title = element_blank(),
-    plot.title   = element_blank(),
+    axis.text.x   = element_blank(),
+    axis.ticks.x  = element_blank(),
+    axis.title.x  = element_blank(),
+    legend.title  = element_blank(),
+    plot.title    = element_blank(),
     plot.subtitle = element_blank()
   )
 
 print(p_sil)
 
 ###############################################################################
-# ***** Define the function plot_mean_abs_shap for SHAP bar plots *****
+# 12. Define function plot_mean_abs_shap for SHAP bar plots
 ###############################################################################
 plot_mean_abs_shap <- function(cluster_id, shap_values_FNConc, full_scaled) {
-  # Subset SHAP rows for this cluster
   cluster_indices <- which(full_scaled$final_cluster == cluster_id)
   shap_cluster    <- shap_values_FNConc[cluster_indices, , drop = FALSE]
   
-  # Compute mean(|SHAP|) per feature
   mean_abs_shap <- colMeans(abs(shap_cluster), na.rm = TRUE)
   
-  # Build a data frame of feature names + their mean(|SHAP|)
   df_shap <- data.frame(
     feature          = names(mean_abs_shap),
     mean_abs_shapval = as.numeric(mean_abs_shap),
     stringsAsFactors = FALSE
   ) %>%
     arrange(desc(mean_abs_shapval)) %>%
-    # REMOVE "FNConc" and anything starting with "rocks"
     filter(
       feature != "FNConc",
       !grepl("^rocks", feature, ignore.case = TRUE)
     )
   
-  # FIXED: Use the same recoding approach
   feature_recode_map <- c(
     "NOx" = "Nitrate", "P" = "P", "precip" = "Precip", "temp" = "Temperature",
     "snow_cover" = "Snow Cover", "npp" = "NPP", "evapotrans" = "ET",
     "greenup_day" = "Greenup Day", "permafrost" = "Permafrost",
-    "elevation" = "Elevation", "RBFI" = "Flashiness Index", "RBI" = "Flashiness Index",
+    "elevation" = "Elevation", "RBI" = "Flashiness Index",
     "basin_slope" = "Basin Slope", "recession_slope" = "Recession Curve Slope",
-    "land_Bare" = "Land: Bare", "land_Cropland" = "Land: Cropland", 
+    "land_Bare" = "Land: Bare", "land_Cropland" = "Land: Cropland",
     "land_Forest" = "Land: Forest", "land_Grassland_Shrubland" = "Land: Grassland & Shrubland",
     "land_Ice_Snow" = "Land: Ice & Snow", "land_Impervious" = "Land: Impervious",
     "land_Salt_Water" = "Land: Salt Water", "land_Tidal_Wetland" = "Land: Tidal Wetland",
@@ -369,7 +362,6 @@ plot_mean_abs_shap <- function(cluster_id, shap_values_FNConc, full_scaled) {
       feature_recoded = factor(feature_recoded, levels = feature_recoded)
     )
   
-  # Draw the horizontal bar-plot
   ggplot(df_shap, aes(x = reorder(feature_recoded, mean_abs_shapval), y = mean_abs_shapval)) +
     geom_bar(stat = "identity", fill = my_cluster_colors[[as.character(cluster_id)]], alpha = 0.8) +
     coord_flip() +
@@ -383,196 +375,164 @@ plot_mean_abs_shap <- function(cluster_id, shap_values_FNConc, full_scaled) {
     )
 }
 
-
 ###############################################################################
-# 10. SHAP Dot Plots (Remove Titles from Each Dot Plot; include recession_slope)
+# 13. SHAP Dot Plots: Compute faceted data for all clusters
 ###############################################################################
 full_scaled <- scaled_data
 
 global_min <- min(full_scaled %>% dplyr::select(where(is.numeric)), na.rm = TRUE)
 global_max <- max(full_scaled %>% dplyr::select(where(is.numeric)), na.rm = TRUE)
 
-generate_shap_dot_plot_obj <- function(cluster_name, shap_values_FNConc, full_scaled,
-                                       global_shap_min, global_shap_max) {
-  # (1) Subset to this cluster
-  cluster_indices <- which(full_scaled$final_cluster == cluster_name)
-  cluster_data    <- full_scaled[cluster_indices, , drop = FALSE] %>%
-    dplyr::select(where(is.numeric))
-  cluster_data$id <- seq_len(nrow(cluster_data))
-  
-  # (2) Pivot feature values long
-  cluster_long <- cluster_data %>%
-    pivot_longer(
-      cols      = -id,
-      names_to  = "feature",
-      values_to = "feature_value"
-    )
-  
-  # (3) Pivot SHAP values long - FIXED: Make sure column names match
-  shap_values_FNConc_df <- as.data.frame(shap_values_FNConc)[cluster_indices, , drop = FALSE] %>%
-    mutate(id = seq_len(nrow(.)))
-  
-  # DEBUG: Print column names to verify
-  cat("SHAP columns:", colnames(shap_values_FNConc_df), "\n")
-  cat("Cluster data columns:", colnames(cluster_data), "\n")
-  
-  shap_long <- shap_values_FNConc_df %>%
-    pivot_longer(
-      cols      = -id,
-      names_to  = "feature",
-      values_to = "shap_value"
-    ) %>%
-    left_join(cluster_long, by = c("id", "feature"))
-  
-  # (4) Remove any "rocks…" features and FNConc
-  shap_long <- shap_long %>%
-    filter(
-      !grepl("^rocks", feature, ignore.case = TRUE),
-      feature != "FNConc"
-    )
-  
-  # DEBUG: Check for NAs before recoding
-  cat("Features before recoding:", unique(shap_long$feature), "\n")
-  cat("Any NAs in shap_value?", any(is.na(shap_long$shap_value)), "\n")
-  cat("Any NAs in feature_value?", any(is.na(shap_long$feature_value)), "\n")
-  
-  # (5) Compute overall importance ordering
-  overall_feature_importance <- shap_long %>%
-    group_by(feature) %>%
-    summarize(mean_abs_shap = mean(abs(shap_value), na.rm = TRUE), .groups = "drop") %>%
-    arrange(desc(mean_abs_shap))
-  
-  # (6) Turn feature into a factor in that order
-  shap_long <- shap_long %>%
-    mutate(
-      feature = factor(feature, levels = rev(overall_feature_importance$feature))
-    )
-  
-  # ===== FIXED RECODING BLOCK =====
-  # Create a named vector for recoding
-  feature_recode_map <- c(
-    # Climate/Environmental
-    "NOx" = "Nitrate",
-    "P" = "P",
-    "precip" = "Precip", 
-    "temp" = "Temperature",
-    "snow_cover" = "Snow Cover",
-    "npp" = "NPP",
-    "evapotrans" = "ET",
-    "greenup_day" = "Greenup Day",
-    "permafrost" = "Permafrost",
-    
-    # Topographic/Hydrologic
-    "elevation" = "Elevation",
-    "RBFI" = "Flashiness Index",  # Note: Check if this is RBFI or RBI in your data!
-    "RBI" = "Flashiness Index",   # Alternative name
-    "basin_slope" = "Basin Slope",
-    "recession_slope" = "Recession Curve Slope",
-    
-    # Land Cover
-    "land_Bare" = "Land: Bare",
-    "land_Cropland" = "Land: Cropland", 
-    "land_Forest" = "Land: Forest",
-    "land_Grassland_Shrubland" = "Land: Grassland & Shrubland",
-    "land_Ice_Snow" = "Land: Ice & Snow",
-    "land_Impervious" = "Land: Impervious",
-    "land_Salt_Water" = "Land: Salt Water",
-    "land_Tidal_Wetland" = "Land: Tidal Wetland",
-    "land_Water" = "Land: Water Body",
-    "land_Wetland_Marsh" = "Land: Wetland Marsh"
+# 13a. Identify features present in both shap and scaled_data
+shap_feats   <- colnames(shap_values_FNConc)
+scaled_feats <- colnames(full_scaled)[sapply(full_scaled, is.numeric)]
+common_feats <- intersect(shap_feats, scaled_feats)
+
+# 13b. Build a combined data frame of numeric feature values
+cluster_data_all <- full_scaled[, common_feats, drop = FALSE] %>%
+  as.data.frame() %>%
+  mutate(id = seq_len(nrow(.)))
+
+cluster_long_all <- cluster_data_all %>%
+  pivot_longer(
+    cols      = -id,
+    names_to  = "feature",
+    values_to = "feature_value"
   )
-  
-  # Apply recoding using ifelse to avoid NAs
-  shap_long <- shap_long %>%
-    mutate(
-      feature_recoded = ifelse(
-        as.character(feature) %in% names(feature_recode_map),
-        feature_recode_map[as.character(feature)],
-        as.character(feature)  # Keep original name if not in map
-      )
-    ) %>%
-    # Reorder based on importance but with new names
-    mutate(
-      feature_recoded = factor(feature_recoded, 
-                               levels = rev(unique(feature_recoded)))
+
+# 13c. Build a combined data frame of SHAP values
+shap_df_all <- as.data.frame(shap_values_FNConc)[, common_feats, drop = FALSE] %>%
+  mutate(id = seq_len(nrow(.)))
+
+shap_long_all <- shap_df_all %>%
+  pivot_longer(
+    cols      = -id,
+    names_to  = "feature",
+    values_to = "shap_value"
+  ) %>%
+  left_join(cluster_long_all, by = c("id", "feature"))
+
+# 13d. Drop "FNConc" but keep all rock columns
+shap_long_all <- shap_long_all %>%
+  filter(feature != "FNConc")
+
+# 13e. Recode feature names for plotting
+feature_recode_map <- c(
+  "NOx"                      = "Nitrate",
+  "P"                        = "P",
+  "precip"                   = "Precip",
+  "temp"                     = "Temperature",
+  "snow_cover"               = "Snow Cover",
+  "npp"                      = "NPP",
+  "evapotrans"               = "ET",
+  "greenup_day"              = "Greenup Day",
+  "permafrost"               = "Permafrost",
+  "elevation"                = "Elevation",
+  "RBI"                      = "Flashiness Index",
+  "basin_slope"              = "Basin Slope",
+  "recession_slope"          = "Recession Curve Slope",
+  "land_Bare"                = "Land: Bare",
+  "land_Cropland"            = "Land: Cropland",
+  "land_Forest"              = "Land: Forest",
+  "land_Grassland_Shrubland" = "Land: Grassland & Shrubland",
+  "land_Ice_Snow"            = "Land: Ice & Snow",
+  "land_Impervious"          = "Land: Impervious",
+  "land_Salt_Water"          = "Land: Salt Water",
+  "land_Tidal_Wetland"       = "Land: Tidal Wetland",
+  "land_Water"               = "Land: Water Body",
+  "land_Wetland_Marsh"       = "Land: Wetland Marsh"
+)
+
+shap_long_all <- shap_long_all %>%
+  mutate(
+    feature_recoded = ifelse(
+      feature %in% names(feature_recode_map),
+      feature_recode_map[feature],
+      feature
     )
-  
-  # DEBUG: Check recoding results
-  cat("Original vs Recoded features:\n")
-  print(data.frame(
-    original = levels(shap_long$feature),
-    recoded = levels(shap_long$feature_recoded)
-  ))
-  
-  # (7) Draw the dot plot using the recoded feature names
-  ggplot(shap_long, aes(x = shap_value, y = feature_recoded, fill = feature_value)) +
-    geom_point(
-      alpha = 0.6, size = 3, shape = 21, stroke = 0.1, color = "black"
-    ) +
-    scale_fill_gradientn(
-      colors = c("white", "gray", "black"),
-      name   = NULL,
-      limits = c(global_shap_min, global_shap_max)
-    ) +
-    labs(x = "SHAP Value", y = NULL, title = NULL) +
-    geom_vline(xintercept = 0, linetype = "dashed", color = "grey30") +
-    scale_x_continuous(limits = c(global_shap_min, global_shap_max)) +
-    theme_classic() +
-    theme(
-      axis.title      = element_text(size = 14, face = "bold"),
-      axis.text       = element_text(size = 12),
-      legend.text     = element_text(size = 12),
-      legend.title    = element_text(size = 14),
-      legend.key.size = unit(1.5, "lines"),
-      plot.title      = element_blank()
-    )
-}
-
-
-global_shap_min <- min(shap_values_FNConc, na.rm = TRUE)
-global_shap_max <- max(shap_values_FNConc, na.rm = TRUE)
-
-dot_plots <- lapply(unique_clusters, function(cl) {
-  generate_shap_dot_plot_obj(
-    cl,
-    shap_values_FNConc,
-    full_scaled,
-    global_shap_min,
-    global_shap_max
+  ) %>%
+  mutate(
+    feature_recoded = factor(feature_recoded, levels = unique(feature_recoded))
   )
-})
 
-# Remove x-axis elements from all but the bottom-most dot plot
-for (i in seq_along(dot_plots)) {
-  if (i < length(dot_plots)) {
-    dot_plots[[i]] <- dot_plots[[i]] +
-      theme(axis.title.x = element_blank(), axis.text.x = element_blank())
-  }
-}
+# 13f. Attach the cluster label to each row by ID
+shap_long_all$final_cluster <- full_scaled$final_cluster[shap_long_all$id]
 
 ###############################################################################
-# 11. Combine Box Plots & SHAP Dot Plots with patchwork (No extra titles)
+# 14. FACETED BOX‐PLOT: all clusters in one plot, strip labels on the left
 ###############################################################################
-left_col  <- wrap_plots(cluster_boxplots, ncol = 1) & labs(y = "Scaled Value")
-right_col <- wrap_plots(dot_plots, ncol = 1)
+p_box_all <- ggplot(long_data, aes(x = Driver, y = Value, fill = final_cluster)) +
+  geom_boxplot() +
+  scale_fill_manual(values = my_cluster_colors_lighter, guide = "none") +
+  facet_grid(final_cluster ~ ., switch = "y", scales = "free_y") +
+  scale_y_continuous(limits = c(0, 1)) +
+  labs(x = NULL, y = NULL) +
+  theme_classic(base_size = 14) +
+  theme(
+    strip.placement       = "outside",
+    strip.text.y.left     = element_text(angle = 0, size = 14, face = "bold", vjust = 0.5),
+    panel.spacing.y       = unit(0.5, "lines"),
+    strip.background      = element_blank(),
+    strip.text.x          = element_blank(),
+    axis.text.x           = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 12),
+    axis.text.x.top       = element_blank(),
+    axis.ticks.x          = element_blank()
+  ) +
+  # Hide x‐axis tick marks for all but the bottom facet:
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
 
-final_combined_plot <- left_col | right_col +
-  plot_layout(guides = "collect") +
-  plot_annotation(
-    tag_levels = "A",
-    title = NULL,
-    caption = NULL,
-    theme = theme(
-      plot.tag          = element_text(size = 30, face = "bold"),
-      plot.tag.position = "topleft"
-    )
+# Add back bottom‐row x-axis driver names using geom_text
+bottom_clust <- unique_clusters[length(unique_clusters)]
+p_box_all <- p_box_all +
+  geom_text(
+    data = long_data %>% filter(final_cluster == bottom_clust),
+    aes(x = Driver, y = 0, label = Driver),
+    angle = 90, hjust = 1, vjust = 0.5, size = 3
+  ) +
+  labs(x = NULL)
+
+###############################################################################
+# 15. FACETED DOT‐PLOT: all clusters in one plot, strip labels on the left
+###############################################################################
+p_dot_all <- ggplot(shap_long_all, aes(x = shap_value, y = feature_recoded, fill = feature_value)) +
+  geom_point(alpha = 0.6, size = 2, shape = 21, color = "black") +
+  scale_fill_gradientn(
+    colors = c("white", "gray", "black"),
+    name   = NULL,
+    limits = c(global_min, global_max)
+  ) +
+  facet_grid(final_cluster ~ ., switch = "y", scales = "free_y") +
+  labs(x = "SHAP Value", y = NULL) +
+  theme_classic(base_size = 14) +
+  theme(
+    strip.placement       = "outside",
+    strip.text.y.left     = element_text(angle = 0, size = 14, face = "bold", vjust = 0.5),
+    panel.spacing.y       = unit(0.5, "lines"),
+    strip.background      = element_blank(),
+    strip.text.x          = element_blank(),
+    axis.text.x           = element_blank(),
+    axis.ticks.x          = element_blank(),
+    axis.text.y           = element_text(size = 12)
+  ) +
+  # Re‐enable x‐axis ticks only for the bottom facet
+  theme(
+    axis.text.x  = element_text(size = 12),
+    axis.title.x = element_text(size = 14, face = "bold")
   )
 
 ###############################################################################
-# 12. Save Final Figures
+# 16. Combine Faceted Box & Dot Plots Side‐by‐Side
+###############################################################################
+final_combined_plot <- p_box_all | p_dot_all
+
+###############################################################################
+# 17. Save Combined Faceted Figure
 ###############################################################################
 ggsave(
-  filename = "Fig4_FNConc_Cluster_Boxplot_SHAP_DotPlots.png",
+  filename = "Fig4_FNConc_Cluster_Boxplot_SHAP_DotPlots_faceted.png",
   plot     = final_combined_plot,
   width    = 16,
   height   = 18,
@@ -581,6 +541,9 @@ ggsave(
 )
 print(final_combined_plot)
 
+###############################################################################
+# 18. Save Individual Figures (Unchanged)
+###############################################################################
 ggsave(
   filename = "Fig5_FNConc_Yearly_Clusters.png",
   plot     = p_FNConc,
@@ -601,7 +564,9 @@ ggsave(
 )
 print(p_sil)
 
-# 13. Create and save SHAP bar‐plot grid
+###############################################################################
+# 19. Create and save SHAP bar‐plot grid
+###############################################################################
 unique_clusters_for_shap <- levels(full_scaled$final_cluster)
 plot_list_bars <- lapply(unique_clusters_for_shap, function(cl) {
   plot_mean_abs_shap(cl, shap_values_FNConc, full_scaled)
@@ -617,14 +582,15 @@ ggsave(
 )
 print(wrap_plots(plot_list_bars, ncol = 2))
 
-# 14. Save workspace objects if needed
+###############################################################################
+# 20. Save workspace objects if needed
+###############################################################################
 save(
   full_scaled,
   cluster_boxplots,
   shap_values_FNConc,
-  global_shap_min,
-  global_shap_max,
+  global_min,
+  global_max,
   plot_mean_abs_shap,
-  generate_shap_dot_plot_obj,
   file = "FNConc_HierClust_Workflow_Objects.RData"
 )

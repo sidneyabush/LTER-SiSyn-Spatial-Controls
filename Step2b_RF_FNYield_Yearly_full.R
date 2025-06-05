@@ -336,9 +336,21 @@ write.csv(
   file = "FNYield_Yearly_stability_frequencies.csv", row.names = FALSE
 )
 
-# Save model and required objects for SHAP analysis
-save(rf_model2, file = "FNYield_Yearly_rf_model2.RData")
-kept_drivers <- drivers_numeric[, colnames(drivers_numeric) %in% result_stability$features]
-save(kept_drivers, file = "FNYield_Yearly_kept_drivers.RData")
-save(drivers_df, file = "FNYield_Yearly_stream_ids.RData")
-save(drivers_numeric, file = "FNYield_Yearly_numeric.RData")
+# Make sure output_dir is defined and exists
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Models"
+dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
+# … later, when saving models and objects:
+save(rf_model2,
+     file = file.path(output_dir, "FNYield_Yearly_rf_model2.RData"))
+
+save(kept_drivers,
+     file = file.path(output_dir, "FNYield_Yearly_kept_drivers.RData"))
+
+save(drivers_df,
+     file = file.path(output_dir, "FNYield_Yearly_stream_ids.RData"))
+
+save(drivers_numeric,
+     file = file.path(output_dir, "FNYield_Yearly_numeric.RData"))
+
+
