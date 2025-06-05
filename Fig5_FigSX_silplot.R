@@ -1,6 +1,9 @@
 ###############################################################################
-# COMBINED WORKFLOW: FNConc & FNYield Clusters → CSV Exports, Box‐Plot & Silhouette
+# COMBINED WORKFLOW: FNConc & FNYield Clusters → CSV Exports, RData Saves,
+#                   Box‐Plot & Silhouette
+#
 #   - Exports unscaled data CSVs for both FNConc and FNYield
+#   - Saves workflow objects for FNConc and FNYield into "Final_Models/"
 #   - Builds one silhouette plot (identical clusters)
 #   - Stacks FNConc (top) / FNYield (bottom) box‐plots, with x‐axis only on bottom
 ###############################################################################
@@ -15,13 +18,14 @@ library(patchwork)    # For wrapping/stacking plots
 library(cluster)      # silhouette()
 library(factoextra)   # fviz_silhouette()
 library(colorspace)   # lighten()
-library(forcats)      # fct_recode() if needed for SHAP later
+library(forcats)      # fct_recode() if needed later
 
 ## 2. Set Working & Output Directories (change paths as needed)
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 output_dir       <- "Final_Figures"
 final_models_dir <- "Final_Models"
 dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+dir.create(final_models_dir, showWarnings = FALSE, recursive = TRUE)
 
 ## 3. Define Cluster‐Color Palettes (shared by both FNConc & FNYield)
 my_cluster_colors <- c(
@@ -36,7 +40,8 @@ my_cluster_colors_lighter <- sapply(my_cluster_colors, function(x) lighten(x, am
 
 
 ###############################################################################
-# A. PROCESS FNConc DATA → CSV, p_FNConc (box‐plot), and p_sil (silhouette)
+# A. PROCESS FNConc DATA → CSV, Save FNConc Workflow Objects, p_FNConc (box‐plot),
+#                          and p_sil (silhouette)
 ###############################################################################
 
 ## A1. Load FNConc RF Model & Drivers‐of‐Interest Data
@@ -61,7 +66,11 @@ drivers_combined_FNConc <- drivers_df_FNConc %>%
     drivers_full %>% dplyr::select(Stream_ID, Year, major_rock, major_land),
     by = c("Stream_ID", "Year")
   ) %>%
-  dplyr::filter(!is.na(major_rock) & trimws(major_rock) != "" & major_rock != "0")
+  dplyr::filter(
+    !is.na(major_rock) &
+      trimws(major_rock) != "" &
+      major_rock != "0"
+  )
 
 ## A4. Consolidate Lithology Categories & Assign “final_cluster”
 drivers_numeric_consolidated_lith_FNConc <- drivers_combined_FNConc %>%
@@ -190,9 +199,19 @@ p_sil <- fviz_silhouette(
     plot.subtitle = element_blank()
   )
 
+## A9. Assign and Save FNConc Workflow Objects into Final_Models/
+full_scaled <- scaled_data
+
+save(
+  full_scaled,
+  shap_values_FNConc,
+  drivers_numeric_consolidated_lith_FNConc,
+  file = file.path(final_models_dir, "FNConc_HierClust_Workflow_Objects.RData")
+)
+
 
 ###############################################################################
-# B. PROCESS FNYield DATA → CSV and p_FNYield (box‐plot)
+# B. PROCESS FNYield DATA → CSV, Save FNYield Workflow Objects, and p_FNYield (box‐plot)
 ###############################################################################
 
 ## B1. Load FNYield RF Model & Drivers‐of‐Interest Data
@@ -214,7 +233,11 @@ drivers_combined_FNYield <- drivers_df_FNYield %>%
     drivers_full %>% dplyr::select(Stream_ID, Year, major_rock, major_land),
     by = c("Stream_ID", "Year")
   ) %>%
-  dplyr::filter(!is.na(major_rock) & trimws(major_rock) != "" & major_rock != "0")
+  dplyr::filter(
+    !is.na(major_rock) &
+      trimws(major_rock) != "" &
+      major_rock != "0"
+  )
 
 ## B3. Consolidate Lithology Categories & Assign “final_cluster”
 drivers_numeric_consolidated_lith_FNYield <- drivers_combined_FNYield %>%
@@ -275,6 +298,13 @@ p_FNYield <- ggplot(df_unscaled_FNYield,
     legend.position = "none",
     axis.text.x     = element_text(angle = 45, hjust = 1)  # x‐axis only on bottom plot
   )
+
+## B6. Save FNYield Workflow Objects into Final_Models/
+save(
+  shap_values_FNYield,
+  drivers_numeric_consolidated_lith_FNYield,
+  file = file.path(final_models_dir, "FNYield_HierClust_Workflow_Objects.RData")
+)
 
 
 ###############################################################################

@@ -24,32 +24,44 @@ theme_set(
 # Clear environment
 rm(list = ls())
 
-# Set working directory
+## 2. Set Working & Output Directories (change paths as needed)
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
+output_dir       <- "Final_Figures"
+final_models_dir <- "Final_Models"
+dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+dir.create(final_models_dir, showWarnings = FALSE, recursive = TRUE)
 
 # ------------------------- FNConc Data (Concentration) -------------------------
-# Load required FNConc data and model
-load("FNConc_Yearly_rf_model2_full_new.RData")
-rf_model2_FNConc <- rf_model2
-load("FNConc_Yearly_kept_drivers__full_new.RData")
-kept_drivers_FNConc <- kept_drivers
-load("FNConc_Yearly_full_new.RData")
-drivers_numeric_FNConc <- drivers_numeric
-load("FNConc_Yearly_full_stream_ids_full_new.RData")  # if needed
-load("FNConc_Yearly_shap_values_new.RData")
-shap_values_FNConc <- shap_values_FNConc
+load(file.path(final_models_dir, "FNConc_Yearly_rf_model2.RData"))       # loads rf_model2
+rf_model2_FNConc       <- rf_model2
+
+load(file.path(final_models_dir, "FNConc_Yearly_kept_drivers.RData"))     # loads kept_drivers
+kept_drivers_FNConc    <- kept_drivers
+
+load(file.path(final_models_dir, "FNConc_Yearly_stream_ids.RData"))       # loads drivers_df
+drivers_df_FNConc      <- drivers_df
+
+load(file.path(final_models_dir, "FNConc_Yearly_shap_values_new.RData"))  # loads shap_values_FNConc
+shap_values_FNConc     <- shap_values_FNConc
+
+## A2. Load the full harmonized driver file (for lithology + land‐cover columns)
+drivers_full <- read.csv("harmonization_files/All_Drivers_Harmonized_Yearly_FNConc_FNYield_5_years.csv")
 
 # ------------------------- FNYield Data (Yield) -------------------------
-# Load required FNYield data and model
-load("FNYield_Yearly_rf_model2_full_new.RData")
-rf_model2_FNYield <- rf_model2
-load("FNYield_Yearly_kept_drivers_full_new.RData")
-kept_drivers_FNYield <- kept_drivers
-load("FNYield_Yearly_full_new.RData")
-drivers_numeric_FNYield <- drivers_numeric
-load("FNYield_Yearly_full_stream_ids_new.RData")  # if needed
-load("FNYield_Yearly_shap_values_new.RData")
-shap_values_FNYield <- shap_values_FNYield
+
+## B1. Load FNYield RF Model & Drivers‐of‐Interest Data
+load(file.path(final_models_dir, "FNYield_Yearly_rf_model2.RData"))      # loads rf_model2
+rf_model2_FNYield      <- rf_model2
+
+load(file.path(final_models_dir, "FNYield_Yearly_kept_drivers.RData"))   # loads kept_drivers
+kept_drivers_FNYield   <- kept_drivers
+
+load(file.path(final_models_dir, "FNYield_Yearly_stream_ids.RData"))     # loads drivers_df
+drivers_df_FNYield     <- drivers_df
+
+load(file.path(final_models_dir, "FNYield_Yearly_shap_values_new.RData")) # loads shap_values_FNYield
+shap_values_FNYield    <- shap_values_FNYield
+
 
 # Set global seed and output directory
 set.seed(123)
