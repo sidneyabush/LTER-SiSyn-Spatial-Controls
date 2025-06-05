@@ -1,5 +1,5 @@
 ###############################################################################
-# STREAMLINED WORKFLOW: FNConc Clusters → Unscaled Box‐Plot, Silhouette,
+# STREAMLINED WORKFLOW: FNConc Clusters -- Unscaled Box‐Plot, Silhouette,
 #                       & SHAP Bar‐Plot Grid (with Titles and Bottom‐Row X‐Axis)
 ###############################################################################
 
@@ -22,7 +22,6 @@ library(forcats)      # fct_recode()
 rm(list = ls())
 
 ## 3. Set working and output directories
-#    ←– Adjust these paths to your local machine
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 output_dir       <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures"
 final_models_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Models"

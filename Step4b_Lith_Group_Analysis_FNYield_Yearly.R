@@ -22,7 +22,6 @@ library(forcats)      # fct_recode()
 rm(list = ls())
 
 ## 3. Set working and output directories
-#    ←– Adjust these paths to your local machine
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 output_dir       <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures"
 final_models_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Models"
@@ -139,12 +138,12 @@ my_cluster_colors <- c(
 my_cluster_colors_lighter <- sapply(my_cluster_colors, function(x) lighten(x, amount = 0.3))
 
 ###############################################################################
-# 8. Box-Plot of Unscaled FNYield by Cluster (formerly “Fig 5”)
+# 8. Box‐Plot of Unscaled FNYield by Cluster
 ###############################################################################
 df_unscaled <- drivers_numeric_consolidated_lith %>%
   dplyr::select(Stream_ID, Year, FNYield, final_cluster)
 
-# Optionally save the CSV of unscaled data
+# Save the CSV of unscaled data (optional)
 write.csv(
   df_unscaled,
   file = file.path(output_dir, "FNYield_Stream_ID_Year_Cluster.csv"),
@@ -156,7 +155,7 @@ p_FNYield <- ggplot(df_unscaled, aes(x = final_cluster, y = FNYield, fill = fina
   geom_jitter(aes(color = final_cluster), width = 0.3, alpha = 0.4, size = 2) +
   scale_fill_manual(values = my_cluster_colors_lighter) +
   scale_color_manual(values = my_cluster_colors) +
-  labs(x = NULL, y = expression(DSi~Concentration~(mg~L^{-1}))) +
+  labs(x = NULL, y = expression(FNYield~(mg~L^{-1}))) +
   theme_classic(base_size = 16) +
   theme(
     legend.position = "none",
@@ -174,7 +173,7 @@ ggsave(
 print(p_FNYield)
 
 ###############################################################################
-# 9. Silhouette Plot with factoextra (formerly “Fig S”) 
+# 9. Silhouette Plot with factoextra
 ###############################################################################
 sil_obj <- silhouette(
   as.numeric(scaled_data$final_cluster),
@@ -267,8 +266,8 @@ plot_mean_abs_shap <- function(cluster_id, shap_values_FNYield, full_scaled) {
     stringsAsFactors = FALSE
   ) %>%
     arrange(desc(mean_abs_shapval)) %>%
+    # (No need to drop a “target” column since shap_values come only from predictors)
     filter(
-      feature != "FNYield",
       !grepl("^rocks", feature, ignore.case = TRUE)
     )
   
@@ -313,7 +312,7 @@ plot_mean_abs_shap <- function(cluster_id, shap_values_FNYield, full_scaled) {
   ggplot(df_shap, aes(x = reorder(feature_recoded, mean_abs_shapval), y = mean_abs_shapval)) +
     geom_bar(stat = "identity", fill = my_cluster_colors[[as.character(cluster_id)]], alpha = 0.8) +
     coord_flip() +
-    scale_y_continuous(limits = c(0, 1.3)) +
+    #scale_y_continuous(limits = c(0, 1.3)) +
     labs(
       x     = NULL,
       y     = "Mean Absolute SHAP Value",
@@ -333,10 +332,10 @@ plot_mean_abs_shap <- function(cluster_id, shap_values_FNYield, full_scaled) {
 full_scaled <- scaled_data
 unique_clusters_for_shap <- levels(full_scaled$final_cluster)
 
-# We will arrange the grid in 2 columns:
+# We will arrange the grid in 2 columns
 ncol_bars    <- 2
 n_total      <- length(unique_clusters_for_shap)
-bottom_index <- seq(n_total - ncol_bars + 1, n_total)  # e.g. if 6 clusters, bottom_index = 5,6
+bottom_index <- seq(n_total - ncol_bars + 1, n_total)  # indices of bottom‐row panels
 
 plot_list_bars <- lapply(seq_along(unique_clusters_for_shap), function(i) {
   cl <- unique_clusters_for_shap[i]
@@ -361,3 +360,16 @@ ggsave(
 )
 print(barplot_grid)
 
+###############################################################################
+# 12. Save workspace objects (if needed)
+###############################################################################
+save(
+  scaled_data,
+  shap_values_FNYield,
+  plot_mean_abs_shap,
+  file = "FNYield_HierClust_Workflow_NoFigure4.RData"
+)
+
+###############################################################################
+# END OF SCRIPT
+###############################################################################
