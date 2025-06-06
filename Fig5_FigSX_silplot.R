@@ -139,7 +139,7 @@ p_FNConc <- ggplot(df_unscaled_FNConc,
   geom_jitter(aes(color = final_cluster), width = 0.3, alpha = 0.4, size = 2) +
   scale_fill_manual(values = my_cluster_colors_lighter) +
   scale_color_manual(values = my_cluster_colors) +
-  labs(x = NULL, y = expression(DSi~Concentration~(mg~L^{-1}))) +
+  labs(x = NULL, y = expression(Concentration~(mg~L^{-1}))) +
   theme_classic(base_size = 16) +
   theme(
     legend.position = "none",
@@ -187,7 +187,7 @@ p_sil <- fviz_silhouette(
     vjust = -0.5
   ) +
   labs(x = NULL, y = "Silhouette Width") +
-  theme_classic(base_size = 16) +
+  theme_classic(base_size = 14) +
   theme(
     legend.position = "bottom",
     legend.direction = "horizontal",
@@ -292,7 +292,7 @@ p_FNYield <- ggplot(df_unscaled_FNYield,
   geom_jitter(aes(color = final_cluster), width = 0.3, alpha = 0.4, size = 2) +
   scale_fill_manual(values = my_cluster_colors_lighter) +
   scale_color_manual(values = my_cluster_colors) +
-  labs(x = NULL, y = expression(FNYield~(mg~L^{-1}))) +
+  labs(x = NULL, y = expression(Yield~(kg~km^{-2}~yr^{-1}))) +
   theme_classic(base_size = 16) +
   theme(
     legend.position = "none",
@@ -313,7 +313,11 @@ save(
 
 ## C1. Combine Box‐Plots: FNConc (top) / FNYield (bottom), with x‐axis only on bottom
 combined_conc <- p_FNConc / p_FNYield +
-  plot_annotation(tag_levels = "A")
+  plot_annotation(tag_levels = "A") & 
+  theme(
+    plot.tag         = element_text(size = 16),  # <-- make tags smaller
+    plot.tag.position = c(0.02, 0.98)             # optional: tweak tag position if desired
+  )
 
 ggsave(
   filename = "Fig5_Concentration_FNConc_FNYield_Combined.png",
@@ -323,6 +327,7 @@ ggsave(
   dpi      = 300,
   path     = output_dir
 )
+
 
 ## C2. Save Single Silhouette Plot
 ggsave(
