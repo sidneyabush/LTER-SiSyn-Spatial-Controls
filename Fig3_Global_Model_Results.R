@@ -1,416 +1,423 @@
 ###############################################################################
-# COMPLETE WORKFLOW: Create Grid of LM and SHAP Dot Plots and Overall Bar Plots
-# WITH LETTERS ON BOTH EXPORTED PLOTS
+# COMPLETE WORKFLOW: 2×2 Grid of LM (A, B) and SHAP Dot Plots (C, D),
+# with a Single Shared Legend (moved under panel C), and No Bold Text
 ###############################################################################
 
-# Load needed packages
-librarian::shelf(iml, ggplot2, dplyr, tidyr, reshape2, parallel, foreach, 
-                 randomForest, tibble, viridis, RColorBrewer, patchwork, scales)
+# 1. Load needed packages
+librarian::shelf(
+  iml, ggplot2, dplyr, tidyr, reshape2, parallel, foreach,
+  randomForest, tibble, viridis, RColorBrewer, patchwork, scales
+)
 
-library(ggplot2)
-
-#––– set a base theme for all of your plots –––#
+#––– set a base theme for all plots –––#
 theme_set(
   theme_classic(base_size = 14) +
     theme(
-      panel.background = element_rect(fill   = "white", colour = NA),
-      plot.background  = element_rect(fill   = "white", colour = NA),
-      legend.background= element_rect(fill   = "white", colour = NA),
-      legend.key       = element_rect(fill   = "white", colour = NA)
+      panel.background  = element_rect(fill   = "white", colour = NA),
+      plot.background   = element_rect(fill   = "white", colour = NA),
+      legend.background = element_rect(fill   = "white", colour = NA),
+      legend.key        = element_rect(fill   = "white", colour = NA)
     )
 )
-
 
 # Clear environment
 rm(list = ls())
 
-## 2. Set Working & Output Directories (change paths as needed)
+# 2. Set Working & Output Directories (change paths if needed)
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 output_dir       <- "Final_Figures"
 final_models_dir <- "Final_Models"
 dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 dir.create(final_models_dir, showWarnings = FALSE, recursive = TRUE)
 
-# ------------------------- FNConc Data (Concentration) -------------------------
+
+# =============================================================================
+# 3. Load FNConc (Concentration) data & models
+# =============================================================================
 load(file.path(final_models_dir, "FNConc_Yearly_rf_model2.RData"))       # loads rf_model2
-rf_model2_FNConc       <- rf_model2
+rf_model2_FNConc    <- rf_model2
 
-load(file.path(final_models_dir, "FNConc_Yearly_kept_drivers.RData"))     # loads kept_drivers
-kept_drivers_FNConc    <- kept_drivers
+load(file.path(final_models_dir, "FNConc_Yearly_kept_drivers.RData"))    # loads kept_drivers
+kept_drivers_FNConc <- kept_drivers
 
-load(file.path(final_models_dir, "FNConc_Yearly_stream_ids.RData"))       # loads drivers_df
-drivers_df_FNConc      <- drivers_df
+load(file.path(final_models_dir, "FNConc_Yearly_stream_ids.RData"))      # loads drivers_df
+drivers_df_FNConc   <- drivers_df
 
-load(file.path(final_models_dir, "FNConc_Yearly_shap_values_new.RData"))  # loads shap_values_FNConc
-shap_values_FNConc     <- shap_values_FNConc
+load(file.path(final_models_dir, "FNConc_Yearly_shap_values_new.RData")) # loads shap_values_FNConc
+shap_values_FNConc  <- shap_values_FNConc
 
-## A2. Load the full harmonized driver file (for lithology + land‐cover columns)
-drivers_full <- read.csv("harmonization_files/All_Drivers_Harmonized_Yearly_FNConc_FNYield_5_years.csv")
+load(file.path(final_models_dir, "FNConc_Yearly_numeric.RData"))         # loads drivers_numeric
+drivers_numeric_FNConc <- drivers_numeric
 
-# ------------------------- FNYield Data (Yield) -------------------------
 
-## B1. Load FNYield RF Model & Drivers‐of‐Interest Data
+# =============================================================================
+# 4. Load FNYield (Yield) data & models
+# =============================================================================
 load(file.path(final_models_dir, "FNYield_Yearly_rf_model2.RData"))      # loads rf_model2
-rf_model2_FNYield      <- rf_model2
+rf_model2_FNYield   <- rf_model2
 
 load(file.path(final_models_dir, "FNYield_Yearly_kept_drivers.RData"))   # loads kept_drivers
-kept_drivers_FNYield   <- kept_drivers
+kept_drivers_FNYield <- kept_drivers
 
 load(file.path(final_models_dir, "FNYield_Yearly_stream_ids.RData"))     # loads drivers_df
-drivers_df_FNYield     <- drivers_df
+drivers_df_FNYield  <- drivers_df
 
-load(file.path(final_models_dir, "FNYield_Yearly_shap_values_new.RData")) # loads shap_values_FNYield
-shap_values_FNYield    <- shap_values_FNYield
+load(file.path(final_models_dir, "FNYield_Yearly_shap_values_new.RData"))# loads shap_values_FNYield
+shap_values_FNYield <- shap_values_FNYield
 
+load(file.path(final_models_dir, "FNYield_Yearly_numeric.RData"))        # loads drivers_numeric
+drivers_numeric_FNYield <- drivers_numeric
 
-# Set global seed and output directory
-set.seed(123)
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Figures"
 
 ###############################################################################
-# Create ggplot LM Plots for predicted vs. observed for Concentration and Yield
+# 5. Build two LM plots: Predicted vs Observed (A = Concentration, B = Yield)
 ###############################################################################
 
-# ----- For FNConc (Concentration) -----
+# 5a. For FNConc (Concentration)
 df_FNConc <- data.frame(
   predicted = rf_model2_FNConc$predicted,
-  observed  = drivers_numeric_FNConc$FNConc  # adjust if needed
+  observed  = drivers_numeric_FNConc$FNConc
 )
-
-# Compute OOB R² and RMSE for FNConc
-oob_r2_FNConc <- mean(rf_model2_FNConc$rsq)
+oob_r2_FNConc   <- mean(rf_model2_FNConc$rsq)
 r2_val_FNConc   <- format(oob_r2_FNConc, digits = 3)
 rmse_val_FNConc <- format(sqrt(mean(rf_model2_FNConc$mse)), digits = 3)
 
 lm_plot_FNConc <- ggplot(df_FNConc, aes(x = predicted, y = observed)) +
   geom_point(shape = 16, size = 3) +
-  geom_abline(intercept = 0, slope = 1, color = "#6699CC", 
+  geom_abline(intercept = 0, slope = 1, color = "#6699CC",
               linetype = "dashed", size = 1.2) +
-  labs(x = "Predicted", y = "Observed", title = "Concentration") +
+  labs(
+    x     = "Predicted",
+    y     = "Observed",
+    title = "Concentration"
+  ) +
   theme_classic(base_size = 14) +
   theme(
-    plot.title = element_text(hjust = 0.5, size = 14),
-    axis.title = element_text(size = 14),
-    axis.text = element_text(size = 14)
+    plot.title = element_text(hjust = 0.5, size = 14, face = "plain"),
+    axis.title = element_text(size = 14, face = "plain"),
+    axis.text  = element_text(size = 14, face = "plain")
   ) +
-  # Annotate with OOB R² on the top left
-  annotate("text", x = max(df_FNConc$predicted)*0.2, 
-           y = max(df_FNConc$observed)*0.95, 
-           label = paste("R² =", r2_val_FNConc), 
-           hjust = 0.5, size = 5) +
-  # Annotate with RMSE on the bottom right
-  annotate("text", x = max(df_FNConc$predicted)*0.95, 
-           y = min(df_FNConc$observed)*1.05, 
-           label = paste("RMSE =", rmse_val_FNConc), 
-           hjust = 1, size = 5)
+  annotate("text",
+           x     = max(df_FNConc$predicted) * 0.2,
+           y     = max(df_FNConc$observed) * 0.95,
+           label = paste("R² =", r2_val_FNConc),
+           hjust = 0.5, size = 5
+  ) +
+  annotate("text",
+           x     = max(df_FNConc$predicted) * 0.95,
+           y     = min(df_FNConc$observed) * 1.05,
+           label = paste("RMSE =", rmse_val_FNConc),
+           hjust = 1, size = 5
+  )
 
-# ----- For FNYield (Yield) -----
+# 5b. For FNYield (Yield)
 df_FNYield <- data.frame(
   predicted = rf_model2_FNYield$predicted,
-  observed  = drivers_numeric_FNYield$FNYield  # adjust if needed
+  observed  = drivers_numeric_FNYield$FNYield
 )
-
-# Compute OOB R² and RMSE for FNYield
-oob_r2_FNYield <- mean(rf_model2_FNYield$rsq)
+oob_r2_FNYield   <- mean(rf_model2_FNYield$rsq)
 r2_val_FNYield   <- format(oob_r2_FNYield, digits = 3)
 rmse_val_FNYield <- format(sqrt(mean(rf_model2_FNYield$mse)), digits = 3)
 
 lm_plot_FNYield <- ggplot(df_FNYield, aes(x = predicted, y = observed)) +
   geom_point(shape = 16, size = 3) +
-  geom_abline(intercept = 0, slope = 1, color = "#6699CC", 
+  geom_abline(intercept = 0, slope = 1, color = "#6699CC",
               linetype = "dashed", size = 1.2) +
-  labs(x = "Predicted", y = NULL, title = "Yield") +
+  labs(
+    x     = "Predicted",
+    y     = NULL,
+    title = "Yield"
+  ) +
   theme_classic(base_size = 14) +
   theme(
-    plot.title = element_text(hjust = 0.5, size = 14),
-    axis.title = element_text(size = 14),
-    axis.text = element_text(size = 14)
+    plot.title = element_text(hjust = 0.5, size = 14, face = "plain"),
+    axis.title = element_text(size = 14, face = "plain"),
+    axis.text  = element_text(size = 14, face = "plain")
   ) +
-  annotate("text", x = max(df_FNYield$predicted)*0.2, 
-           y = max(df_FNYield$observed)*0.95, 
-           label = paste("R² =", r2_val_FNYield), 
-           hjust = 0.5, size = 5) +
-  annotate("text", x = max(df_FNYield$predicted)*0.95, 
-           y = min(df_FNYield$observed)*1.05, 
-           label = paste("RMSE =", rmse_val_FNYield), 
-           hjust = 1, size = 5)
-
+  annotate("text",
+           x     = max(df_FNYield$predicted) * 0.2,
+           y     = max(df_FNYield$observed) * 0.95,
+           label = paste("R² =", r2_val_FNYield),
+           hjust = 0.5, size = 5
+  ) +
+  annotate("text",
+           x     = max(df_FNYield$predicted) * 0.95,
+           y     = min(df_FNYield$observed) * 1.05,
+           label = paste("RMSE =", rmse_val_FNYield),
+           hjust = 1, size = 5
+  )
 
 
 ###############################################################################
-# Create SHAP Plots Function (for both Concentration and Yield)
+# 6. SHAP‐dot Plot Function (for both Concentration & Yield)
 ###############################################################################
-compute_mean_absolute_shap <- function(shap_values) {
-  # Step 1: Convert SHAP values to a data frame and calculate absolute values
-  df_abs <- as.data.frame(shap_values) %>% 
-    mutate(across(everything(), abs))
-  
-  # Optional: Print or inspect df_abs to verify absolute values
-  # print(head(df_abs))
-  
-  # Step 2: Compute the mean of the absolute values for each feature
-  mean_abs <- df_abs %>% 
-    summarise(across(everything(), ~ mean(., na.rm = TRUE)))
-  
-  # Step 3: Reshape the data to long format and arrange in descending order of importance
-  result <- mean_abs %>% 
-    pivot_longer(cols = everything(), names_to = "feature", values_to = "importance") %>%
-    arrange(desc(importance))
-  
-  return(result)
-}
-
-# Compute and print SHAP importances for FNConc and FNYield
-overall_feature_importance_FNConc <- compute_mean_absolute_shap(shap_values_FNConc)
-overall_feature_importance_FNYield <- compute_mean_absolute_shap(shap_values_FNYield)
-
-print("Overall Feature Importance for FNConc:")
-print(overall_feature_importance_FNConc)
-print("Overall Feature Importance for FNYield:")
-print(overall_feature_importance_FNYield)
-
-# Compute the mean of the absolute values for each column
-mean_abs <- apply(abs(shap_values_FNConc), 2, mean, na.rm = TRUE)
-print(mean_abs)
-
-create_shap_plots <- function(shap_values, kept_drivers, output_dir) {
-  # Compute overall feature importance (mean absolute SHAP)
+create_shap_plots <- function(shap_values, kept_drivers) {
+  # 6a. Compute “overall feature importance”
   shap_values_abs <- as.data.frame(shap_values) %>% mutate(across(everything(), abs))
   overall_feature_importance <- shap_values_abs %>%
     summarise(across(everything(), mean, na.rm = TRUE)) %>%
-    pivot_longer(cols = everything(), names_to = "feature", values_to = "importance") %>%
+    pivot_longer(cols = everything(),
+                 names_to  = "feature",
+                 values_to = "importance") %>%
     arrange(desc(importance)) %>%
-    mutate(feature = recode(feature,
-                            "NOx" = "Nitrate",
-                            "P" = "P",
-                            "precip" = "Precip",
-                            "temp" = "Temperature",
-                            "snow_cover" = "Snow Cover",
-                            "npp" = "NPP",
-                            "evapotrans" = "ET",
-                            "greenup_day" = "Greenup Day",
-                            "permafrost" = "Permafrost",
-                            "elevation" = "Elevation",
-                            "RBFI" = "Flashiness Index",
-                            "basin_slope" = "Basin Slope",
-                            "rocks_volcanic" = "Rock: Volcanic",
-                            "rocks_sedimentary" = "Rock: Sedimentary",
-                            "rocks_carbonate_evaporite" = "Rock: Carbonate Evaporite",
-                            "rocks_metamorphic" = "Rock: Metamorphic",
-                            "rocks_plutonic" = "Rock: Plutonic",
-                            "land_Bare" = "Land: Bare", 
-                            "land_Cropland" = "Land: Cropland", 
-                            "land_Forest" = "Land: Forest",
-                            "land_Grassland_Shrubland" = "Land: Grassland & Shrubland", 
-                            "land_Ice_Snow" = "Land: Ice & Snow", 
-                            "land_Impervious" = "Land: Impervious", 
-                            "land_Salt_Water" = "Land: Salt Water",
-                            "land_Tidal_Wetland" = "Land: Tidal Wetland", 
-                            "land_Water" = "Land: Water Body", 
-                            "land_Wetland_Marsh" = "Land: Wetland Marsh"))
-  
-  print("Computed Overall Feature Importance (Descending Order):")
-  print(overall_feature_importance)
-  
-  overall_importance_plot <- ggplot(overall_feature_importance, 
-                                    aes(x = reorder(feature, importance), y = importance)) +
-    geom_bar(stat = "identity", fill = "#5F7F94") +
-    coord_flip() +
-    labs(x = NULL, y = "Mean Absolute SHAP Value") +
-    theme_minimal(base_size = 14) +
-    theme(
-      panel.grid.major = element_blank(),
-      panel.grid.minor = element_blank(),
-      axis.text.y      = element_text(size = 14),
-      axis.title.x     = element_text(size = 14),
-      plot.title       = element_text(size = 14)
+    mutate(
+      feature = recode(
+        feature,
+        "NOx"                      = "Nitrate",
+        "P"                        = "P",
+        "precip"                   = "Precip",
+        "temp"                     = "Temperature",
+        "snow_cover"               = "Snow Cover",
+        "npp"                      = "NPP",
+        "evapotrans"               = "ET",
+        "greenup_day"              = "Greenup Day",
+        "permafrost"               = "Permafrost",
+        "elevation"                = "Elevation",
+        "RBI"                      = "Flashiness (RBI)",
+        "recession_slope"          = "Recession Slope",
+        "basin_slope"              = "Basin Slope",
+        "rocks_volcanic"           = "Rock: Volcanic",
+        "rocks_sedimentary"        = "Rock: Sedimentary",
+        "rocks_carbonate_evaporite"= "Rock: Carbonate Evaporite",
+        "rocks_metamorphic"        = "Rock: Metamorphic",
+        "rocks_plutonic"           = "Rock: Plutonic",
+        "land_Bare"                = "Land: Bare",
+        "land_Cropland"            = "Land: Cropland",
+        "land_Forest"              = "Land: Forest",
+        "land_Grassland_Shrubland" = "Land: Grassland & Shrubland",
+        "land_Ice_Snow"            = "Land: Ice & Snow",
+        "land_Impervious"          = "Land: Impervious",
+        "land_Salt_Water"          = "Land: Salt Water",
+        "land_Tidal_Wetland"       = "Land: Tidal Wetland",
+        "land_Water"               = "Land: Water Body",
+        "land_Wetland_Marsh"       = "Land: Weteland Marsh"
+      )
     )
   
-  # # Save overall plot if desired
-  # ggsave(
-  #   filename = sprintf("%s/SHAP_FNConc_Ave_Overall_Variable_Importance.png", output_dir),
-  #   plot     = overall_importance_plot,
-  #   width    = 9,
-  #   height   = 8,
-  #   dpi      = 300
-  # )
-  # 
-  # Scale kept_drivers using rescale()
+  # 6b. Put SHAP + scaled feature values into “long” form
   kept_drivers_scaled <- kept_drivers %>%
-    mutate(across(everything(), ~ rescale(., to = c(0,1))))
+    mutate(across(everything(), ~ scales::rescale(., to = c(0, 1))))
   
   kept_drivers_with_id <- kept_drivers_scaled %>%
     mutate(id = seq_len(nrow(.))) %>%
-    pivot_longer(-id, names_to = "feature", values_to = "feature_value")
+    pivot_longer(-id,
+                 names_to  = "feature",
+                 values_to = "feature_value")
   
   shap_values_df <- as.data.frame(shap_values) %>%
     mutate(id = seq_len(nrow(shap_values)))
   
   shap_long <- shap_values_df %>%
-    pivot_longer(-id, names_to = "feature", values_to = "shap_value") %>%
+    pivot_longer(-id,
+                 names_to  = "feature",
+                 values_to = "shap_value") %>%
     left_join(kept_drivers_with_id, by = c("id", "feature")) %>%
-    mutate(feature = recode(feature,
-                            "NOx" = "Nitrate",
-                            "P" = "P",
-                            "precip" = "Precip",
-                            "temp" = "Temperature",
-                            "snow_cover" = "Snow Cover",
-                            "npp" = "NPP",
-                            "evapotrans" = "ET",
-                            "greenup_day" = "Greenup Day",
-                            "permafrost" = "Permafrost",
-                            "elevation" = "Elevation",
-                            "RBFI" = "Flashiness Index",
-                            "basin_slope" = "Basin Slope",
-                            "rocks_volcanic" = "Rock: Volcanic",
-                            "rocks_sedimentary" = "Rock: Sedimentary",
-                            "rocks_carbonate_evaporite" = "Rock: Carbonate Evaporite",
-                            "rocks_metamorphic" = "Rock: Metamorphic",
-                            "rocks_plutonic" = "Rock: Plutonic",
-                            "land_Bare" = "Land: Bare", 
-                            "land_Cropland" = "Land: Cropland", 
-                            "land_Forest" = "Land: Forest",
-                            "land_Grassland_Shrubland" = "Land: Grassland & Shrubland", 
-                            "land_Ice_Snow" = "Land: Ice & Snow", 
-                            "land_Impervious" = "Land: Impervious", 
-                            "land_Salt_Water" = "Land: Salt Water",
-                            "land_Tidal_Wetland" = "Land: Tidal Wetland", 
-                            "land_Water" = "Land: Water Body", 
-                            "land_Wetland_Marsh" = "Land: Wetland Marsh"))
+    mutate(
+      feature = recode(
+        feature,
+        "NOx"                      = "Nitrate",
+        "P"                        = "P",
+        "precip"                   = "Precip",
+        "temp"                     = "Temperature",
+        "snow_cover"               = "Snow Cover",
+        "npp"                      = "NPP",
+        "evapotrans"               = "ET",
+        "greenup_day"              = "Greenup Day",
+        "permafrost"               = "Permafrost",
+        "elevation"                = "Elevation",
+        "RBI"                      = "Flashiness (RBI)",
+        "recession_slope"          = "Recession Slope",
+        "basin_slope"              = "Basin Slope",
+        "rocks_volcanic"           = "Rock: Volcanic",
+        "rocks_sedimentary"        = "Rock: Sedimentary",
+        "rocks_carbonate_evaporite"= "Rock: Carbonate Evaporite",
+        "rocks_metamorphic"        = "Rock: Metamorphic",
+        "rocks_plutonic"           = "Rock: Plutonic",
+        "land_Bare"                = "Land: Bare",
+        "land_Cropland"            = "Land: Cropland",
+        "land_Forest"              = "Land: Forest",
+        "land_Grassland_Shrubland" = "Land: Grassland & Shrubland",
+        "land_Ice_Snow"            = "Land: Ice & Snow",
+        "land_Impervious"          = "Land: Impervious",
+        "land_Salt_Water"          = "Land: Salt Water",
+        "land_Tidal_Wetland"       = "Land: Tidal Wetland",
+        "land_Water"               = "Land: Water Body",
+        "land_Wetland_Marsh"       = "Land: Weteland Marsh"
+      )
+    )
   
-  # Set factor levels for the dot plot based on overall importance order
-  shap_long$feature <- factor(shap_long$feature, levels = rev(overall_feature_importance$feature))
+  # 6c. Order “feature” so that most‐important appear at the top
+  shap_long$feature <- factor(
+    shap_long$feature,
+    levels = rev(overall_feature_importance$feature)
+  )
   
-  print("Assigned Factor Levels to shap_long$feature:")
-  print(levels(shap_long$feature))  # Debugging check
-  
-  dot_plot <- ggplot(shap_long, aes(x = shap_value, 
-                                    y = feature, 
-                                    fill = feature_value)) +
+  # 6d. Build the SHAP‐dot plot (with its own legend under panel C)
+  dot_plot <- ggplot(
+    shap_long,
+    aes(x = shap_value, y = feature, fill = feature_value)
+  ) +
     geom_point(alpha = 0.6, size = 3, shape = 21, stroke = 0.1, color = "black") +
     scale_fill_gradientn(
       colors = c("white", "gray", "black"),
-      name   = "Feature Value"
+      name   = "Scaled Value",
+      guide  = guide_colorbar(
+        title.position = "top",
+        title.hjust    = 0.5,
+        barwidth       = unit(6, "cm"),
+        barheight      = unit(0.4, "cm"),
+        label.theme    = element_text(size = 12, face = "plain"),
+        title.theme    = element_text(size = 14, face = "plain")
+      )
     ) +
     labs(x = "SHAP Value", y = NULL) +
     geom_vline(xintercept = 0, linetype = "dashed", color = "grey30") +
     theme_classic(base_size = 14) +
     theme(
-      axis.title = element_text(size = 14, face = "bold"),
-      axis.text  = element_text(size = 14),
-      legend.text = element_text(size = 14),
-      legend.title = element_blank(),
-      legend.key.size = unit(1, "lines"),
+      axis.title       = element_text(size = 14, face = "plain"),
+      axis.text        = element_text(size = 12, face = "plain"),
+      legend.text      = element_text(size = 14, face = "plain"),
+      legend.title     = element_text(size = 14, face = "plain"),
+      legend.key.size  = unit(1, "lines"),
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank()
     )
   
-  return(list(overall = overall_importance_plot, dot = dot_plot))
+  return(list(
+    overall = overall_feature_importance,  # not used in this grid
+    dot     = dot_plot
+  ))
 }
 
-# Create SHAP plots for FNConc (Concentration)
-fnconc_shap <- create_shap_plots(shap_values_FNConc, kept_drivers_FNConc, output_dir)
-overall_plot_FNConc <- fnconc_shap$overall + labs(title = "Concentration") +
-  theme(plot.title = element_text(size = 14, hjust = 0.5))
-dot_plot_FNConc <- fnconc_shap$dot + labs(title = "Concentration") +
-  theme(plot.title = element_text(size = 14, hjust = 0.5))
+# 6a. Create SHAP‐dot for FNConc (Concentration)
+fnconc_shap     <- create_shap_plots(shap_values_FNConc, kept_drivers_FNConc)
+dot_plot_FNConc <- fnconc_shap$dot    # this one has its legend underneath
 
-# Create SHAP plots for FNYield (Yield)
-fnyield_shap <- create_shap_plots(shap_values_FNYield, kept_drivers_FNYield, output_dir)
-overall_plot_FNYield <- fnyield_shap$overall + labs(title = "Yield") +
-  theme(plot.title = element_text(size = 14, hjust = 0.5))
-dot_plot_FNYield <- fnyield_shap$dot + labs(title = "Yield") +
-  theme(plot.title = element_text(size = 14, hjust = 0.5))
+# 6b. Create SHAP‐dot for FNYield (Yield)
+fnyield_shap     <- create_shap_plots(shap_values_FNYield, kept_drivers_FNYield)
+dot_plot_FNYield <- fnyield_shap$dot   # also has legend by default, but we’ll remove it below
+
 
 ###############################################################################
-# Combine LM and Dot Plots into a Grid with a Combined Legend for Dot Plots
+# 7. Combine LM and Dot Plots into a 2×2 Grid 
+#    - Top row: Panels A & B (LM plots)
+#    - Bottom row: Panel C (SHAP‐dot with legend), Panel D (SHAP‐dot without legend)
+#    - All tags set manually, no bold text
 ###############################################################################
-library(cowplot)
 
-##############################
-# 1. Remove Legends from Dot Plots
-##############################
-dot_plot_FNConc_no_legend  <- dot_plot_FNConc  + theme(legend.position = "none")
-dot_plot_FNYield_no_legend <- dot_plot_FNYield + theme(legend.position = "none")
+# 7.1 Build the TOP ROW (two LM plots), tagged “A” and “B”
+top_row <- 
+  ( lm_plot_FNConc +
+      labs(title = "Concentration") +
+      labs(tag = "A") +
+      theme(
+        plot.tag          = element_text(size = 14, face = "plain"),
+        plot.tag.position = c(0, 1)
+      )
+  ) |
+  ( lm_plot_FNYield +
+      labs(title = "Yield") +
+      labs(tag = "B") +
+      theme(
+        plot.tag          = element_text(size = 14, face = "plain"),
+        plot.tag.position = c(0, 1)
+      )
+  )
 
-##############################
-# 2. Extract Shared Legend
-##############################
-legend_dot <- get_legend(
-  dot_plot_FNYield + theme(legend.position = "right")
-)
+# 7.2 Build the BOTTOM ROW (two SHAP‐dot plots):
+#      - Panel C: keep its legend, tag “C”
+#      - Panel D: remove its legend, tag “D”
+C_plot_tagged <- dot_plot_FNConc +
+  theme(legend.position = "bottom") +
+  labs(tag = "C") +
+  theme(
+    plot.tag          = element_text(size = 14, face = "plain"),
+    plot.tag.position = c(0, 1)
+  )
 
-##############################
-# 3. Label Each Plot
-##############################
-plotA <- lm_plot_FNConc  + ggtitle("A") + theme(plot.title=element_text(hjust=0,size=14))
-plotB <- lm_plot_FNYield + ggtitle("B") + theme(plot.title=element_text(hjust=0,size=14))
-plotC <- dot_plot_FNConc_no_legend  + ggtitle("C") + theme(plot.title=element_text(hjust=-1,size=14))
-plotD <- dot_plot_FNYield_no_legend + ggtitle("D") + theme(plot.title=element_text(hjust=-1,size=14))
+D_plot_tagged <- dot_plot_FNYield +
+  theme(legend.position = "none") +
+  labs(tag = "D") +
+  theme(
+    plot.tag          = element_text(size = 14, face = "plain"),
+    plot.tag.position = c(0, 1)
+  )
 
-##############################
-# 4. Build the Top Row (2×3) 
-#    Column 1: A, Column 2: B, Column 3: blank
-##############################
-top_row_3col <- plot_grid(
-  plotA,    # top-left
-  plotB,    # top-middle
-  NULL,     # top-right cell is blank
-  ncol       = 3,
-  align      = "hv",
-  axis       = "tblr",
-  rel_widths = c(1, 1, 0.3)  # 3 columns: left=1, middle=1, right=0.3
-)
+bottom_row <- C_plot_tagged | D_plot_tagged
 
-##############################
-# 5. Build the Bottom Row (2×3)
-#    Column 1: C, Column 2: D, Column 3: legend
-##############################
-bottom_row_3col <- plot_grid(
-  plotC,           # bottom-left
-  plotD,           # bottom-middle
-  legend_dot,      # bottom-right
-  ncol       = 3,
-  align      = "hv",
-  axis       = "tblr",
-  rel_widths = c(1, 1, 0.3)  # same column widths => B & D line up
-)
+# 7.3 Stack top_row above bottom_row with unequal heights (top_row taller)
+final_grid <- (top_row / bottom_row) +
+  plot_layout(
+    heights = c(1.3, 1)  # top row = 1.3× height of bottom row
+  ) &
+  theme(
+    plot.margin = ggplot2::margin(t = 10, r = 10, b = 10, l = 10)
+  )
 
-##############################
-# 6. Stack the Two Rows
-##############################
-final_grid <- plot_grid(
-  top_row_3col,
-  bottom_row_3col,
-  ncol = 1,
-  align = "v",
-  axis  = "lr"
-)
-
-##############################
-# 7. Print or Save
-##############################
+# 7.4 Print and Save
 print(final_grid)
 ggsave(
-  filename = "Fig3_Global_Grid_FNConc_FNYield.png",
+  filename = file.path(output_dir, "Fig3_Global_Grid_FNConc_FNYield.png"),
   plot     = final_grid,
-  width    = 15,
-  height   = 13,
-  dpi      = 300,
-  path     = output_dir
+  width    = 12,
+  height   = 10,
+  dpi      = 300
 )
 
 
 ###############################################################################
-# Combine Overall (Mean Absolute SHAP) Bar Plots into a Grid
+# 8. Combine Overall (Mean Absolute SHAP) Bar Plots into a 1×2 Grid
 ###############################################################################
-final_overall_grid <- overall_plot_FNConc | overall_plot_FNYield
+# 8a. Re‐build the “overall feature importance” bar charts from step 6
+overall_bar_FNConc  <- ggplot(fnconc_shap$overall, 
+                              aes(x = reorder(feature, importance), y = importance)) +
+  geom_bar(stat = "identity", fill = "#5F7F94") +
+  coord_flip() +
+  labs(x = NULL, y = "Mean Absolute SHAP Value", title = "Concentration") +
+  theme_minimal(base_size = 14) +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.y      = element_text(size = 14, face = "plain"),
+    axis.title.x     = element_text(size = 14, face = "plain"),
+    plot.title       = element_text(size = 14, hjust = 0.5, face = "plain")
+  )
 
-# Add letters (A, B) to each bar plot
-final_overall_grid_labeled <- final_overall_grid + plot_annotation(tag_levels = "A")
+overall_bar_FNYield <- ggplot(fnyield_shap$overall, 
+                              aes(x = reorder(feature, importance), y = importance)) +
+  geom_bar(stat = "identity", fill = "#5F7F94") +
+  coord_flip() +
+  labs(x = NULL, y = "Mean Absolute SHAP Value", title = "Yield") +
+  theme_minimal(base_size = 14) +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.y      = element_text(size = 14, face = "plain"),
+    axis.title.x     = element_text(size = 14, face = "plain"),
+    plot.title       = element_text(size = 14, hjust = 0.5, face = "plain")
+  )
 
-# Save the labeled overall grid
-ggsave(filename = "FigSX_Final_Overall_FNConc_FNYield.png", 
-       plot = final_overall_grid_labeled,
-       width = 11, height = 6, dpi = 300, path = output_dir)
+# 8b. Put them side by side, tag “A” & “B” on those two
+final_overall_grid <- ( overall_bar_FNConc + labs(tag = "A") +
+                          theme(
+                            plot.tag          = element_text(size = 14, face = "plain"),
+                            plot.tag.position = c(0, 1)
+                          )
+) |
+  ( overall_bar_FNYield + labs(tag = "B") +
+      theme(
+        plot.tag          = element_text(size = 14, face = "plain"),
+        plot.tag.position = c(0, 1)
+      )
+  ) +
+  plot_layout(widths = c(1, 1))
 
+# 8c. Print and Save
+print(final_overall_grid)
+ggsave(
+  filename = file.path(output_dir, "FigSX_Final_Overall_FNConc_FNYield.png"),
+  plot     = final_overall_grid,
+  width    = 15,
+  height   = 7.5,
+  dpi      = 300
+)

@@ -396,16 +396,16 @@ blank_panel    <- wrap_elements(full = textGrob("", x = 0.5, hjust = 0.5))
 title_all_vars <- wrap_elements(
   full = textGrob(
     "All Variables", 
-    x = 0.5, y = 0.5,           # Move closer to plot (y close to 1 = closer to top, but <1 or it clips)
-    hjust = -0.5, vjust = 1,
+    x = 0.6, y = 0.5,           # Move closer to plot (y close to 1 = closer to top, but <1 or it clips)
+    hjust = 0.6, vjust = 1,
     gp = gpar(fontsize = 28, fontface = "plain")
   )
 )
 title_conc     <- wrap_elements(
   full = textGrob(
     "Concentration", 
-    x = 0.5, y = 0.5,
-    hjust = -0.5, vjust = 1,
+    x = 0.6, y = 0.5,
+    hjust = 0.2, vjust = 1,
     gp = gpar(fontsize = 28, fontface = "plain")
   )
 )
@@ -413,7 +413,7 @@ title_yield    <- wrap_elements(
   full = textGrob(
     "Yield", 
     x = 0.5, y = 0.5,
-    hjust = -0.5, vjust = 1,
+    hjust = -0.8, vjust = 1,
     gp = gpar(fontsize = 30, fontface = "plain")
   )
 )
