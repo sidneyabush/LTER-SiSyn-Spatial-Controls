@@ -14,7 +14,7 @@ library(cowplot)
 # --------------------------------------------------
 # 1) Data Preparation
 # --------------------------------------------------
-setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files")
 rm(list = ls())
 
 record_length <- 5
