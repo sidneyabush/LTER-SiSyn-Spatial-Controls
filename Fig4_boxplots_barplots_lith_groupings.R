@@ -3,8 +3,10 @@
 #                 Land Recoding, Separate X-Axis Scaling for Dot Plots,
 #                 Combined Legend for Dot Plots, Patchwork Layout
 #                 (jitter removed, lighter boxplot fills, subtle group shading;
-#                  cluster label in its own left‐hand panel, shifted inward)
+#                  cluster label in its own left‐hand panel, shifted inward;
+#                  center‐aligned column titles, larger fonts for publication)
 ###############################################################################
+
 ## 1. Load Necessary Packages
 library(ggplot2)
 library(dplyr)
@@ -12,10 +14,12 @@ library(tidyr)
 library(scales)
 library(patchwork)   # For wrap_plots(), plot_layout(), wrap_elements()
 library(grid)        # For textGrob()
+
 ## 2. Set Working & Output Directories
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 output_dir <- "Final_Figures"
 dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
 ## 3. Load Pre‐saved Workflow Objects
 final_models_dir <- "Final_Models"
 # Load FNConc objects (full_scaled, shap_values_FNConc, drivers_numeric_consolidated_lith_FNConc)
@@ -24,6 +28,7 @@ load(file.path(final_models_dir, "FNConc_HierClust_Workflow_Objects.RData"))
 # Load FNYield objects (shap_values_FNYield, drivers_numeric_consolidated_lith_FNYield)
 load(file.path(final_models_dir, "FNYield_HierClust_Workflow_Objects.RData"))
 #   → Loads: shap_values_FNYield, drivers_numeric_consolidated_lith_FNYield
+
 ## 4. Define Cluster‐Color Palette
 my_cluster_colors <- c(
   "Volcanic"            = "#AC7B32",
@@ -36,6 +41,7 @@ my_cluster_colors <- c(
 # Determine the unique cluster levels (from FNConc's full_scaled)
 unique_clusters <- levels(full_scaled$final_cluster)
 # e.g.: c("Volcanic","Sedimentary","Mixed Sedimentary","Plutonic","Metamorphic","Carbonate Evaporite")
+
 ## 5. Define Manual Ordering & Renaming of All Numeric Features
 # 5.1 "Old" column names in the order to appear:
 var_order <- c(
@@ -91,6 +97,7 @@ var_labels <- c(
 )
 # 5.3 Named vector for recoding all "old" → "pretty"
 recode_map_box <- setNames(var_labels, var_order)
+
 ## 6. Precompute Numeric Positions for Each Group's Shading
 prod_start <- which(var_labels == "NOx") - 0.5
 prod_end   <- which(var_labels == "Greenup Day") + 0.5
@@ -102,7 +109,8 @@ disc_start <- which(var_labels == "Flashiness (RBI)") - 0.5
 disc_end   <- which(var_labels == "Recession Slope") + 0.5
 land_start_index <- which(var_labels == "Land: Bare") - 0.5
 land_end_index   <- which(var_labels == "Land: Wetland Marsh") + 0.5
-# 6.1 Define shading fills and label colors
+
+# 6.1 Define shading fills and label colors (unchanged)
 prod_fill   <- "white"
 prod_text   <- "black"
 clim_fill   <- "#f7f7f7"   # very light gray
@@ -113,6 +121,7 @@ disc_fill   <- "#d3d3d3"   # medium-light gray
 disc_text   <- "#404040"
 lulc_fill   <- "#f0f0f0"   # slightly darker pale gray
 lulc_text   <- "black"
+
 ## 7. Define plot_mean_abs_shap() with Recoding & Ordering for Bar Plots
 plot_mean_abs_shap <- function(cluster_id, shap_values, full_scaled, y_limit = 1.3) {
   cluster_indices <- which(full_scaled$final_cluster == cluster_id)
@@ -152,14 +161,15 @@ plot_mean_abs_shap <- function(cluster_id, shap_values, full_scaled, y_limit = 1
     ) +
     coord_flip() +
     labs(x = NULL, y = NULL, title = NULL) +
-    theme_classic(base_size = 24) +  # Increased from 18 to 24
+    theme_classic(base_size = 28) +  # ↑ base_size = 28 for larger fonts
     theme(
-      axis.text.y = element_text(size = 20),  # Increased from 16 to 20
-      axis.text.x = element_text(size = 20),  # Increased from 16 to 20
-      axis.title.x = element_text(size = 22), # Added explicit axis title size
-      axis.title.y = element_text(size = 22)  # Added explicit axis title size
+      axis.text.y = element_text(size = 28),   # ↑ 28 for y‐text
+      axis.text.x = element_text(size = 28),   # ↑ 28 for x‐text
+      axis.title.x = element_text(size = 30),  # ↑ 30 for axis titles (if ever used)
+      axis.title.y = element_text(size = 30)
     )
 }
+
 ## 8. Create a "Cluster Label" Plot (Text Only)
 cluster_label_plot <- function(cluster_name) {
   ggplot() +
@@ -168,14 +178,15 @@ cluster_label_plot <- function(cluster_name) {
       x = 0.5, y = 0.5,
       label    = cluster_name,
       angle    = 90,
-      fontface = "plain",  # Already plain, keeping as is
-      size     = 10,       # Increased from 6 to 10
+      fontface = "plain",
+      size     = 10,       # Keep cluster‐label text at 10
       color    = "#404040"
     ) +
     xlim(0, 1) +
     ylim(0, 1) +
     theme_void()
 }
+
 ## 9. Build the "All Variables" Boxplot for Each Cluster
 cluster_boxplots <- lapply(unique_clusters, function(cl) {
   df_long <- full_scaled %>%
@@ -199,18 +210,18 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
   box_color <- cluster_col
   
   ggplot(df_long, aes(x = feature, y = scaled_value)) +
-    # 1) "Productivity" (reduced size to prevent overlap)
+    ## 1) "Productivity" (just like dot version, size = 6)
     annotate(
       "text",
       x = (which(var_labels == "NOx") + which(var_labels == "Greenup Day")) / 2,
       y = Inf, label = "Productivity",
       color    = prod_text,
-      fontface = "plain",   # Changed from "bold" to "plain"
+      fontface = "plain", 
       vjust    = 2,
-      size     = 4.5,       # Reduced from 7 to 4.5
+      size     = 6,       # unchanged from dot version
       inherit.aes = FALSE
     ) +
-    # 2) "Climate" (shaded rect + reduced size to prevent overlap)
+    ## 2) "Climate" (shaded rect + text size = 6)
     annotate(
       "rect",
       xmin = clim_start, xmax = clim_end,
@@ -224,12 +235,12 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
       x = (which(var_labels == "Precip") + which(var_labels == "Permafrost")) / 2,
       y = Inf, label = "Climate",
       color    = clim_text,
-      fontface = "plain",   # Changed from "bold" to "plain"
+      fontface = "plain",
       vjust    = 2,
-      size     = 4.5,       # Reduced from 7 to 4.5
+      size     = 6,       # unchanged from dot version
       inherit.aes = FALSE
     ) +
-    # 3) "Topo" (shaded rect + reduced size to prevent overlap)
+    ## 3) "Topo" (shaded rect + text size = 6)
     annotate(
       "rect",
       xmin = topo_start, xmax = topo_end,
@@ -243,12 +254,12 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
       x = (which(var_labels == "Elevation") + which(var_labels == "Basin Slope")) / 2,
       y = Inf, label = "Topo",
       color    = topo_text,
-      fontface = "plain",   # Changed from "bold" to "plain"
+      fontface = "plain",
       vjust    = 2,
-      size     = 4.5,       # Reduced from 7 to 4.5
+      size     = 6,       # unchanged from dot version
       inherit.aes = FALSE
     ) +
-    # 4) "Q" (shaded rect + reduced size to prevent overlap)
+    ## 4) "Q" (shaded rect + text size = 6)
     annotate(
       "rect",
       xmin = disc_start, xmax = disc_end,
@@ -263,12 +274,12 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
       x = (which(var_labels == "Flashiness (RBI)") + which(var_labels == "Recession Slope")) / 2,
       y = Inf, label = "Q",
       color    = disc_text,
-      fontface = "plain",   # Changed from "bold" to "plain"
+      fontface = "plain",
       vjust    = 2,
-      size     = 4.5,       # Reduced from 7 to 4.5
+      size     = 6,       # unchanged from dot version
       inherit.aes = FALSE
     ) +
-    # 5) "LULC" (shaded rect + reduced size to prevent overlap)
+    ## 5) "LULC" (shaded rect + text size = 6)
     annotate(
       "rect",
       xmin = land_start_index, xmax = land_end_index,
@@ -283,12 +294,12 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
       x = (which(var_labels == "Land: Bare") + which(var_labels == "Land: Wetland Marsh")) / 2,
       y = Inf, label = "LULC",
       color    = lulc_text,
-      fontface = "plain",   # Changed from "bold" to "plain"
+      fontface = "plain",
       vjust    = 2,
-      size     = 4.5,       # Reduced from 7 to 4.5
+      size     = 6,       # unchanged from dot version
       inherit.aes = FALSE
     ) +
-    # 6) The actual boxplot (lighter fill)
+    ## 6) The actual boxplot (lighter fill)
     geom_boxplot(
       outlier.shape = NA,
       fill  = box_fill,
@@ -302,16 +313,22 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
       expand = expansion(add = c(1, 0))
     ) +
     coord_cartesian(clip = "off") +   # allow drawing outside panel area
-    theme_classic(base_size = 18) +   # Increased from 14 to 18
+    theme_classic(base_size = 28) +   # ↑ base_size = 28 for larger fonts
     theme(
-      plot.margin = ggplot2::margin(t = 20, r = 5, b = 5, l = 50),  # Increased top margin from 15 to 20
-      axis.text.x     = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 16),  # Increased from 12 to 16
-      axis.text.y     = element_text(size = 16),  # Increased from 12 to 16
-      axis.title.y    = element_text(size = 18),  # Increased from 14 to 18
-      axis.title.x    = element_text(size = 18),  # Added explicit x-axis title size
+      plot.margin    = ggplot2::margin(t = 20, r = 5, b = 5, l = 50), 
+      axis.text.x     = element_text(                                   # smaller for boxplot x‐axis
+        angle = 90, 
+        vjust = 0.5, 
+        hjust = 1, 
+        size  = 20  # ↑ 20 (smaller than 28)
+      ),
+      axis.text.y     = element_text(size = 28),                        # ↑ 28
+      axis.title.y    = element_text(size = 28),                        # ↑ 28
+      axis.title.x    = element_text(size = 28),                        # ↑ 28
       legend.position = "none"
     )
 })
+
 ## 10. Build Concentration & Yield Bar‐Plot Lists
 plot_list_bars_conc <- lapply(unique_clusters, function(cl) {
   plot_mean_abs_shap(cl, shap_values_FNConc, full_scaled, y_limit = 0.7)
@@ -319,6 +336,7 @@ plot_list_bars_conc <- lapply(unique_clusters, function(cl) {
 plot_list_bars_yield <- lapply(unique_clusters, function(cl) {
   plot_mean_abs_shap(cl, shap_values_FNYield, full_scaled, y_limit = 850)
 })
+
 ## 11. Combine Each Row as FOUR Panels: 
 ##     [ (1) cluster_label_plot | (2) boxplot | (3) concentration barplot | (4) yield barplot ]
 rows_list <- lapply(seq_along(unique_clusters), function(i) {
@@ -354,54 +372,80 @@ rows_list <- lapply(seq_along(unique_clusters), function(i) {
   } else {
     # Bottom row: add "Mean Absolute SHAP Value" label with larger font
     p_conc  <- p_conc  + labs(y = "Mean Absolute SHAP Value") + 
-      theme(axis.title.y = element_text(size = 18))
+      theme(axis.title.y = element_text(size = 28))
     p_yield <- p_yield + labs(y = "Mean Absolute SHAP Value") + 
-      theme(axis.title.y = element_text(size = 18))
+      theme(axis.title.y = element_text(size = 28))
   }
   
-  # Place four panels side by side, with a narrower first column (0.05) so label is closer
+  # Place four panels side by side, with a narrower first column (0.05)
   (p_label | p_all_vars | p_conc | p_yield) +
     plot_layout(ncol = 4, widths = c(0.05, 0.35, 0.30, 0.30))
 })
+
 # Stack all rows
 bar_plots_combined <- wrap_plots(rows_list, ncol = 1)
+
 ## 12. Build Column Titles + "Scaled Value" Y‐axis Label
 # Title for the blank first column
 blank_panel <- wrap_elements(
   full = textGrob("", x = 0.5, hjust = 0.5)
 )
-# Titles for columns 2–4 (removed bold, increased size further)
+
+# Titles for columns 2–4, centered inside their row (y = 0.5)
 title_all_vars <- wrap_elements(
-  full = textGrob("All Variables", x = 0.5, hjust = 0.5,
-                  gp = gpar(fontsize = 28, fontface = "plain"))  # Increased from 20 to 28
+  full = textGrob(
+    "All Variables", 
+    x = 0.5, y = 0.5, 
+    hjust = 0.5, vjust = 0.5,
+    gp = gpar(fontsize = 28, fontface = "plain")
+  )
 )
 title_conc <- wrap_elements(
-  full = textGrob("Concentration", x = 0.5, hjust = 0.5,
-                  gp = gpar(fontsize = 28, fontface = "plain"))  # Increased from 20 to 28
+  full = textGrob(
+    "Concentration", 
+    x = 0.5, y = 0.5, 
+    hjust = 0.5, vjust = 0.5,
+    gp = gpar(fontsize = 28, fontface = "plain")
+  )
 )
 title_yield <- wrap_elements(
-  full = textGrob("Yield", x = 0.5, hjust = 0.5,
-                  gp = gpar(fontsize = 28, fontface = "plain"))  # Increased from 20 to 28
+  full = textGrob(
+    "Yield", 
+    x = 0.5, y = 0.5, 
+    hjust = 0.5, vjust = 0.5,
+    gp = gpar(fontsize = 28, fontface = "plain")
+  )
 )
-# Combine into a single title row, shrinking first column to 0.05
+
+# Combine into a single title row, with very narrow first column:
 title_row <- (blank_panel + title_all_vars + title_conc + title_yield) +
   plot_layout(ncol = 4, widths = c(0.0000001, 0.35, 0.30, 0.30))
-# "Scaled Value" label on the far left (removed bold, increased size further)
+
+# "Scaled Value" label on the far left, moved in close to the plots
 y_axis_label <- wrap_elements(
-  full = textGrob("Scaled Value", rot = 90,
-                  gp = gpar(fontsize = 28, fontface = "plain"))  # Increased from 20 to 28
+  full = textGrob(
+    "Scaled Value", 
+    x = 0.5, 
+    rot = 90,
+    gp = gpar(fontsize = 28, fontface = "plain")
+  )
 )
-# Stack the title row above the combined rows, then add y‐axis label on left
-bar_plots_with_title <- title_row / bar_plots_combined +
-  plot_layout(heights = c(1.0, 10))  # Increased from 0.8 to 1.0 for more space for larger titles
-final_grid_bar <- (y_axis_label | bar_plots_with_title) +
-  plot_layout(widths = c(0.08, 0.92))  # Increased y-axis label width from 0.06 to 0.08
+
+# Stack the title row above the combined bar plots, and move them together.
+#   – We give the title row a small height (0.2), so it sits close to its plots.
+#   – We move the entire left column (“Scaled Value”) in close by using widths = c(0.03, 0.97).
+dot_plots_with_title <- title_row / bar_plots_combined +
+  plot_layout(heights = c(0.2, 10))
+
+final_grid_bar <- (y_axis_label | dot_plots_with_title) +
+  plot_layout(widths = c(0.03, 0.97))
+
 ## 13. Save & Print Final Figure
 ggsave(
   filename = "Fig4_Combined_Grid_BarPlots.png",
   plot     = final_grid_bar,
-  width    = 26,    # Increased from 24 to 26 for larger text
-  height   = 30,    # Increased from 27 to 30 for larger text
+  width    = 28,   # slightly wider to accommodate larger fonts
+  height   = 32,
   dpi      = 300,
   path     = output_dir
 )
