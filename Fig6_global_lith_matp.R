@@ -184,6 +184,6 @@ ggsave(
   filename = "Final_Figures/Fig6_global_map_lith.png",
   plot     = global_with_insets,
   width    = 8,
-  height   = 8.5,
+  height   = 5,
   dpi      = 300
 )
