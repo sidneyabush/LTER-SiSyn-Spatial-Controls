@@ -3,22 +3,28 @@
 #                 Land Recoding, Separate X-Axis Scaling for Dot Plots,
 #                 Combined Legend for Dot Plots, Patchwork Layout
 #                 (jitter removed, lighter boxplot fills, subtle group shading;
-#                  cluster name printed inside each “All Variables” plot,
-#                  vertically centered on the y-axis)
+#                  cluster label in its own left‐hand panel, shifted inward)
 ###############################################################################
-
-## 0. Load Pre‐saved Workflow Objects and Rebuild "All Variables" Boxplots
+## 1. Load Necessary Packages
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(scales)
+library(patchwork)   # For wrap_plots(), plot_layout(), wrap_elements()
+library(grid)        # For textGrob()
+## 2. Set Working & Output Directories
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
+output_dir <- "Final_Figures"
+dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+## 3. Load Pre‐saved Workflow Objects
 final_models_dir <- "Final_Models"
-
 # Load FNConc objects (full_scaled, shap_values_FNConc, drivers_numeric_consolidated_lith_FNConc)
 load(file.path(final_models_dir, "FNConc_HierClust_Workflow_Objects.RData"))
 #   → Loads: full_scaled, shap_values_FNConc, drivers_numeric_consolidated_lith_FNConc
-
 # Load FNYield objects (shap_values_FNYield, drivers_numeric_consolidated_lith_FNYield)
 load(file.path(final_models_dir, "FNYield_HierClust_Workflow_Objects.RData"))
 #   → Loads: shap_values_FNYield, drivers_numeric_consolidated_lith_FNYield
-
-# Define cluster‐color palette
+## 4. Define Cluster‐Color Palette
 my_cluster_colors <- c(
   "Volcanic"            = "#AC7B32",
   "Sedimentary"         = "#579C8E",
@@ -27,35 +33,25 @@ my_cluster_colors <- c(
   "Metamorphic"         = "#C26F86",
   "Carbonate Evaporite" = "#5E88B0"
 )
-
 # Determine the unique cluster levels (from FNConc's full_scaled)
 unique_clusters <- levels(full_scaled$final_cluster)
-# e.g. c("Volcanic","Sedimentary","Mixed Sedimentary","Plutonic","Metamorphic","Carbonate Evaporite")
-
-# ------------------------------------------------------------------------------
-# 0.1 Define manual ordering & renaming of all numeric features
-#     (for the boxplots and bar plots)
-# ------------------------------------------------------------------------------
-
-# 1) Specify the “old” column names in the order you want them to appear:
+# e.g.: c("Volcanic","Sedimentary","Mixed Sedimentary","Plutonic","Metamorphic","Carbonate Evaporite")
+## 5. Define Manual Ordering & Renaming of All Numeric Features
+# 5.1 "Old" column names in the order to appear:
 var_order <- c(
   "NOx",
   "P",
   "npp",
   "evapotrans",
   "greenup_day",
-  
   "precip",
   "temp",
   "snow_cover",
   "permafrost",
-  
   "elevation",
   "basin_slope",
-  
   "RBI",
   "recession_slope",
-  
   "land_Bare",
   "land_Cropland",
   "land_Forest",
@@ -67,26 +63,21 @@ var_order <- c(
   "land_Water",
   "land_Wetland_Marsh"
 )
-
-# 2) Provide “pretty” labels (same length/order as var_order):
+# 5.2 "Pretty" labels (same length/order as var_order):
 var_labels <- c(
   "NOx",
   "P",
   "NPP",
   "ET",
-  "Greenup Day", # productivity
-  
+  "Greenup Day",   # Productivity
   "Precip",
   "Temp",
   "Snow Cover",
-  "Permafrost", # climate
-  
+  "Permafrost",    # Climate
   "Elevation",
-  "Basin Slope", # topo
-  
-  "Flashiness Index (RBI)", 
+  "Basin Slope",   # Topo
+  "Flashiness (RBI)",
   "Recession Slope", # Q
-  
   "Land: Bare",
   "Land: Cropland",
   "Land: Forest",
@@ -98,178 +89,31 @@ var_labels <- c(
   "Land: Water Body",
   "Land: Wetland Marsh"
 )
-
-# 3) Create a named vector for recoding all “old” → “pretty” names
+# 5.3 Named vector for recoding all "old" → "pretty"
 recode_map_box <- setNames(var_labels, var_order)
-
-# 4) Precompute numeric positions for each group’s shading in the discrete scale:
+## 6. Precompute Numeric Positions for Each Group's Shading
 prod_start <- which(var_labels == "NOx") - 0.5
 prod_end   <- which(var_labels == "Greenup Day") + 0.5
-
 clim_start <- which(var_labels == "Precip") - 0.5
 clim_end   <- which(var_labels == "Permafrost") + 0.5
-
 topo_start <- which(var_labels == "Elevation") - 0.5
 topo_end   <- which(var_labels == "Basin Slope") + 0.5
-
-disc_start <- which(var_labels == "Flashiness Index (RBI)") - 0.5
+disc_start <- which(var_labels == "Flashiness (RBI)") - 0.5
 disc_end   <- which(var_labels == "Recession Slope") + 0.5
-
 land_start_index <- which(var_labels == "Land: Bare") - 0.5
 land_end_index   <- which(var_labels == "Land: Wetland Marsh") + 0.5
-
-# Define shading fills and label colors:
+# 6.1 Define shading fills and label colors
 prod_fill   <- "white"
 prod_text   <- "black"
-
-clim_fill  <- "#f7f7f7"    # very light gray
-clim_text  <- "#404040"    # darker gray
-
-topo_fill  <- "#e0e0e0"    # light gray
-topo_text  <- "#404040"
-
-disc_fill  <- "#d3d3d3"    # medium-light gray
-disc_text  <- "#404040"
-
+clim_fill   <- "#f7f7f7"   # very light gray
+clim_text   <- "#404040"   # darker gray
+topo_fill   <- "#e0e0e0"   # light gray
+topo_text   <- "#404040"
+disc_fill   <- "#d3d3d3"   # medium-light gray
+disc_text   <- "#404040"
 lulc_fill   <- "#f0f0f0"   # slightly darker pale gray
 lulc_text   <- "black"
-
-###############################################################################
-# 0.2 Create "All Variables" boxplot for each cluster 
-#     (jitter removed, lighter boxplot fills, subtle group shading;
-#      cluster name printed at x=0, y=0.5 inside the same plot but pushed left)
-###############################################################################
-cluster_boxplots <- lapply(unique_clusters, function(cl) {
-  df_long <- full_scaled %>%
-    dplyr::filter(final_cluster == cl) %>%
-    # Keep only numeric columns that are in var_order
-    dplyr::select(all_of(var_order)) %>%
-    tidyr::pivot_longer(
-      cols      = everything(),
-      names_to  = "feature",
-      values_to = "scaled_value"
-    ) %>%
-    # Recode “feature” to pretty labels and set factor levels
-    dplyr::mutate(
-      feature = dplyr::recode(feature, !!!recode_map_box),
-      feature = factor(feature, levels = var_labels)
-    )
-  
-  cluster_col <- my_cluster_colors[[cl]]
-  # Lighter fill for boxplot so medians remain visible:
-  box_fill  <- adjustcolor(cluster_col, alpha.f = 0.3)
-  box_color <- cluster_col
-  
-  ggplot(df_long, aes(x = feature, y = scaled_value)) +
-    # 1) Label “Productivity” (no background rectangle)
-    annotate(
-      "text",
-      x = (which(var_labels == "NOx") + which(var_labels == "Greenup Day")) / 2,
-      y = Inf, label = "Productivity",
-      color = prod_text, fontface = "bold",
-      vjust = 2, size = 3.5, inherit.aes = FALSE
-    ) +
-    # 2) Shaded background for Climate block (very light gray)
-    annotate(
-      "rect",
-      xmin = clim_start, xmax = clim_end,
-      ymin = -Inf, ymax = Inf,
-      fill = clim_fill, color = NA,
-      inherit.aes = FALSE
-    ) +
-    annotate(
-      "text",
-      x = (which(var_labels == "Precip") + which(var_labels == "Permafrost")) / 2,
-      y = Inf, label = "Climate",
-      color = clim_text, fontface = "bold",
-      vjust = 2, size = 3.5, inherit.aes = FALSE
-    ) +
-    # 3) Shaded background for Topo block (light gray)
-    annotate(
-      "rect",
-      xmin = topo_start, xmax = topo_end,
-      ymin = -Inf, ymax = Inf,
-      fill = topo_fill, color = NA,
-      inherit.aes = FALSE
-    ) +
-    annotate(
-      "text",
-      x = (which(var_labels == "Elevation") + which(var_labels == "Basin Slope")) / 2,
-      y = Inf, label = "Topo",
-      color = topo_text, fontface = "bold",
-      vjust = 2, size = 3.5, inherit.aes = FALSE
-    ) +
-    # 4) Shaded background for Discharge (Q) block (very light, alpha=0.3)
-    annotate(
-      "rect",
-      xmin = disc_start, xmax = disc_end,
-      ymin = -Inf, ymax = Inf,
-      fill = disc_fill, alpha = 0.3, color = NA,
-      inherit.aes = FALSE
-    ) +
-    annotate(
-      "text",
-      x = (which(var_labels == "Flashiness Index (RBI)") + which(var_labels == "Recession Slope")) / 2,
-      y = Inf, label = "Q",
-      color = disc_text, fontface = "bold",
-      vjust = 2, size = 3.5, inherit.aes = FALSE
-    ) +
-    # 5) Shaded background for LULC block (light gray, alpha=0.3, no border)
-    annotate(
-      "rect",
-      xmin = land_start_index, xmax = land_end_index,
-      ymin = -Inf, ymax = Inf,
-      fill = lulc_fill, color = NA, alpha = 0.3,
-      inherit.aes = FALSE
-    ) +
-    annotate(
-      "text",
-      x = (which(var_labels == "Land: Bare") + which(var_labels == "Land: Wetland Marsh")) / 2,
-      y = Inf, label = "LULC",
-      color = lulc_text, fontface = "bold",
-      vjust = 2, size = 3.5, inherit.aes = FALSE
-    ) +
-    # 6) Print cluster name at x = 0, y = 0.5 (vertical), but expand left space so it's outside ticks
-    annotate(
-      "text",
-      x = 0,               # will lie to the left of the first category
-      y = 0.5,             # center of y‐range (0→1 scaled values)
-      label = cl,
-      angle = 90,
-      fontface = "bold",
-      size = 4,
-      color = "#404040",
-      hjust = 0.5,
-      vjust = 0.5,
-      inherit.aes = FALSE
-    ) +
-    # 7) The actual boxplot with lighter fill:
-    geom_boxplot(
-      outlier.shape = NA,
-      fill  = box_fill,
-      color = box_color,
-      width = 0.7
-    ) +
-    labs(x = NULL, y = "Scaled Value") +
-    # 8) Force discrete x‐axis ordering, and add extra left “expansion” 
-    #    so that x = 0 really sits left of the first tick label
-    scale_x_discrete(
-      limits = var_labels,
-      expand = expansion(add = c(1.5, 0))
-    ) +
-    coord_cartesian(clip = "off") +   # allow that label to draw outside panel area
-    theme_classic(base_size = 10) +
-    theme(
-      plot.margin = ggplot2::margin(t = 10, r = 5, b = 5, l = 40),
-      axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
-      legend.position = "none"
-    )
-})
-
-
-###############################################################################
-# 0.3 Define plot_mean_abs_shap() with recoding & ordering for bar plots
-###############################################################################
+## 7. Define plot_mean_abs_shap() with Recoding & Ordering for Bar Plots
 plot_mean_abs_shap <- function(cluster_id, shap_values, full_scaled, y_limit = 1.3) {
   cluster_indices <- which(full_scaled$final_cluster == cluster_id)
   shap_cluster    <- shap_values[cluster_indices, , drop = FALSE]
@@ -280,18 +124,18 @@ plot_mean_abs_shap <- function(cluster_id, shap_values, full_scaled, y_limit = 1
     mean_abs_shapval = as.numeric(mean_abs_shap),
     stringsAsFactors = FALSE
   ) %>%
-    # Drop any “rocks” features
+    # Drop any "rocks" features
     dplyr::filter(!grepl("rocks", feature, ignore.case = TRUE)) %>%
-    # Recode to pretty labels
+    # Recode to "pretty" labels
     dplyr::mutate(
       feature = dplyr::recode(
         feature,
-        "FNConc" = "DSi Concentration",
+        "FNConc"  = "DSi Concentration",
         "FNYield" = "DSi Yield",
         !!!recode_map_box
       )
     ) %>%
-    # Use the same ordering: DSi Concentration, DSi Yield, var_labels
+    # Use ordering: DSi Concentration, DSi Yield, then var_labels
     dplyr::mutate(
       feature = factor(feature, levels = c("DSi Concentration", "DSi Yield", var_labels))
     ) %>%
@@ -308,44 +152,189 @@ plot_mean_abs_shap <- function(cluster_id, shap_values, full_scaled, y_limit = 1
     ) +
     coord_flip() +
     labs(x = NULL, y = NULL, title = NULL) +
-    theme_classic(base_size = 14) +
+    theme_classic(base_size = 24) +  # Increased from 18 to 24
     theme(
-      axis.text.y = element_text(size = 12),
-      axis.text.x = element_text(size = 12)
+      axis.text.y = element_text(size = 20),  # Increased from 16 to 20
+      axis.text.x = element_text(size = 20),  # Increased from 16 to 20
+      axis.title.x = element_text(size = 22), # Added explicit axis title size
+      axis.title.y = element_text(size = 22)  # Added explicit axis title size
     )
 }
-
-###############################################################################
-# 1. Load Necessary Packages
-###############################################################################
-library(ggplot2)
-library(dplyr)
-library(tidyr)
-library(scales)
-library(patchwork)   # For wrap_plots(), plot_layout(), wrap_elements()
-library(grid)        # For textGrob()
-
-# Set working directory & output directory
-setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures"
-
-###############################################################################
-# 2. SHAP Bar Plots (3 columns × N rows) + Column Titles, Single Y-Axis Label
-#    (each row still has 3 panels: [All Variables], [Concentration], [Yield])
-###############################################################################
+## 8. Create a "Cluster Label" Plot (Text Only)
+cluster_label_plot <- function(cluster_name) {
+  ggplot() +
+    annotate(
+      "text",
+      x = 0.5, y = 0.5,
+      label    = cluster_name,
+      angle    = 90,
+      fontface = "plain",  # Already plain, keeping as is
+      size     = 10,       # Increased from 6 to 10
+      color    = "#404040"
+    ) +
+    xlim(0, 1) +
+    ylim(0, 1) +
+    theme_void()
+}
+## 9. Build the "All Variables" Boxplot for Each Cluster
+cluster_boxplots <- lapply(unique_clusters, function(cl) {
+  df_long <- full_scaled %>%
+    dplyr::filter(final_cluster == cl) %>%
+    # Keep only numeric columns in var_order
+    dplyr::select(all_of(var_order)) %>%
+    tidyr::pivot_longer(
+      cols      = everything(),
+      names_to  = "feature",
+      values_to = "scaled_value"
+    ) %>%
+    # Recode to "pretty" labels and set factor levels
+    dplyr::mutate(
+      feature = dplyr::recode(feature, !!!recode_map_box),
+      feature = factor(feature, levels = var_labels)
+    )
+  
+  cluster_col <- my_cluster_colors[[cl]]
+  # Lighter fill so medians remain visible
+  box_fill  <- adjustcolor(cluster_col, alpha.f = 0.3)
+  box_color <- cluster_col
+  
+  ggplot(df_long, aes(x = feature, y = scaled_value)) +
+    # 1) "Productivity" (reduced size to prevent overlap)
+    annotate(
+      "text",
+      x = (which(var_labels == "NOx") + which(var_labels == "Greenup Day")) / 2,
+      y = Inf, label = "Productivity",
+      color    = prod_text,
+      fontface = "plain",   # Changed from "bold" to "plain"
+      vjust    = 2,
+      size     = 4.5,       # Reduced from 7 to 4.5
+      inherit.aes = FALSE
+    ) +
+    # 2) "Climate" (shaded rect + reduced size to prevent overlap)
+    annotate(
+      "rect",
+      xmin = clim_start, xmax = clim_end,
+      ymin = -Inf, ymax = Inf,
+      fill  = clim_fill,
+      color = NA,
+      inherit.aes = FALSE
+    ) +
+    annotate(
+      "text",
+      x = (which(var_labels == "Precip") + which(var_labels == "Permafrost")) / 2,
+      y = Inf, label = "Climate",
+      color    = clim_text,
+      fontface = "plain",   # Changed from "bold" to "plain"
+      vjust    = 2,
+      size     = 4.5,       # Reduced from 7 to 4.5
+      inherit.aes = FALSE
+    ) +
+    # 3) "Topo" (shaded rect + reduced size to prevent overlap)
+    annotate(
+      "rect",
+      xmin = topo_start, xmax = topo_end,
+      ymin = -Inf, ymax = Inf,
+      fill  = topo_fill,
+      color = NA,
+      inherit.aes = FALSE
+    ) +
+    annotate(
+      "text",
+      x = (which(var_labels == "Elevation") + which(var_labels == "Basin Slope")) / 2,
+      y = Inf, label = "Topo",
+      color    = topo_text,
+      fontface = "plain",   # Changed from "bold" to "plain"
+      vjust    = 2,
+      size     = 4.5,       # Reduced from 7 to 4.5
+      inherit.aes = FALSE
+    ) +
+    # 4) "Q" (shaded rect + reduced size to prevent overlap)
+    annotate(
+      "rect",
+      xmin = disc_start, xmax = disc_end,
+      ymin = -Inf, ymax = Inf,
+      fill  = disc_fill,
+      alpha = 0.3,
+      color = NA,
+      inherit.aes = FALSE
+    ) +
+    annotate(
+      "text",
+      x = (which(var_labels == "Flashiness (RBI)") + which(var_labels == "Recession Slope")) / 2,
+      y = Inf, label = "Q",
+      color    = disc_text,
+      fontface = "plain",   # Changed from "bold" to "plain"
+      vjust    = 2,
+      size     = 4.5,       # Reduced from 7 to 4.5
+      inherit.aes = FALSE
+    ) +
+    # 5) "LULC" (shaded rect + reduced size to prevent overlap)
+    annotate(
+      "rect",
+      xmin = land_start_index, xmax = land_end_index,
+      ymin = -Inf, ymax = Inf,
+      fill  = lulc_fill,
+      alpha = 0.3,
+      color = NA,
+      inherit.aes = FALSE
+    ) +
+    annotate(
+      "text",
+      x = (which(var_labels == "Land: Bare") + which(var_labels == "Land: Wetland Marsh")) / 2,
+      y = Inf, label = "LULC",
+      color    = lulc_text,
+      fontface = "plain",   # Changed from "bold" to "plain"
+      vjust    = 2,
+      size     = 4.5,       # Reduced from 7 to 4.5
+      inherit.aes = FALSE
+    ) +
+    # 6) The actual boxplot (lighter fill)
+    geom_boxplot(
+      outlier.shape = NA,
+      fill  = box_fill,
+      color = box_color,
+      width = 0.7
+    ) +
+    labs(x = NULL, y = "Scaled Value") +
+    # 7) Force discrete x-axis ordering, shift categories right by exactly 1 unit
+    scale_x_discrete(
+      limits = var_labels,
+      expand = expansion(add = c(1, 0))
+    ) +
+    coord_cartesian(clip = "off") +   # allow drawing outside panel area
+    theme_classic(base_size = 18) +   # Increased from 14 to 18
+    theme(
+      plot.margin = ggplot2::margin(t = 20, r = 5, b = 5, l = 50),  # Increased top margin from 15 to 20
+      axis.text.x     = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 16),  # Increased from 12 to 16
+      axis.text.y     = element_text(size = 16),  # Increased from 12 to 16
+      axis.title.y    = element_text(size = 18),  # Increased from 14 to 18
+      axis.title.x    = element_text(size = 18),  # Added explicit x-axis title size
+      legend.position = "none"
+    )
+})
+## 10. Build Concentration & Yield Bar‐Plot Lists
 plot_list_bars_conc <- lapply(unique_clusters, function(cl) {
   plot_mean_abs_shap(cl, shap_values_FNConc, full_scaled, y_limit = 0.7)
 })
 plot_list_bars_yield <- lapply(unique_clusters, function(cl) {
   plot_mean_abs_shap(cl, shap_values_FNYield, full_scaled, y_limit = 850)
 })
-
+## 11. Combine Each Row as FOUR Panels: 
+##     [ (1) cluster_label_plot | (2) boxplot | (3) concentration barplot | (4) yield barplot ]
 rows_list <- lapply(seq_along(unique_clusters), function(i) {
-  p_all_vars <- cluster_boxplots[[i]] + labs(y = NULL)
-  p_conc     <- plot_list_bars_conc[[i]]
-  p_yield    <- plot_list_bars_yield[[i]]
+  # (1) Text‐only cluster label:
+  p_label <- cluster_label_plot(unique_clusters[i])
   
-  # If not the last row, suppress x-axis on all three subplots
+  # (2) "All Variables" boxplot:
+  p_all_vars <- cluster_boxplots[[i]] + labs(y = NULL)
+  
+  # (3) Concentration barplot:
+  p_conc  <- plot_list_bars_conc[[i]]
+  
+  # (4) Yield barplot:
+  p_yield <- plot_list_bars_yield[[i]]
+  
+  # If not the last row, suppress x-axis on data panels:
   if (i < length(unique_clusters)) {
     p_all_vars <- p_all_vars + theme(
       axis.title.x = element_blank(),
@@ -363,52 +352,56 @@ rows_list <- lapply(seq_along(unique_clusters), function(i) {
       axis.ticks.x = element_blank()
     )
   } else {
-    # Last row => add y-axis label for “Mean Absolute SHAP Value”
-    p_conc  <- p_conc  + labs(y = "Mean Absolute SHAP Value")
-    p_yield <- p_yield + labs(y = "Mean Absolute SHAP Value")
+    # Bottom row: add "Mean Absolute SHAP Value" label with larger font
+    p_conc  <- p_conc  + labs(y = "Mean Absolute SHAP Value") + 
+      theme(axis.title.y = element_text(size = 18))
+    p_yield <- p_yield + labs(y = "Mean Absolute SHAP Value") + 
+      theme(axis.title.y = element_text(size = 18))
   }
   
-  # Arrange three panels side by side
-  (p_all_vars | p_conc | p_yield) + plot_layout(ncol = 3, widths = c(1, 1, 1))
+  # Place four panels side by side, with a narrower first column (0.05) so label is closer
+  (p_label | p_all_vars | p_conc | p_yield) +
+    plot_layout(ncol = 4, widths = c(0.05, 0.35, 0.30, 0.30))
 })
-
+# Stack all rows
 bar_plots_combined <- wrap_plots(rows_list, ncol = 1)
-
-# Column titles (skip any “cluster label” column now; just 3 titles)
+## 12. Build Column Titles + "Scaled Value" Y‐axis Label
+# Title for the blank first column
+blank_panel <- wrap_elements(
+  full = textGrob("", x = 0.5, hjust = 0.5)
+)
+# Titles for columns 2–4 (removed bold, increased size further)
 title_all_vars <- wrap_elements(
   full = textGrob("All Variables", x = 0.5, hjust = 0.5,
-                  gp = gpar(fontsize = 16, fontface = "bold"))
+                  gp = gpar(fontsize = 28, fontface = "plain"))  # Increased from 20 to 28
 )
 title_conc <- wrap_elements(
   full = textGrob("Concentration", x = 0.5, hjust = 0.5,
-                  gp = gpar(fontsize = 16, fontface = "bold"))
+                  gp = gpar(fontsize = 28, fontface = "plain"))  # Increased from 20 to 28
 )
 title_yield <- wrap_elements(
   full = textGrob("Yield", x = 0.5, hjust = 0.5,
-                  gp = gpar(fontsize = 16, fontface = "bold"))
+                  gp = gpar(fontsize = 28, fontface = "plain"))  # Increased from 20 to 28
 )
-title_row <- (title_all_vars + title_conc + title_yield) +
-  plot_layout(ncol = 3, widths = c(1, 1, 1))
-
-# Single y-axis label on the far left
+# Combine into a single title row, shrinking first column to 0.05
+title_row <- (blank_panel + title_all_vars + title_conc + title_yield) +
+  plot_layout(ncol = 4, widths = c(0.0000001, 0.35, 0.30, 0.30))
+# "Scaled Value" label on the far left (removed bold, increased size further)
 y_axis_label <- wrap_elements(
   full = textGrob("Scaled Value", rot = 90,
-                  gp = gpar(fontsize = 16, fontface = "bold"))
+                  gp = gpar(fontsize = 28, fontface = "plain"))  # Increased from 20 to 28
 )
-
-# Stack titles on top of the combined rows
+# Stack the title row above the combined rows, then add y‐axis label on left
 bar_plots_with_title <- title_row / bar_plots_combined +
-  plot_layout(heights = c(0.6, 10))
-
-# Place "Scaled Value" label on far left
+  plot_layout(heights = c(1.0, 10))  # Increased from 0.8 to 1.0 for more space for larger titles
 final_grid_bar <- (y_axis_label | bar_plots_with_title) +
-  plot_layout(widths = c(0.06, 0.94))
-
+  plot_layout(widths = c(0.08, 0.92))  # Increased y-axis label width from 0.06 to 0.08
+## 13. Save & Print Final Figure
 ggsave(
   filename = "Fig4_Combined_Grid_BarPlots.png",
   plot     = final_grid_bar,
-  width    = 22,
-  height   = 25,
+  width    = 26,    # Increased from 24 to 26 for larger text
+  height   = 30,    # Increased from 27 to 30 for larger text
   dpi      = 300,
   path     = output_dir
 )
