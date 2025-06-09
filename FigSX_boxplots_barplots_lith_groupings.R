@@ -442,7 +442,7 @@ final_grid_bar <- (y_axis_label | dot_plots_with_title) +
 
 ## 13. Save & Print Final Figure
 ggsave(
-  filename = "Fig4_Combined_Grid_BarPlots.png",
+  filename = "FigSX_Combined_Grid_BarPlots.png",
   plot     = final_grid_bar,
   width    = 28,   # slightly wider to accommodate larger fonts
   height   = 32,

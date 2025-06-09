@@ -1,6 +1,5 @@
 ###############################################################################
-# UPDATED Fig 3 SCRIPT: use SX‐style jittered SHAP dot‐plots (dark‐gray outline,
-# white‐to‐black fill, feature‐ordering by mean |SHAP|), with a shared legend.
+# UPDATED Fig 2 SCRIPT: 
 ###############################################################################
 
 # 1. Load needed packages
@@ -161,9 +160,28 @@ var_labels <- c(
 )
 recode_map <- setNames(var_labels, var_order)
 
-# 6.2 Scale all kept_drivers (for color‐mapping)
-kept_FNConc_scaled  <- kept_drivers_FNConc %>% mutate(across(everything(), ~ scales::rescale(., to = c(0, 1))))
-kept_FNYield_scaled <- kept_drivers_FNYield %>% mutate(across(everything(), ~ scales::rescale(., to = c(0, 1))))
+# 6.2 Log‐transform NOx & P, then rescale *all* features to [0,1]
+kept_FNConc_scaled  <- kept_drivers_FNConc %>%
+  mutate(
+    # NOx = log10(NOx),
+    P   = log10(P)
+  ) %>%
+  mutate(across(everything(), ~ scales::rescale(., to = c(0, 1))))
+
+kept_FNYield_scaled <- kept_drivers_FNYield %>%
+  mutate(
+    NOx = log10(NOx),
+    P   = log10(P)
+  ) %>%
+  mutate(across(everything(), ~ scales::rescale(., to = c(0, 1))))
+
+# for use in Fig3 plots
+save(
+  kept_FNConc_scaled,
+  kept_FNYield_scaled,
+  file = file.path(final_models_dir, "HierClust_scaled_drivers.RData")
+)
+
 
 # 6.3 Compute global color‐scale limits from both FNConc & FNYield scaled drivers
 existing_feats_FNConc <- intersect(var_order, colnames(kept_FNConc_scaled))
@@ -340,7 +358,7 @@ final_2x2 <- cowplot::plot_grid(
 
 # 7.6 Save FIG 3
 ggsave(
-  file.path(output_dir, "Fig3_Global_Grid_FNConc_FNYield.png"),
+  file.path(output_dir, "Fig2_Global_Grid_FNConc_FNYield.png"),
   final_2x2,
   width = 16,
   height = 18,
