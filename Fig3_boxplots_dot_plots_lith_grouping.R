@@ -5,8 +5,8 @@
 #                 (jittered points with dark‐gray outline, subtle group shading;
 #                  cluster label in its own left‐hand panel, shifted inward;
 #                  FEATURES ORDERED BY DESCENDING MEAN |SHAP| FOR Y‐AXIS)
+#                 NOW WITH CORRECT LOG TRANSFORMATIONS FROM drivers_numeric
 ###############################################################################
-
 ## 1. Load Necessary Packages
 library(ggplot2)
 library(dplyr)
@@ -17,6 +17,7 @@ library(grid)        # For textGrob()
 
 ## 2. Set Working & Output Directories
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
+rm(list = ls())
 output_dir <- "Final_Figures"
 dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
@@ -25,19 +26,84 @@ final_models_dir <- "Final_Models"
 load(file.path(final_models_dir, "FNConc_HierClust_Workflow_Objects.RData"))
 load(file.path(final_models_dir, "FNYield_HierClust_Workflow_Objects.RData"))
 
-## 3.1 Compute global min/max of all scaled feature values (for color scale)
-all_scaled_vals <- full_scaled %>%
-  dplyr::select(all_of(var_order)) %>%
-  unlist(use.names = FALSE)
-global_scaled_min <- min(all_scaled_vals, na.rm = TRUE)
-global_scaled_max <- max(all_scaled_vals, na.rm = TRUE)
+# Also load the drivers_numeric datasets used for the models
+load(file.path(final_models_dir, "FNConc_Yearly_numeric.RData"))         # loads drivers_numeric
+drivers_numeric_FNConc <- drivers_numeric
+load(file.path(final_models_dir, "FNYield_Yearly_numeric.RData"))        # loads drivers_numeric
+drivers_numeric_FNYield <- drivers_numeric
 
-## 3.2 Compute global min/max of SHAP values for Conc and Yield separately
-#    so that dot-plot x-axes are aligned across clusters
-global_shap_min_conc  <- min(shap_values_FNConc, na.rm = TRUE)
-global_shap_max_conc  <- max(shap_values_FNConc, na.rm = TRUE)
-global_shap_min_yield <- min(shap_values_FNYield, na.rm = TRUE)
-global_shap_max_yield <- max(shap_values_FNYield, na.rm = TRUE)
+## 4. Define Manual Ordering & Renaming of All Numeric Features FIRST
+# Use the proper variable ordering and recoding from your original code
+var_order <- c(
+  "NOx", "P", "npp", "evapotrans", "greenup_day", "precip", "temp",
+  "snow_cover", "permafrost", "elevation", "basin_slope", "RBI",
+  "recession_slope", "land_Bare", "land_Cropland", "land_Forest",
+  "land_Grassland_Shrubland", "land_Ice_Snow", "land_Impervious",
+  "land_Salt_Water", "land_Tidal_Wetland", "land_Water",
+  "land_Wetland_Marsh"
+)
+
+var_labels <- c(
+  "NOx", "P", "NPP", "ET", "Greenup Day", "Precip", "Temp",
+  "Snow Cover", "Permafrost", "Elevation", "Basin Slope",
+  "Flashiness (RBI)", "Recession Slope", "Land: Bare", "Land: Cropland",
+  "Land: Forest", "Land: Grass & Shrub", "Land: Ice & Snow",
+  "Land: Impervious", "Land: Salt Water", "Land: Tidal Wetland",
+  "Land: Water Body", "Land: Wetland Marsh"
+)
+
+recode_map_box <- setNames(var_labels, var_order)
+
+## 3.1 Apply log transformations and scaling like Figure 2
+# For FNConc: only P is log-transformed (NOx line is commented out)
+# For FNYield: both NOx and P are log-transformed
+
+# Create properly log-transformed and scaled datasets
+drivers_FNConc_scaled <- drivers_numeric_FNConc %>%
+  mutate(
+    # NOx = log10(NOx),  # Commented out for concentration analysis
+    P = log10(P)
+  ) %>%
+  mutate(across(everything(), ~ scales::rescale(., to = c(0, 1))))
+
+drivers_FNYield_scaled <- drivers_numeric_FNYield %>%
+  mutate(
+    NOx = log10(NOx),  # Applied for yield analysis
+    P = log10(P)
+  ) %>%
+  mutate(across(everything(), ~ scales::rescale(., to = c(0, 1))))
+
+# Add cluster information back to the scaled datasets
+# Assuming the row order matches between datasets
+drivers_FNConc_scaled$final_cluster <- full_scaled$final_cluster
+drivers_FNYield_scaled$final_cluster <- full_scaled$final_cluster
+
+## 3.2 Compute global min/max of all scaled feature values (for color scale)
+# Use the intersection of var_order with actual columns that exist in both datasets
+existing_vars_conc <- intersect(var_order, names(drivers_FNConc_scaled))
+existing_vars_yield <- intersect(var_order, names(drivers_FNYield_scaled))
+existing_vars <- intersect(existing_vars_conc, existing_vars_yield)
+
+all_scaled_vals_conc <- drivers_FNConc_scaled %>%
+  dplyr::select(all_of(existing_vars)) %>%
+  unlist(use.names = FALSE)
+
+all_scaled_vals_yield <- drivers_FNYield_scaled %>%
+  dplyr::select(all_of(existing_vars)) %>%
+  unlist(use.names = FALSE)
+
+global_scaled_min <- min(c(all_scaled_vals_conc, all_scaled_vals_yield), na.rm = TRUE)
+global_scaled_max <- max(c(all_scaled_vals_conc, all_scaled_vals_yield), na.rm = TRUE)
+
+## 3.3 Compute global min/max of SHAP values for Conc and Yield separately
+# Exclude "rocks_" variables from axis limit calculations
+non_rocks_cols_conc <- colnames(shap_values_FNConc)[!grepl("^rocks_", colnames(shap_values_FNConc))]
+non_rocks_cols_yield <- colnames(shap_values_FNYield)[!grepl("^rocks_", colnames(shap_values_FNYield))]
+
+global_shap_min_conc  <- min(shap_values_FNConc[, non_rocks_cols_conc], na.rm = TRUE)
+global_shap_max_conc  <- max(shap_values_FNConc[, non_rocks_cols_conc], na.rm = TRUE)
+global_shap_min_yield <- min(shap_values_FNYield[, non_rocks_cols_yield], na.rm = TRUE)
+global_shap_max_yield <- max(shap_values_FNYield[, non_rocks_cols_yield], na.rm = TRUE)
 
 ## 4. Define Cluster‐Color Palette
 my_cluster_colors <- c(
@@ -50,26 +116,7 @@ my_cluster_colors <- c(
 )
 unique_clusters <- levels(full_scaled$final_cluster)
 
-## 5. Define Manual Ordering & Renaming of All Numeric Features
-var_order <- c(
-  "NOx", "P", "npp", "evapotrans", "greenup_day", "precip", "temp",
-  "snow_cover", "permafrost", "elevation", "basin_slope", "RBI",
-  "recession_slope", "land_Bare", "land_Cropland", "land_Forest",
-  "land_Grassland_Shrubland", "land_Ice_Snow", "land_Impervious",
-  "land_Salt_Water", "land_Tidal_Wetland", "land_Water",
-  "land_Wetland_Marsh"
-)
-var_labels <- c(
-  "NOx", "P", "NPP", "ET", "Greenup Day", "Precip", "Temp",
-  "Snow Cover", "Permafrost", "Elevation", "Basin Slope",
-  "Flashiness (RBI)", "Recession Slope", "Land: Bare", "Land: Cropland",
-  "Land: Forest", "Land: Grass & Shrub", "Land: Ice & Snow",
-  "Land: Impervious", "Land: Salt Water", "Land: Tidal Wetland",
-  "Land: Water Body", "Land: Wetland Marsh"
-)
-recode_map_box <- setNames(var_labels, var_order)
-
-## 6. Precompute Numeric Positions for Each Group's Shading
+## 5. Precompute Numeric Positions for Each Group's Shading
 prod_start <- which(var_labels == "NOx") - 0.5
 prod_end   <- which(var_labels == "Greenup Day") + 0.5
 clim_start <- which(var_labels == "Precip") - 0.5
@@ -92,14 +139,10 @@ disc_text   <- "#404040"
 lulc_fill   <- "#f0f0f0"
 lulc_text   <- "black"
 
-## 7. Define plot_shap_dot()
-#    - Orders features by descending MEAN |SHAP| for this cluster
-#    - Uses a fixed x-axis range (passed via arguments)
-#    - Points filled by scaled feature_value, outlined dark gray
-#    - Vertical dashed line at x = 0
-plot_shap_dot <- function(cluster_id, shap_values, full_scaled,
+## 6. Define plot_shap_dot()
+plot_shap_dot <- function(cluster_id, shap_values, scaled_data, response_type = "concentration",
                           global_shap_min, global_shap_max) {
-  idx      <- which(full_scaled$final_cluster == cluster_id)
+  idx      <- which(scaled_data$final_cluster == cluster_id)
   shap_cl  <- shap_values[idx, , drop = FALSE]
   
   shap_long <- as.data.frame(shap_cl) %>%
@@ -109,7 +152,8 @@ plot_shap_dot <- function(cluster_id, shap_values, full_scaled,
       names_to  = "feature",
       values_to = "shap_value"
     )
-  feat_long <- full_scaled[idx, var_order, drop = FALSE] %>%
+  
+  feat_long <- scaled_data[idx, existing_vars, drop = FALSE] %>%
     mutate(id = row_number()) %>%
     pivot_longer(
       cols      = -id,
@@ -137,9 +181,8 @@ plot_shap_dot <- function(cluster_id, shap_values, full_scaled,
     pull(feature)
   
   df_shap_long <- df_shap_long %>%
-    mutate(feature = factor(feature, levels = rev(feature_order))) # REVERSED HERE
+    mutate(feature = factor(feature, levels = rev(feature_order)))
   
-  # Make a big, horizontal legend
   ggplot(df_shap_long, aes(x = shap_value, y = feature)) +
     geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
     geom_jitter(
@@ -169,7 +212,7 @@ plot_shap_dot <- function(cluster_id, shap_values, full_scaled,
     labs(x = NULL, y = NULL, title = NULL) +
     theme_classic(base_size = 28) +
     theme(
-      axis.text.y       = element_text(size = 20),  # smaller for dot plots
+      axis.text.y       = element_text(size = 20),
       axis.text.x       = element_text(size = 28),
       axis.title.x      = element_text(size = 30),
       axis.title.y      = element_text(size = 30),
@@ -182,7 +225,7 @@ plot_shap_dot <- function(cluster_id, shap_values, full_scaled,
     )
 }
 
-## 8. Create a "Cluster Label" Plot (Text Only)
+## 7. Create a "Cluster Label" Plot (Text Only)
 cluster_label_plot <- function(cluster_name) {
   ggplot() +
     annotate(
@@ -191,7 +234,7 @@ cluster_label_plot <- function(cluster_name) {
       label    = cluster_name,
       angle    = 90,
       fontface = "plain",
-      size     = 10,  # unchanged
+      size     = 10,
       color    = "#404040"
     ) +
     xlim(0, 1) +
@@ -199,11 +242,12 @@ cluster_label_plot <- function(cluster_name) {
     theme_void()
 }
 
-## 9. Build the "All Variables" Boxplot for Each Cluster
+## 8. Build the "All Variables" Boxplot for Each Cluster
 cluster_boxplots <- lapply(unique_clusters, function(cl) {
-  df_long <- full_scaled %>%
+  # Use the concentration scaled data for boxplots
+  df_long <- drivers_FNConc_scaled %>%
     filter(final_cluster == cl) %>%
-    select(all_of(var_order)) %>%
+    select(all_of(existing_vars)) %>%
     pivot_longer(
       cols      = everything(),
       names_to  = "feature",
@@ -221,12 +265,12 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
   ggplot(df_long, aes(x = feature, y = scaled_value)) +
     annotate(
       "text",
-      x = (which(var_labels == "NOx") + which(var_labels == "Greenup Day")) / 2,
+      x = (prod_start + prod_end) / 2,
       y = Inf, label = "Productivity",
       color    = prod_text,
       fontface = "plain",
       vjust    = 2,
-      size     = 6,  # unchanged
+      size     = 6,
       inherit.aes = FALSE
     ) +
     annotate(
@@ -239,12 +283,12 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
     ) +
     annotate(
       "text",
-      x = (which(var_labels == "Precip") + which(var_labels == "Permafrost")) / 2,
+      x = (clim_start + clim_end) / 2,
       y = Inf, label = "Climate",
       color    = clim_text,
       fontface = "plain",
       vjust    = 2,
-      size     = 6,  # unchanged
+      size     = 6,
       inherit.aes = FALSE
     ) +
     annotate(
@@ -257,12 +301,12 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
     ) +
     annotate(
       "text",
-      x = (which(var_labels == "Elevation") + which(var_labels == "Basin Slope")) / 2,
+      x = (topo_start + topo_end) / 2,
       y = Inf, label = "Topo",
       color    = topo_text,
       fontface = "plain",
       vjust    = 2,
-      size     = 6,  # unchanged
+      size     = 6,
       inherit.aes = FALSE
     ) +
     annotate(
@@ -276,12 +320,12 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
     ) +
     annotate(
       "text",
-      x = (which(var_labels == "Flashiness (RBI)") + which(var_labels == "Recession Slope")) / 2,
+      x = (disc_start + disc_end) / 2,
       y = Inf, label = "Q",
       color    = disc_text,
       fontface = "plain",
       vjust    = 2,
-      size     = 6,  # unchanged
+      size     = 6,
       inherit.aes = FALSE
     ) +
     annotate(
@@ -295,12 +339,12 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
     ) +
     annotate(
       "text",
-      x = (which(var_labels == "Land: Bare") + which(var_labels == "Land: Wetland Marsh")) / 2,
+      x = (land_start_index + land_end_index) / 2,
       y = Inf, label = "LULC",
       color    = lulc_text,
       fontface = "plain",
       vjust    = 2,
-      size     = 6,  # unchanged
+      size     = 6,
       inherit.aes = FALSE
     ) +
     geom_boxplot(
@@ -318,7 +362,7 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
     theme_classic(base_size = 28) +
     theme(
       plot.margin    = ggplot2::margin(t = 20, r = 5, b = 5, l = 50),
-      axis.text.x     = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 20), # smaller for boxplot x-axis
+      axis.text.x     = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 20),
       axis.text.y     = element_text(size = 28),
       axis.title.y    = element_text(size = 28),
       axis.title.x    = element_text(size = 28),
@@ -326,27 +370,30 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
     )
 })
 
-## 10. Build Concentration & Yield Dot‐Plot Lists
+## 9. Build Concentration & Yield Dot‐Plot Lists
 plot_list_dots_conc <- lapply(unique_clusters, function(cl) {
   plot_shap_dot(
     cl,
     shap_values_FNConc,
-    full_scaled,
+    drivers_FNConc_scaled,
+    response_type = "concentration",
     global_shap_min = global_shap_min_conc,
     global_shap_max = global_shap_max_conc
   )
 })
+
 plot_list_dots_yield <- lapply(unique_clusters, function(cl) {
   plot_shap_dot(
     cl,
     shap_values_FNYield,
-    full_scaled,
+    drivers_FNYield_scaled,
+    response_type = "yield",
     global_shap_min = global_shap_min_yield,
     global_shap_max = global_shap_max_yield
   )
 })
 
-## 11. Combine Each Row and Collect One Shared Legend
+## 10. Combine Each Row and Collect One Shared Legend
 rows_list <- lapply(seq_along(unique_clusters), function(i) {
   p_label    <- cluster_label_plot(unique_clusters[i])
   p_all_vars <- cluster_boxplots[[i]] + labs(y = NULL)
@@ -391,12 +438,12 @@ dot_plots_combined <- wrap_plots(rows_list, ncol = 1, guides = "collect") &
         legend.justification = "center"
   )
 
-## 12. Build Column Titles + "Scaled Value" Y-axis Label
+## 11. Build Column Titles + "Scaled Value" Y-axis Label
 blank_panel    <- wrap_elements(full = textGrob("", x = 0.5, hjust = 0.5))
 title_all_vars <- wrap_elements(
   full = textGrob(
     "All Variables", 
-    x = 0.6, y = 0.5,           # Move closer to plot (y close to 1 = closer to top, but <1 or it clips)
+    x = 0.6, y = 0.5,
     hjust = 0.6, vjust = 1,
     gp = gpar(fontsize = 28, fontface = "plain")
   )
@@ -417,7 +464,6 @@ title_yield    <- wrap_elements(
     gp = gpar(fontsize = 30, fontface = "plain")
   )
 )
-
 title_row <- (blank_panel + title_all_vars + title_conc + title_yield) +
   plot_layout(ncol = 4, widths = c(0.0000001, 0.35, 0.30, 0.30))
 
@@ -428,13 +474,12 @@ y_axis_label <- wrap_elements(
 
 # Reduce height of title row to bring it closer to the plots
 dot_plots_with_title <- title_row / dot_plots_combined +
-  plot_layout(heights = c(0.2, 10))  # was c(1.0, 10)
+  plot_layout(heights = c(0.2, 10))
 
 final_grid_dot <- (y_axis_label | dot_plots_with_title) +
   plot_layout(widths = c(0.03, 0.97))
 
-
-## 13. Save & Print Final Figure
+## 12. Save & Print Final Figure
 ggsave(
   filename = "Fig3_Combined_Grid_DotPlots.png",
   plot     = final_grid_dot,
