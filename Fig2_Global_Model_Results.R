@@ -406,3 +406,93 @@ for (plot_name in names(all_pdp_plots)) {
 
 cat("Partial dependence plots completed and saved in:", global_pdp_dir, "\n")
 
+###############################################################################
+# 9. Create SHAP vs Driver Scatterplots by Lithology Group (with LOESS fits)
+###############################################################################
+
+# 9.1 Define custom cluster color palette
+theme_cluster_colors <- c(
+  "Volcanic"            = "#AC7B32",
+  "Sedimentary"         = "#579C8E",
+  "Mixed Sedimentary"   = "#89C8A0",
+  "Plutonic"            = "#8D9A40",
+  "Metamorphic"         = "#C26F86",
+  "Carbonate Evaporite" = "#5E88B0"
+)
+
+# 9.2 Function factory: returns a SHAP scatter plotting function for given method
+make_shap_scatter_fn <- function(fit_method, output_subdir) {
+  function(shap_matrix, drivers_data, drivers_consolidated_lith, model_name, base_output) {
+    feats <- colnames(shap_matrix)
+    litho <- factor(drivers_consolidated_lith$final_cluster)
+    colors <- theme_cluster_colors[levels(litho)]
+    
+    out_dir <- file.path(base_output, output_subdir)
+    dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+    
+    for (feat in feats) {
+      if (!feat %in% colnames(drivers_data)) next
+      df <- data.frame(
+        driver_value = drivers_data[[feat]],
+        shap_value   = shap_matrix[, feat],
+        lithology    = litho
+      )
+      df <- df[is.finite(df$driver_value) & is.finite(df$shap_value), ]
+      if (nrow(df) < 10) next
+      
+      feat_label <- if (feat %in% names(recode_map)) recode_map[feat] else feat
+      
+      p <- ggplot(df, aes(x = driver_value, y = shap_value, color = lithology)) +
+        geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
+        geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+        geom_point(alpha = 0.6, size = 2) +
+        geom_smooth(method = fit_method, se = FALSE, size = 1) +
+        scale_color_manual(values = colors, name = "Lithology") +
+        labs(
+          x     = feat_label,
+          y     = paste("SHAP value\n(", model_name, ")", sep = ""),
+          title = paste("SHAP vs", feat_label)
+        ) +
+        theme_classic(base_size = 18) +
+        theme(
+          plot.title      = element_text(hjust = 0.5, size = 20, face = "bold"),
+          axis.title      = element_text(size = 16),
+          axis.text       = element_text(size = 14),
+          legend.position = "bottom",
+          legend.title    = element_text(size = 14),
+          legend.text     = element_text(size = 12)
+        )
+      
+      fname <- file.path(out_dir, paste0("SHAP_", fit_method, "_", model_name, "_", feat, ".png"))
+      ggsave(fname, p, width = 8, height = 6, dpi = 300, bg = "white")
+    }
+    message("Plots saved to ", out_dir)
+  }
+}
+
+# 9.3 Instantiate two plotting functions
+gscatter_lm   <- make_shap_scatter_fn("lm",   "shap_scatter_lm")
+gscatter_loess <- make_shap_scatter_fn("loess", "shap_scatter_loess")
+
+# 9.4 Generate for FNConc and FNYield
+for (fn in list(
+  list(fn = gscatter_lm,   suffix = "LM"),
+  list(fn = gscatter_loess, suffix = "LOESS")
+)) {
+  fn$fn(
+    shap_matrix               = shap_values_FNConc,
+    drivers_data              = kept_drivers_FNConc,
+    drivers_consolidated_lith = drivers_numeric_consolidated_lith_FNConc,
+    model_name                = "Concentration",
+    base_output               = output_dir
+  )
+  fn$fn(
+    shap_matrix               = shap_values_FNYield,
+    drivers_data              = kept_drivers_FNYield,
+    drivers_consolidated_lith = drivers_numeric_consolidated_lith_FNYield,
+    model_name                = "Yield",
+    base_output               = output_dir
+  )
+}
+
+message("All SHAP scatterplots generated under '", output_dir, "'.")
