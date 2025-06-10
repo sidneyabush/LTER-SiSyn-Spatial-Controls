@@ -367,196 +367,42 @@ ggsave(
 )
 
 ###############################################################################
-# 8. Create Partial Dependence Plots for each driver (colored by lithologic type)
+# 8. Create Partial Dependence Plots for each driver (using *all* kept_drivers)
 ###############################################################################
 
-# 8.1 Load required additional packages for partial dependence
-if (!require(pdp)) install.packages("pdp")
-library(pdp)
-
-# 8.2 Create function to generate partial dependence plots
-create_pdp_plots <- function(rf_model, drivers_data, drivers_consolidated_lith, model_name, selected_features = NULL) {
-  
-  # Get feature names from the model
-  feature_names <- names(rf_model$forest$xlevels)
-  if (is.null(feature_names)) {
-    feature_names <- colnames(drivers_data)
-  }
-  
-  # Filter to only selected features if provided
-  if (!is.null(selected_features)) {
-    feature_names <- intersect(feature_names, selected_features)
-    cat("Using only selected features:", paste(feature_names, collapse = ", "), "\n")
-  }
-  
-  # Use the final_cluster column from drivers_consolidated_lith for rock group coloring
-  if ("final_cluster" %in% colnames(drivers_consolidated_lith)) {
-    litho_type <- drivers_consolidated_lith$final_cluster
-    cat("Using 'final_cluster' column for rock group coloring\n")
-  } else {
-    stop("Error: 'final_cluster' column not found in drivers_consolidated_lith. Please ensure this column exists.")
-  }
-  
-  # Ensure lithologic type is a factor
-  litho_type <- as.factor(litho_type)
-  
-  # Create color palette for lithologic types
-  n_types <- length(levels(litho_type))
-  if (n_types <= 8) {
-    colors <- RColorBrewer::brewer.pal(max(3, n_types), "Set2")[1:n_types]
-  } else {
-    colors <- rainbow(n_types)
-  }
-  names(colors) <- levels(litho_type)
-  
-  # Create partial dependence plots for each feature
-  pdp_plots <- list()
-  
-  for (i in seq_along(feature_names)) {
-    feature <- feature_names[i]
-    
-    # Skip if feature not in drivers_data
-    if (!feature %in% colnames(drivers_data)) next
-    
-    cat("Creating PDP for", feature, "...\n")
-    
-    # Calculate partial dependence
-    pd_data <- partial(rf_model, pred.var = feature, train = drivers_data)
-    
-    # Add lithologic information for coloring individual points
-    # Create expanded data for plotting individual predictions
-    feature_range <- seq(min(drivers_data[[feature]], na.rm = TRUE),
-                         max(drivers_data[[feature]], na.rm = TRUE),
-                         length.out = 50)
-    
-    # Create data frame for plotting
-    plot_data <- data.frame(
-      feature_value = drivers_data[[feature]],
-      litho_type = litho_type
-    )
-    
-    # Get feature label for plotting
-    feature_label <- ifelse(feature %in% names(recode_map), 
-                            recode_map[feature], 
-                            feature)
-    
-    # Create the plot
-    p <- ggplot() +
-      # Add partial dependence line
-      geom_line(data = pd_data, 
-                aes(x = get(feature), y = yhat), 
-                color = "black", size = 1.5, alpha = 0.8) +
-      # Add individual points colored by lithology
-      geom_point(data = plot_data, 
-                 aes(x = feature_value, y = 0, color = litho_type),
-                 alpha = 0.6, size = 2, 
-                 position = position_jitter(height = 0.02, width = 0)) +
-      scale_color_manual(values = colors, name = "Rock Group") +
-      labs(
-        x = feature_label,
-        y = paste("Partial Dependence\n(", model_name, ")", sep = ""),
-        title = paste("PDP:", feature_label)
-      ) +
-      theme_classic(base_size = 14) +
-      theme(
-        plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-        axis.title = element_text(size = 14),
-        axis.text = element_text(size = 12),
-        legend.position = "bottom",
-        legend.title = element_text(size = 12),
-        legend.text = element_text(size = 10)
-      )
-    
-    pdp_plots[[paste0(feature, "_", model_name)]] <- p
-  }
-  
-  return(pdp_plots)
-}
-
-# 8.3 Load the consolidated lithology dataframes
-load(file.path(final_models_dir, "FNConc_HierClust_Workflow_Objects.RData"))
-load(file.path(final_models_dir, "FNYield_HierClust_Workflow_Objects.RData"))
-
-# 8.4 Define specific features for each model
-# Map display names back to variable names in the data
-reverse_recode_map <- setNames(names(recode_map), recode_map)
-
-# Features for Concentration model (using display names, will be mapped back)
-conc_features_display <- c(
-  "Basin Slope", "Elevation", "Rock: Volcanic", "P", "Land: Water Body", 
-  "Recession Slope", "Land: Forest", "Flashiness (RBI)", "Precip", 
-  "Land: Cropland", "Rock: Sedimentary", "Land: Grass & Shrub", "Land: Impervious"
-)
-
-# Features for Yield model (using display names, will be mapped back)
-yield_features_display <- c(
-  "Rock: Volcanic", "ET", "NPP", "Flashiness (RBI)", "Temp", "Recession Slope", 
-  "Rock: Plutonic", "Elevation", "NOx", "Land: Wetland Marsh", "P"
-)
-
-# Map display names back to variable names
-conc_features_vars <- character()
-for (display_name in conc_features_display) {
-  if (display_name %in% reverse_recode_map) {
-    conc_features_vars <- c(conc_features_vars, reverse_recode_map[display_name])
-  } else if (display_name == "Rock: Volcanic") {
-    conc_features_vars <- c(conc_features_vars, "rocks_volcanic")
-  } else if (display_name == "Rock: Sedimentary") {
-    conc_features_vars <- c(conc_features_vars, "rocks_sedimentary")
-  }
-}
-
-yield_features_vars <- character()
-for (display_name in yield_features_display) {
-  if (display_name %in% reverse_recode_map) {
-    yield_features_vars <- c(yield_features_vars, reverse_recode_map[display_name])
-  } else if (display_name == "Rock: Volcanic") {
-    yield_features_vars <- c(yield_features_vars, "rocks_volcanic")
-  } else if (display_name == "Rock: Plutonic") {
-    yield_features_vars <- c(yield_features_vars, "rocks_plutonic")
-  }
-}
-
-# 8.5 Generate PDP plots for both models with selected features only
-cat("Creating PDPs for FN Concentration model (selected features only)...\n")
+# 8.2 Generate PDP plots for both models, using kept_drivers as training data
+cat("Creating PDPs for FN Concentration model (all kept drivers)...\n")
 pdp_plots_conc <- create_pdp_plots(
-  rf_model = rf_model2_FNConc,
-  drivers_data = kept_drivers_FNConc,
+  rf_model                  = rf_model2_FNConc,
+  drivers_data              = kept_drivers_FNConc,
   drivers_consolidated_lith = drivers_numeric_consolidated_lith_FNConc,
-  model_name = "Concentration",
-  selected_features = conc_features_vars
+  model_name                = "Concentration"
 )
 
-cat("Creating PDPs for FN Yield model (selected features only)...\n")
+cat("Creating PDPs for FN Yield model (all kept drivers)...\n")
 pdp_plots_yield <- create_pdp_plots(
-  rf_model = rf_model2_FNYield,
-  drivers_data = kept_drivers_FNYield,
+  rf_model                  = rf_model2_FNYield,
+  drivers_data              = kept_drivers_FNYield,
   drivers_consolidated_lith = drivers_numeric_consolidated_lith_FNYield,
-  model_name = "Yield",
-  selected_features = yield_features_vars
+  model_name                = "Yield"
 )
 
-# 8.6 Create global_pdp output directory
-global_pdp_dir <- "global_pdp"
+# 8.3 Define output directory under Final_Figures and create it
+global_pdp_dir <- file.path(output_dir, "global_pdp")
 dir.create(global_pdp_dir, showWarnings = FALSE, recursive = TRUE)
 
-# 8.7 Combine all PDP plots
+# 8.4 Save individual PDP plots to Final_Figures/global_pdp
 all_pdp_plots <- c(pdp_plots_conc, pdp_plots_yield)
-
-# 8.8 Save individual PDP plots to global_pdp folder
 for (plot_name in names(all_pdp_plots)) {
   ggsave(
-    file.path(global_pdp_dir, paste0("PDP_", plot_name, ".png")),
-    all_pdp_plots[[plot_name]],
-    width = 10,
-    height = 8,
-    dpi = 300,
-    bg = "white"
+    filename = file.path(global_pdp_dir, paste0("PDP_", plot_name, ".png")),
+    plot     = all_pdp_plots[[plot_name]],
+    width    = 10,
+    height   = 8,
+    dpi      = 300,
+    bg       = "white"
   )
 }
 
-cat("Partial dependence plots completed and saved!\n")
-cat("Files created in 'global_pdp' folder:\n")
-for (plot_name in names(all_pdp_plots)) {
-  cat(paste0("- PDP_", plot_name, ".png\n"))
-}
+cat("Partial dependence plots completed and saved in:", global_pdp_dir, "\n")
+
