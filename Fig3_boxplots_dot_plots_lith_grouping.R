@@ -46,7 +46,7 @@ var_order <- c(
 var_labels <- c(
   "NOx", "P", "NPP", "ET", "Greenup Day", "Precip", "Temp",
   "Snow Cover", "Permafrost", "Elevation", "Basin Slope",
-  "Flashiness (RBI)", "Recession Slope", "Land: Bare", "Land: Cropland",
+  "Flashiness (RBI)", "Recession Curve Slope", "Land: Bare", "Land: Cropland",
   "Land: Forest", "Land: Grass & Shrub", "Land: Ice & Snow",
   "Land: Impervious", "Land: Salt Water", "Land: Tidal Wetland",
   "Land: Water Body", "Land: Wetland Marsh"
@@ -124,7 +124,7 @@ clim_end   <- which(var_labels == "Permafrost") + 0.5
 topo_start <- which(var_labels == "Elevation") - 0.5
 topo_end   <- which(var_labels == "Basin Slope") + 0.5
 disc_start <- which(var_labels == "Flashiness (RBI)") - 0.5
-disc_end   <- which(var_labels == "Recession Slope") + 0.5
+disc_end   <- which(var_labels == "Recession Curve Slope") + 0.5
 land_start_index <- which(var_labels == "Land: Bare") - 0.5
 land_end_index   <- which(var_labels == "Land: Wetland Marsh") + 0.5
 
@@ -488,3 +488,160 @@ ggsave(
   dpi      = 300,
   path     = output_dir
 )
+
+###############################################################################
+# 12. Lithology‐Stacked Mean |SHAP| Bar Plots (by driver, colored by final_cluster)
+###############################################################################
+
+# 12.0 Define the exact legend/bar order and corresponding colors
+cluster_levels <- c(
+  "Volcanic",
+  "Sedimentary",
+  "Mixed Sedimentary",
+  "Plutonic",
+  "Metamorphic",
+  "Carbonate Evaporite"
+)
+my_cluster_colors <- setNames(
+  c("#AC7B32", "#579C8E", "#89C8A0", "#8D9A40", "#C26F86", "#5E88B0"),
+  cluster_levels
+)
+
+# 12.1 Prepare Concentration data
+conc_shap_litho <- as.data.frame(shap_values_FNConc) %>%
+  mutate(id = row_number()) %>%
+  pivot_longer(
+    cols      = -id,
+    names_to  = "feature",
+    values_to = "shap_value"
+  ) %>%
+  left_join(
+    drivers_FNConc_scaled %>%
+      mutate(id = row_number()) %>%
+      select(id, final_cluster),
+    by = "id"
+  ) %>%
+  filter(!grepl("^rocks_", feature)) %>%
+  group_by(feature, final_cluster) %>%
+  summarize(mean_abs = mean(abs(shap_value), na.rm = TRUE), .groups = "drop") %>%
+  group_by(feature) %>%
+  mutate(total = sum(mean_abs)) %>%
+  ungroup() %>%
+  mutate(
+    feature       = recode(feature, !!!recode_map_box),
+    final_cluster = factor(final_cluster, levels = cluster_levels)
+  )
+
+# Order features so that least‐important (smallest total) is first, most‐important last
+feature_order <- conc_shap_litho %>%
+  distinct(feature, total) %>%
+  arrange(total) %>%    # ascending: smallest → largest
+  pull(feature)
+
+conc_shap_litho <- conc_shap_litho %>%
+  mutate(feature = factor(feature, levels = feature_order))
+
+# 12.2 Plot Concentration (horizontal bars, legend at bottom)
+conc_litho_bar <- ggplot(conc_shap_litho,
+                         aes(x = mean_abs, y = feature, fill = final_cluster)) +
+  geom_col(position = position_stack(reverse = TRUE)) +
+  scale_fill_manual(
+    name   = "Lithology",
+    values = my_cluster_colors,
+    breaks = cluster_levels,
+    limits = cluster_levels
+  ) +
+  labs(
+    x     = "Mean Absolute SHAP Value",
+    y     = NULL,
+    title = "Concentration",
+    tag   = "A"
+  ) +
+  theme_classic(base_size = 22) +
+  theme(
+    plot.title      = element_text(hjust = 0.5, size = 24),
+    plot.tag        = element_text(size = 24, hjust = 0, vjust = 1),
+    axis.text       = element_text(size = 20),
+    axis.title.x    = element_text(size = 22),
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    legend.title    = element_blank(),
+    legend.text     = element_text(size = 18)
+  )
+
+# 12.3 Prepare Yield data
+yield_shap_litho <- as.data.frame(shap_values_FNYield) %>%
+  mutate(id = row_number()) %>%
+  pivot_longer(
+    cols      = -id,
+    names_to  = "feature",
+    values_to = "shap_value"
+  ) %>%
+  left_join(
+    drivers_FNYield_scaled %>%
+      mutate(id = row_number()) %>%
+      select(id, final_cluster),
+    by = "id"
+  ) %>%
+  filter(!grepl("^rocks_", feature)) %>%
+  group_by(feature, final_cluster) %>%
+  summarize(mean_abs = mean(abs(shap_value), na.rm = TRUE), .groups = "drop") %>%
+  group_by(feature) %>%
+  mutate(total = sum(mean_abs)) %>%
+  ungroup() %>%
+  mutate(
+    feature       = recode(feature, !!!recode_map_box),
+    final_cluster = factor(final_cluster, levels = cluster_levels)
+  )
+
+feature_order_yield <- yield_shap_litho %>%
+  distinct(feature, total) %>%
+  arrange(total) %>%    # ascending
+  pull(feature)
+
+yield_shap_litho <- yield_shap_litho %>%
+  mutate(feature = factor(feature, levels = feature_order_yield))
+
+# 12.4 Plot Yield (horizontal bars, legend at bottom)
+yield_litho_bar <- ggplot(yield_shap_litho,
+                          aes(x = mean_abs, y = feature, fill = final_cluster)) +
+  geom_col(position = position_stack(reverse = TRUE)) +
+  scale_fill_manual(
+    name   = "Lithology",
+    values = my_cluster_colors,
+    breaks = cluster_levels,
+    limits = cluster_levels
+  ) +
+  labs(
+    x     = "Mean Absolute Shap Value",
+    y     = NULL,
+    title = "Yield",
+    tag   = "B"
+  ) +
+  theme_classic(base_size = 22) +
+  theme(
+    plot.title      = element_text(hjust = 0.5, size = 24),
+    plot.tag        = element_text(size = 24, hjust = 0, vjust = 1),
+    axis.text       = element_text(size = 20),
+    axis.title.x    = element_text(size = 22),
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    legend.title    = element_blank(),
+    legend.text     = element_text(size = 18)
+  )
+
+# 12.5 Combine and save
+library(patchwork)
+fig_litho_shap <- conc_litho_bar + yield_litho_bar +
+  plot_layout(ncol = 2, guides = "collect") &
+  theme(legend.position = "bottom")
+
+ggsave(
+  file.path(output_dir, "FigX_Lithology_Stacked_SHAP.png"),
+  fig_litho_shap,
+  width  = 18,
+  height = 10,
+  dpi    = 300,
+  bg     = "white"
+)
+
