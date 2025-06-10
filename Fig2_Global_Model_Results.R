@@ -299,71 +299,104 @@ dot_plot_FNYield <- create_shap_dot_global(
 )
 
 ###############################################################################
-# 7. Combine LM (A,B) + Dot‐plots (C,D) into a 2×2 grid with shared legend
+# 7. Create Fig 2
 ###############################################################################
 
-# 7.1 Tag LM panels
-A_tagged <- lm_plot_FNConc +
-  labs(tag = "A") +
-  theme(
-    plot.tag         = element_text(size = 24, face = "plain"),
-    plot.tag.position = c(0.02, 0.98),
-    plot.margin      = ggplot2::margin(10, 10, 10, 10, "pt")
-  )
+# 7.0 Define & generate mean-|SHAP| bar-plots with pretty labels & correct order
+create_shap_bar_global <- function(shap_matrix, model_name) {
+  shap_df <- as.data.frame(shap_matrix) %>%
+    pivot_longer(
+      cols      = everything(),
+      names_to  = "feature",
+      values_to = "shap_value"
+    )
+  
+  bar_stats <- shap_df %>%
+    group_by(feature) %>%
+    summarize(mean_abs = mean(abs(shap_value), na.rm = TRUE), .groups="drop") %>%
+    # recode both rocks_ and the var_order features
+    mutate(pretty = case_when(
+      grepl("^rocks_volcanic$",           feature) ~ "Rock: Volcanic",
+      grepl("^rocks_sedimentary$",        feature) ~ "Rock: Sedimentary",
+      grepl("^rocks_carbonate_evaporite$",feature) ~ "Rock: Carbonate Evaporite",
+      grepl("^rocks_metamorphic$",        feature) ~ "Rock: Metamorphic",
+      grepl("^rocks_plutonic$",           feature) ~ "Rock: Plutonic",
+      TRUE                                        ~ recode(feature, !!!recode_map)
+    )) %>%
+    # sort descending by mean_abs, then reverse for factor levels:
+    arrange(desc(mean_abs)) %>%
+    mutate(pretty = factor(pretty, levels = rev(unique(pretty))))
+  
+  ggplot(bar_stats, aes(x = pretty, y = mean_abs)) +
+    geom_col() +
+    coord_flip() +
+    labs(
+      x     = NULL,
+      y     = "Mean Absolute SHAP",
+      title = NULL
+    ) +
+    theme_classic(base_size = 22) +                # match the others
+    theme(
+      plot.title   = element_text(hjust = 0.5, size = 22, face = "bold"),
+      axis.text.y  = element_text(size = 20, face = "plain"),
+      axis.text.x  = element_text(size = 20, face = "plain"),
+      axis.title.x = element_text(size = 22, face = "plain")
+    )
+}
 
-B_tagged <- lm_plot_FNYield +
-  labs(tag = "B") +
-  theme(
-    plot.tag         = element_text(size = 24, face = "plain"),
-    plot.tag.position = c(0.02, 0.98),
-    axis.title.y     = element_blank(),
-    plot.margin      = ggplot2::margin(10, 10, 10, 10, "pt")
-  )
+# regenerate your bars:
+bar_plot_FNConc  <- create_shap_bar_global(shap_values_FNConc,  "Concentration")
+bar_plot_FNYield <- create_shap_bar_global(shap_values_FNYield, "Yield")
 
-# 7.2 Prepare FNConc dot‐plot with legend on right (temporarily) to extract it
-C_with_legend <- dot_plot_FNConc +
-  labs(tag = "C") +
-  theme(
-    plot.tag         = element_text(size = 24, face = "plain"),
-    plot.tag.position = c(0.02, 0.98),
-    legend.position  = "right"
-  )
+# 7.1 (unchanged) A & B:
+A_tagged <- lm_plot_FNConc + labs(tag="A") +
+  theme(plot.tag=element_text(size=24), plot.tag.position=c(0.02,0.98))
 
-# 7.3 Extract shared legend
-shared_legend <- cowplot::get_legend(C_with_legend)
+B_tagged <- lm_plot_FNYield + labs(tag="B") +
+  theme(plot.tag=element_text(size=24), plot.tag.position=c(0.02,0.98),
+        axis.title.y=element_blank())
 
-# 7.4 Strip legends from C & D
-C_nolegend <- C_with_legend + theme(legend.position = "none")
+# 7.2 (unchanged) C & D:
+C_tagged <- bar_plot_FNConc + labs(tag="C") +
+  theme(plot.tag=element_text(size=24), plot.tag.position=c(0.02,0.98))
 
-D_tagged <- dot_plot_FNYield +
-  labs(tag = "D") +
-  theme(
-    plot.tag         = element_text(size = 24, face = "plain"),
-    plot.tag.position = c(0.02, 0.98),
-    legend.position  = "none"
-  )
+D_tagged <- bar_plot_FNYield + labs(tag="D") +
+  theme(plot.tag=element_text(size=24), plot.tag.position=c(0.02,0.98))
 
-# 7.5 Assemble the 2×2 grid + shared legend
-final_2x2 <- cowplot::plot_grid(
-  # Top row: A | B
-  cowplot::plot_grid(A_tagged, B_tagged, ncol = 2),
-  # Bottom row: C_nolegend | D_tagged
-  cowplot::plot_grid(C_nolegend, D_tagged, ncol = 2),
-  # Legend at bottom
-  shared_legend,
-  ncol = 1,
-  rel_heights = c(1, 1.2, 0.2),
-  align = "v"
+# 7.3 Extract shared legend from the FNConc dot plot
+temp_leg <- dot_plot_FNConc + theme(legend.position="right")
+shared_legend <- cowplot::get_legend(temp_leg)
+
+# 7.4 Create no-legend dot plots and tag E & F
+dot_nolegend_FNConc   <- dot_plot_FNConc   + theme(legend.position="none")
+dot_nolegend_FNYield  <- dot_plot_FNYield  + theme(legend.position="none")
+
+E_tagged <- dot_nolegend_FNConc + labs(tag="E") +
+  theme(plot.tag=element_text(size=24), plot.tag.position=c(0.02,0.98))
+
+F_tagged <- dot_nolegend_FNYield + labs(tag="F") +
+  theme(plot.tag=element_text(size=24), plot.tag.position=c(0.02,0.98))
+
+# 7.5 Assemble rows: 
+row1 <- cowplot::plot_grid(A_tagged, B_tagged, ncol=2)
+row2 <- cowplot::plot_grid(C_tagged, D_tagged, ncol=2)
+row3 <- cowplot::plot_grid(E_tagged, F_tagged, ncol=2)
+
+final_3x2 <- cowplot::plot_grid(
+  row1, row2, row3, shared_legend,
+  ncol       = 1,
+  rel_heights= c(1, 1.1, 1.2, 0.2),
+  align      = "v"
 )
 
 # 7.6 Save FIG 2
 ggsave(
-  file.path(output_dir, "Fig2_Global_Grid_FNConc_FNYield.png"),
-  final_2x2,
-  width = 16,
-  height = 18,
-  dpi = 300,
-  bg = "white"
+  file.path(output_dir, "Fig2_Global_3row2col_FNConc_FNYield.png"),
+  final_3x2,
+  width  = 20,
+  height = 25,
+  dpi    = 300,
+  bg     = "white"
 )
 
 ###############################################################################
@@ -501,7 +534,6 @@ message("All SHAP scatterplots generated under '", output_dir, "'.")
 # 10. Create SHAP vs Driver Scatterplots (full‐data LOESS fit, no lithology)
 ###############################################################################
 
-# 10.1 Function to plot full‐data LOESS for each feature
 make_shap_loess_full <- function(shap_matrix, drivers_data, model_name, base_output) {
   feats   <- colnames(shap_matrix)
   out_dir <- file.path(base_output, "shap_scatter_loess_full")
@@ -509,6 +541,7 @@ make_shap_loess_full <- function(shap_matrix, drivers_data, model_name, base_out
   
   for (feat in feats) {
     if (!feat %in% colnames(drivers_data)) next
+    
     df <- data.frame(
       driver_value = drivers_data[[feat]],
       shap_value   = shap_matrix[, feat]
@@ -535,9 +568,26 @@ make_shap_loess_full <- function(shap_matrix, drivers_data, model_name, base_out
         axis.text  = element_text(size = 14)
       )
     
+    # – log-scale P, NOx, ET –
+    if (feat %in% c("P", "NOx", "evapotrans")) {
+      p <- p +
+        scale_x_log10(
+          breaks = scales::trans_breaks("log10", function(x) 10^x),
+          labels = scales::trans_format("log10", scales::math_format(10^.x))
+        ) +
+        labs(x = paste0("log10(", feat_label, ")"))
+    }
+    
+    # – cap x at 0.35 for Wetland Marsh –
+    if (feat == "land_Wetland_Marsh") {
+      p <- p +
+        scale_x_continuous(limits = c(0, 35))
+    }
+    
     fname <- file.path(out_dir, paste0("SHAP_loess_full_", model_name, "_", feat, ".png"))
     ggsave(fname, p, width = 8, height = 6, dpi = 300, bg = "white")
   }
+  
   message("Full-data LOESS shap scatterplots saved to ", out_dir)
 }
 
