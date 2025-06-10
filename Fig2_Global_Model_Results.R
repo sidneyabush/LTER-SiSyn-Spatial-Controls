@@ -332,7 +332,7 @@ create_shap_bar_global <- function(shap_matrix, model_name) {
     coord_flip() +
     labs(
       x     = NULL,
-      y     = "Mean Absolute SHAP",
+      y     = "Mean Absolute SHAP Value",
       title = NULL
     ) +
     theme_classic(base_size = 22) +                # match the others
@@ -399,136 +399,136 @@ ggsave(
   bg     = "white"
 )
 
-###############################################################################
-# 8. Create Partial Dependence Plots for each driver (using *all* kept_drivers)
-###############################################################################
-
-# 8.2 Generate PDP plots for both models, using kept_drivers as training data
-cat("Creating PDPs for FN Concentration model (all kept drivers)...\n")
-pdp_plots_conc <- create_pdp_plots(
-  rf_model                  = rf_model2_FNConc,
-  drivers_data              = kept_drivers_FNConc,
-  drivers_consolidated_lith = drivers_numeric_consolidated_lith_FNConc,
-  model_name                = "Concentration"
-)
-
-cat("Creating PDPs for FN Yield model (all kept drivers)...\n")
-pdp_plots_yield <- create_pdp_plots(
-  rf_model                  = rf_model2_FNYield,
-  drivers_data              = kept_drivers_FNYield,
-  drivers_consolidated_lith = drivers_numeric_consolidated_lith_FNYield,
-  model_name                = "Yield"
-)
-
-# 8.3 Define output directory under Final_Figures and create it
-global_pdp_dir <- file.path(output_dir, "global_pdp")
-dir.create(global_pdp_dir, showWarnings = FALSE, recursive = TRUE)
-
-# 8.4 Save individual PDP plots to Final_Figures/global_pdp
-all_pdp_plots <- c(pdp_plots_conc, pdp_plots_yield)
-for (plot_name in names(all_pdp_plots)) {
-  ggsave(
-    filename = file.path(global_pdp_dir, paste0("PDP_", plot_name, ".png")),
-    plot     = all_pdp_plots[[plot_name]],
-    width    = 10,
-    height   = 8,
-    dpi      = 300,
-    bg       = "white"
-  )
-}
-
-cat("Partial dependence plots completed and saved in:", global_pdp_dir, "\n")
-
-###############################################################################
-# 9. Create SHAP vs Driver Scatterplots by Lithology Group (with LOESS fits)
-###############################################################################
-
-# 9.1 Define custom cluster color palette
-theme_cluster_colors <- c(
-  "Volcanic"            = "#AC7B32",
-  "Sedimentary"         = "#579C8E",
-  "Mixed Sedimentary"   = "#89C8A0",
-  "Plutonic"            = "#8D9A40",
-  "Metamorphic"         = "#C26F86",
-  "Carbonate Evaporite" = "#5E88B0"
-)
-
-# 9.2 Function factory: returns a SHAP scatter plotting function for given method
-make_shap_scatter_fn <- function(fit_method, output_subdir) {
-  function(shap_matrix, drivers_data, drivers_consolidated_lith, model_name, base_output) {
-    feats <- colnames(shap_matrix)
-    litho <- factor(drivers_consolidated_lith$final_cluster)
-    colors <- theme_cluster_colors[levels(litho)]
-    
-    out_dir <- file.path(base_output, output_subdir)
-    dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
-    
-    for (feat in feats) {
-      if (!feat %in% colnames(drivers_data)) next
-      df <- data.frame(
-        driver_value = drivers_data[[feat]],
-        shap_value   = shap_matrix[, feat],
-        lithology    = litho
-      )
-      df <- df[is.finite(df$driver_value) & is.finite(df$shap_value), ]
-      if (nrow(df) < 10) next
-      
-      feat_label <- if (feat %in% names(recode_map)) recode_map[feat] else feat
-      
-      p <- ggplot(df, aes(x = driver_value, y = shap_value, color = lithology)) +
-        geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
-        geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
-        geom_point(alpha = 0.6, size = 2) +
-        geom_smooth(method = fit_method, se = FALSE, size = 1) +
-        scale_color_manual(values = colors, name = "Lithology") +
-        labs(
-          x     = feat_label,
-          y     = paste("SHAP value\n(", model_name, ")", sep = ""),
-          title = paste("SHAP vs", feat_label)
-        ) +
-        theme_classic(base_size = 18) +
-        theme(
-          plot.title      = element_text(hjust = 0.5, size = 20, face = "bold"),
-          axis.title      = element_text(size = 16),
-          axis.text       = element_text(size = 14),
-          legend.position = "bottom",
-          legend.title    = element_text(size = 14),
-          legend.text     = element_text(size = 12)
-        )
-      
-      fname <- file.path(out_dir, paste0("SHAP_", fit_method, "_", model_name, "_", feat, ".png"))
-      ggsave(fname, p, width = 8, height = 6, dpi = 300, bg = "white")
-    }
-    message("Plots saved to ", out_dir)
-  }
-}
-
-# 9.3 Instantiate two plotting functions
-gscatter_lm   <- make_shap_scatter_fn("lm",   "shap_scatter_lm")
-gscatter_loess <- make_shap_scatter_fn("loess", "shap_scatter_loess")
-
-# 9.4 Generate for FNConc and FNYield
-for (fn in list(
-  list(fn = gscatter_lm,   suffix = "LM"),
-  list(fn = gscatter_loess, suffix = "LOESS")
-)) {
-  fn$fn(
-    shap_matrix               = shap_values_FNConc,
-    drivers_data              = kept_drivers_FNConc,
-    drivers_consolidated_lith = drivers_numeric_consolidated_lith_FNConc,
-    model_name                = "Concentration",
-    base_output               = output_dir
-  )
-  fn$fn(
-    shap_matrix               = shap_values_FNYield,
-    drivers_data              = kept_drivers_FNYield,
-    drivers_consolidated_lith = drivers_numeric_consolidated_lith_FNYield,
-    model_name                = "Yield",
-    base_output               = output_dir
-  )
-}
-
-message("All SHAP scatterplots generated under '", output_dir, "'.")
+# ###############################################################################
+# # 8. Create Partial Dependence Plots for each driver (using *all* kept_drivers)
+# ###############################################################################
+# 
+# # 8.2 Generate PDP plots for both models, using kept_drivers as training data
+# cat("Creating PDPs for FN Concentration model (all kept drivers)...\n")
+# pdp_plots_conc <- create_pdp_plots(
+#   rf_model                  = rf_model2_FNConc,
+#   drivers_data              = kept_drivers_FNConc,
+#   drivers_consolidated_lith = drivers_numeric_consolidated_lith_FNConc,
+#   model_name                = "Concentration"
+# )
+# 
+# cat("Creating PDPs for FN Yield model (all kept drivers)...\n")
+# pdp_plots_yield <- create_pdp_plots(
+#   rf_model                  = rf_model2_FNYield,
+#   drivers_data              = kept_drivers_FNYield,
+#   drivers_consolidated_lith = drivers_numeric_consolidated_lith_FNYield,
+#   model_name                = "Yield"
+# )
+# 
+# # 8.3 Define output directory under Final_Figures and create it
+# global_pdp_dir <- file.path(output_dir, "global_pdp")
+# dir.create(global_pdp_dir, showWarnings = FALSE, recursive = TRUE)
+# 
+# # 8.4 Save individual PDP plots to Final_Figures/global_pdp
+# all_pdp_plots <- c(pdp_plots_conc, pdp_plots_yield)
+# for (plot_name in names(all_pdp_plots)) {
+#   ggsave(
+#     filename = file.path(global_pdp_dir, paste0("PDP_", plot_name, ".png")),
+#     plot     = all_pdp_plots[[plot_name]],
+#     width    = 10,
+#     height   = 8,
+#     dpi      = 300,
+#     bg       = "white"
+#   )
+# }
+# 
+# cat("Partial dependence plots completed and saved in:", global_pdp_dir, "\n")
+# 
+# ###############################################################################
+# # 9. Create SHAP vs Driver Scatterplots by Lithology Group (with LOESS fits)
+# ###############################################################################
+# 
+# # 9.1 Define custom cluster color palette
+# theme_cluster_colors <- c(
+#   "Volcanic"            = "#AC7B32",
+#   "Sedimentary"         = "#579C8E",
+#   "Mixed Sedimentary"   = "#89C8A0",
+#   "Plutonic"            = "#8D9A40",
+#   "Metamorphic"         = "#C26F86",
+#   "Carbonate Evaporite" = "#5E88B0"
+# )
+# 
+# # 9.2 Function factory: returns a SHAP scatter plotting function for given method
+# make_shap_scatter_fn <- function(fit_method, output_subdir) {
+#   function(shap_matrix, drivers_data, drivers_consolidated_lith, model_name, base_output) {
+#     feats <- colnames(shap_matrix)
+#     litho <- factor(drivers_consolidated_lith$final_cluster)
+#     colors <- theme_cluster_colors[levels(litho)]
+#     
+#     out_dir <- file.path(base_output, output_subdir)
+#     dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+#     
+#     for (feat in feats) {
+#       if (!feat %in% colnames(drivers_data)) next
+#       df <- data.frame(
+#         driver_value = drivers_data[[feat]],
+#         shap_value   = shap_matrix[, feat],
+#         lithology    = litho
+#       )
+#       df <- df[is.finite(df$driver_value) & is.finite(df$shap_value), ]
+#       if (nrow(df) < 10) next
+#       
+#       feat_label <- if (feat %in% names(recode_map)) recode_map[feat] else feat
+#       
+#       p <- ggplot(df, aes(x = driver_value, y = shap_value, color = lithology)) +
+#         geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
+#         geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+#         geom_point(alpha = 0.6, size = 2) +
+#         geom_smooth(method = fit_method, se = FALSE, size = 1) +
+#         scale_color_manual(values = colors, name = "Lithology") +
+#         labs(
+#           x     = feat_label,
+#           y     = paste("SHAP value\n(", model_name, ")", sep = ""),
+#           title = paste("SHAP vs", feat_label)
+#         ) +
+#         theme_classic(base_size = 18) +
+#         theme(
+#           plot.title      = element_text(hjust = 0.5, size = 20, face = "bold"),
+#           axis.title      = element_text(size = 16),
+#           axis.text       = element_text(size = 14),
+#           legend.position = "bottom",
+#           legend.title    = element_text(size = 14),
+#           legend.text     = element_text(size = 12)
+#         )
+#       
+#       fname <- file.path(out_dir, paste0("SHAP_", fit_method, "_", model_name, "_", feat, ".png"))
+#       ggsave(fname, p, width = 8, height = 6, dpi = 300, bg = "white")
+#     }
+#     message("Plots saved to ", out_dir)
+#   }
+# }
+# 
+# # 9.3 Instantiate two plotting functions
+# gscatter_lm   <- make_shap_scatter_fn("lm",   "shap_scatter_lm")
+# gscatter_loess <- make_shap_scatter_fn("loess", "shap_scatter_loess")
+# 
+# # 9.4 Generate for FNConc and FNYield
+# for (fn in list(
+#   list(fn = gscatter_lm,   suffix = "LM"),
+#   list(fn = gscatter_loess, suffix = "LOESS")
+# )) {
+#   fn$fn(
+#     shap_matrix               = shap_values_FNConc,
+#     drivers_data              = kept_drivers_FNConc,
+#     drivers_consolidated_lith = drivers_numeric_consolidated_lith_FNConc,
+#     model_name                = "Concentration",
+#     base_output               = output_dir
+#   )
+#   fn$fn(
+#     shap_matrix               = shap_values_FNYield,
+#     drivers_data              = kept_drivers_FNYield,
+#     drivers_consolidated_lith = drivers_numeric_consolidated_lith_FNYield,
+#     model_name                = "Yield",
+#     base_output               = output_dir
+#   )
+# }
+# 
+# message("All SHAP scatterplots generated under '", output_dir, "'.")
 
 ###############################################################################
 # 10. Create SHAP vs Driver Scatterplots (full‐data LOESS fit, no lithology)
@@ -547,6 +547,11 @@ make_shap_loess_full <- function(shap_matrix, drivers_data, model_name, base_out
       shap_value   = shap_matrix[, feat]
     ) %>%
       filter(is.finite(driver_value), is.finite(shap_value))
+    
+    # — drop P values below 1e-3 before plotting —
+    if (feat == "P") {
+      df <- df %>% filter(driver_value >= 1e-3)
+    }
     if (nrow(df) < 10) next
     
     feat_label <- if (feat %in% names(recode_map)) recode_map[feat] else feat
@@ -568,20 +573,31 @@ make_shap_loess_full <- function(shap_matrix, drivers_data, model_name, base_out
         axis.text  = element_text(size = 14)
       )
     
-    # – log-scale P, NOx, ET –
-    if (feat %in% c("P", "NOx", "evapotrans")) {
+    # — log-scale ET & NOx —
+    if (feat %in% c("NOx")) {
       p <- p +
         scale_x_log10(
-          breaks = scales::trans_breaks("log10", function(x) 10^x),
-          labels = scales::trans_format("log10", scales::math_format(10^.x))
+          breaks = scales::trans_breaks("log", function(x) 10^x),
+          labels = scales::trans_format("log", scales::math_format(10^.x))
         ) +
-        labs(x = paste0("log10(", feat_label, ")"))
+        labs(x = paste0("log(", feat_label, ")"))
     }
     
-    # – cap x at 0.35 for Wetland Marsh –
+    # — log-scale P and enforce lower cutoff at 1e-3 —
+    if (feat == "P") {
+      p <- p +
+        scale_x_log10(
+          limits = c(1e-3, NA),
+          breaks = scales::trans_breaks("log", function(x) 10^x),
+          labels = scales::trans_format("log", scales::math_format(10^.x))
+        ) +
+        labs(x = paste0("log(", feat_label, ")"))
+    }
+    
+    # — cap x at 0.35 for Wetland Marsh —
     if (feat == "land_Wetland_Marsh") {
       p <- p +
-        scale_x_continuous(limits = c(0, 35))
+        scale_x_continuous(limits = c(0, 0.35))
     }
     
     fname <- file.path(out_dir, paste0("SHAP_loess_full_", model_name, "_", feat, ".png"))
@@ -590,6 +606,7 @@ make_shap_loess_full <- function(shap_matrix, drivers_data, model_name, base_out
   
   message("Full-data LOESS shap scatterplots saved to ", out_dir)
 }
+
 
 # 10.2 Generate full‐data LOESS plots for both models
 make_shap_loess_full(
@@ -605,3 +622,123 @@ make_shap_loess_full(
   model_name   = "Yield",
   base_output  = output_dir
 )
+
+library(patchwork)
+
+# 10.3 Helper to build one full-data LOESS plot (P/NOx log scales, Marsh cap, custom y-label)
+single_loess_plot <- function(feat, shap_matrix, drivers_data, model_name) {
+  df <- data.frame(
+    driver_value = drivers_data[[feat]],
+    shap_value   = shap_matrix[, feat]
+  ) %>% 
+    filter(is.finite(driver_value), is.finite(shap_value))
+  
+  # drop P below 1e-3
+  if (feat == "P") df <- df %>% filter(driver_value >= 1e-3)
+  if (nrow(df) < 10) return(NULL)
+  
+  feat_label <- if (feat %in% names(recode_map)) recode_map[feat] else feat
+  
+  p <- ggplot(df, aes(x = driver_value, y = shap_value)) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+    geom_point(alpha = 0.6, size = 2) +
+    geom_smooth(method = "loess", se = FALSE, size = 1, color = "#6699CC") +
+    labs(
+      x = feat_label,
+      y = paste(model_name, "SHAP Value")
+    ) +
+    theme_classic(base_size = 18) +
+    theme(
+      axis.title = element_text(size = 16),
+      axis.text  = element_text(size = 14)
+    )
+  
+  # log-scale NOx
+  if (feat == "NOx") {
+    p <- p +
+      scale_x_log10(
+        breaks = scales::trans_breaks("log", function(x) 10^x),
+        labels = scales::trans_format("log", scales::math_format(10^.x))
+      ) +
+      labs(x = paste0("log(", feat_label, ")"))
+  }
+  
+  # log-scale P with lower-cut at 1e-3
+  if (feat == "P") {
+    p <- p +
+      scale_x_log10(
+        limits = c(1e-3, NA),
+        breaks = scales::trans_breaks("log", function(x) 10^x),
+        labels = scales::trans_format("log", scales::math_format(10^.x))
+      ) +
+      labs(x = paste0("log(", feat_label, ")"))
+  }
+  
+  # cap Wetland Marsh
+  if (feat == "land_Wetland_Marsh") {
+    p <- p + scale_x_continuous(limits = c(0, 0.35))
+  }
+  
+  p
+}
+
+library(patchwork)
+
+# 10.4 Build & save Concentration grid (2 cols × 3 rows)
+conc_feats <- c(
+  "basin_slope",        "recession_slope",
+  "precip",             "P",
+  "land_Water",         "land_Grassland_Shrubland"
+)
+conc_plots <- lapply(conc_feats, single_loess_plot,
+                     shap_matrix  = shap_values_FNConc,
+                     drivers_data = kept_drivers_FNConc,
+                     model_name   = "Concentration")
+# drop NULLs
+conc_plots <- conc_plots[!sapply(conc_plots, is.null)]
+# remove y-axis title only on right-column panels (2, 4, 6)
+conc_plots <- Map(function(p, idx) {
+  if (idx %% 2 == 0) {
+    p + theme(axis.title.y = element_blank())
+  } else p
+}, conc_plots, seq_along(conc_plots))
+
+conc_grid <- wrap_plots(conc_plots, ncol = 2)
+ggsave(
+  file.path(output_dir, "Fig3_Concentration_SHAP_grid.png"),
+  conc_grid,
+  width  = 10, 
+  height = 12, 
+  dpi = 300, 
+  bg = "white"
+)
+
+# 10.5 Build & save Yield grid (2 cols × 2 rows)
+yield_feats <- c(
+  "recession_slope",    "land_Wetland_Marsh",
+  "npp",                "NOx"
+)
+yield_plots <- lapply(yield_feats, single_loess_plot,
+                      shap_matrix  = shap_values_FNYield,
+                      drivers_data = kept_drivers_FNYield,
+                      model_name   = "Yield")
+# drop NULLs
+yield_plots <- yield_plots[!sapply(yield_plots, is.null)]
+# remove y-axis title only on right-column panels (2, 4)
+yield_plots <- Map(function(p, idx) {
+  if (idx %% 2 == 0) {
+    p + theme(axis.title.y = element_blank())
+  } else p
+}, yield_plots, seq_along(yield_plots))
+
+yield_grid <- wrap_plots(yield_plots, ncol = 2)
+ggsave(
+  file.path(output_dir, "Fig4_Yield_SHAP_grid.png"),
+  yield_grid,
+  width  = 10, 
+  height = 8, 
+  dpi = 300, 
+  bg = "white"
+)
+
