@@ -496,3 +496,62 @@ for (fn in list(
 }
 
 message("All SHAP scatterplots generated under '", output_dir, "'.")
+
+###############################################################################
+# 10. Create SHAP vs Driver Scatterplots (full‐data LOESS fit, no lithology)
+###############################################################################
+
+# 10.1 Function to plot full‐data LOESS for each feature
+make_shap_loess_full <- function(shap_matrix, drivers_data, model_name, base_output) {
+  feats   <- colnames(shap_matrix)
+  out_dir <- file.path(base_output, "shap_scatter_loess_full")
+  dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+  
+  for (feat in feats) {
+    if (!feat %in% colnames(drivers_data)) next
+    df <- data.frame(
+      driver_value = drivers_data[[feat]],
+      shap_value   = shap_matrix[, feat]
+    ) %>%
+      filter(is.finite(driver_value), is.finite(shap_value))
+    if (nrow(df) < 10) next
+    
+    feat_label <- if (feat %in% names(recode_map)) recode_map[feat] else feat
+    
+    p <- ggplot(df, aes(x = driver_value, y = shap_value)) +
+      geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
+      geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+      geom_point(alpha = 0.6, size = 2) +
+      geom_smooth(method = "loess", se = FALSE, size = 1) +
+      labs(
+        x     = feat_label,
+        y     = paste0("SHAP value\n(", model_name, ")"),
+        title = paste("SHAP vs", feat_label, "(LOESS – full dataset)")
+      ) +
+      theme_classic(base_size = 18) +
+      theme(
+        plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+        axis.title = element_text(size = 16),
+        axis.text  = element_text(size = 14)
+      )
+    
+    fname <- file.path(out_dir, paste0("SHAP_loess_full_", model_name, "_", feat, ".png"))
+    ggsave(fname, p, width = 8, height = 6, dpi = 300, bg = "white")
+  }
+  message("Full-data LOESS shap scatterplots saved to ", out_dir)
+}
+
+# 10.2 Generate full‐data LOESS plots for both models
+make_shap_loess_full(
+  shap_matrix  = shap_values_FNConc,
+  drivers_data = kept_drivers_FNConc,
+  model_name   = "Concentration",
+  base_output  = output_dir
+)
+
+make_shap_loess_full(
+  shap_matrix  = shap_values_FNYield,
+  drivers_data = kept_drivers_FNYield,
+  model_name   = "Yield",
+  base_output  = output_dir
+)
