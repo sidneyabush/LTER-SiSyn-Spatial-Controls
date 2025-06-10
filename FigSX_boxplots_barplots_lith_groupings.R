@@ -445,7 +445,7 @@ ggsave(
   filename = "FigSX_Combined_Grid_BarPlots.png",
   plot     = final_grid_bar,
   width    = 28,   # slightly wider to accommodate larger fonts
-  height   = 32,
+  height   = 30,
   dpi      = 300,
   path     = output_dir
 )

@@ -483,8 +483,8 @@ final_grid_dot <- (y_axis_label | dot_plots_with_title) +
 ggsave(
   filename = "Fig3_Combined_Grid_DotPlots.png",
   plot     = final_grid_dot,
-  width    = 28,
-  height   = 32,
+  width    = 26,
+  height   = 28,
   dpi      = 300,
   path     = output_dir
 )
