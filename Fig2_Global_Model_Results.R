@@ -375,7 +375,7 @@ if (!require(pdp)) install.packages("pdp")
 library(pdp)
 
 # 8.2 Create function to generate partial dependence plots
-create_pdp_plots <- function(rf_model, drivers_data, drivers_df, model_name) {
+create_pdp_plots <- function(rf_model, drivers_data, drivers_consolidated_lith, model_name, selected_features = NULL) {
   
   # Get feature names from the model
   feature_names <- names(rf_model$forest$xlevels)
@@ -383,35 +383,18 @@ create_pdp_plots <- function(rf_model, drivers_data, drivers_df, model_name) {
     feature_names <- colnames(drivers_data)
   }
   
-  # Create lithologic type column for coloring
-  # Assuming lithologic info is in drivers_df - adjust column name as needed
-  litho_col <- NULL
-  possible_litho_cols <- c("lithology", "litho", "rock_type", "geology", "bedrock")
-  
-  for (col in possible_litho_cols) {
-    if (col %in% colnames(drivers_df)) {
-      litho_col <- col
-      break
-    }
+  # Filter to only selected features if provided
+  if (!is.null(selected_features)) {
+    feature_names <- intersect(feature_names, selected_features)
+    cat("Using only selected features:", paste(feature_names, collapse = ", "), "\n")
   }
   
-  # If no lithologic column found, create a default grouping
-  if (is.null(litho_col)) {
-    # Look for rock-related columns in drivers_data
-    rock_cols <- grep("^rocks_", colnames(drivers_data), value = TRUE)
-    if (length(rock_cols) > 0) {
-      # Create lithologic type based on dominant rock type
-      rock_data <- drivers_data[, rock_cols, drop = FALSE]
-      litho_type <- apply(rock_data, 1, function(x) {
-        if (all(is.na(x))) return("Unknown")
-        max_col <- which.max(x)
-        gsub("rocks_", "", names(rock_data)[max_col])
-      })
-    } else {
-      litho_type <- rep("Mixed", nrow(drivers_data))
-    }
+  # Use the final_cluster column from drivers_consolidated_lith for rock group coloring
+  if ("final_cluster" %in% colnames(drivers_consolidated_lith)) {
+    litho_type <- drivers_consolidated_lith$final_cluster
+    cat("Using 'final_cluster' column for rock group coloring\n")
   } else {
-    litho_type <- drivers_df[[litho_col]]
+    stop("Error: 'final_cluster' column not found in drivers_consolidated_lith. Please ensure this column exists.")
   }
   
   # Ensure lithologic type is a factor
@@ -468,7 +451,7 @@ create_pdp_plots <- function(rf_model, drivers_data, drivers_df, model_name) {
                  aes(x = feature_value, y = 0, color = litho_type),
                  alpha = 0.6, size = 2, 
                  position = position_jitter(height = 0.02, width = 0)) +
-      scale_color_manual(values = colors, name = "Lithology") +
+      scale_color_manual(values = colors, name = "Rock Group") +
       labs(
         x = feature_label,
         y = paste("Partial Dependence\n(", model_name, ")", sep = ""),
@@ -490,120 +473,90 @@ create_pdp_plots <- function(rf_model, drivers_data, drivers_df, model_name) {
   return(pdp_plots)
 }
 
-# 8.3 Generate PDP plots for both models
-cat("Creating PDPs for FN Concentration model...\n")
+# 8.3 Load the consolidated lithology dataframes
+load(file.path(final_models_dir, "FNConc_HierClust_Workflow_Objects.RData"))
+load(file.path(final_models_dir, "FNYield_HierClust_Workflow_Objects.RData"))
+
+# 8.4 Define specific features for each model
+# Map display names back to variable names in the data
+reverse_recode_map <- setNames(names(recode_map), recode_map)
+
+# Features for Concentration model (using display names, will be mapped back)
+conc_features_display <- c(
+  "Basin Slope", "Elevation", "Rock: Volcanic", "P", "Land: Water Body", 
+  "Recession Slope", "Land: Forest", "Flashiness (RBI)", "Precip", 
+  "Land: Cropland", "Rock: Sedimentary", "Land: Grass & Shrub", "Land: Impervious"
+)
+
+# Features for Yield model (using display names, will be mapped back)
+yield_features_display <- c(
+  "Rock: Volcanic", "ET", "NPP", "Flashiness (RBI)", "Temp", "Recession Slope", 
+  "Rock: Plutonic", "Elevation", "NOx", "Land: Wetland Marsh", "P"
+)
+
+# Map display names back to variable names
+conc_features_vars <- character()
+for (display_name in conc_features_display) {
+  if (display_name %in% reverse_recode_map) {
+    conc_features_vars <- c(conc_features_vars, reverse_recode_map[display_name])
+  } else if (display_name == "Rock: Volcanic") {
+    conc_features_vars <- c(conc_features_vars, "rocks_volcanic")
+  } else if (display_name == "Rock: Sedimentary") {
+    conc_features_vars <- c(conc_features_vars, "rocks_sedimentary")
+  }
+}
+
+yield_features_vars <- character()
+for (display_name in yield_features_display) {
+  if (display_name %in% reverse_recode_map) {
+    yield_features_vars <- c(yield_features_vars, reverse_recode_map[display_name])
+  } else if (display_name == "Rock: Volcanic") {
+    yield_features_vars <- c(yield_features_vars, "rocks_volcanic")
+  } else if (display_name == "Rock: Plutonic") {
+    yield_features_vars <- c(yield_features_vars, "rocks_plutonic")
+  }
+}
+
+# 8.5 Generate PDP plots for both models with selected features only
+cat("Creating PDPs for FN Concentration model (selected features only)...\n")
 pdp_plots_conc <- create_pdp_plots(
   rf_model = rf_model2_FNConc,
   drivers_data = kept_drivers_FNConc,
-  drivers_df = drivers_df_FNConc,
-  model_name = "Concentration"
+  drivers_consolidated_lith = drivers_numeric_consolidated_lith_FNConc,
+  model_name = "Concentration",
+  selected_features = conc_features_vars
 )
 
-cat("Creating PDPs for FN Yield model...\n")
+cat("Creating PDPs for FN Yield model (selected features only)...\n")
 pdp_plots_yield <- create_pdp_plots(
   rf_model = rf_model2_FNYield,
   drivers_data = kept_drivers_FNYield,
-  drivers_df = drivers_df_FNYield,
-  model_name = "Yield"
+  drivers_consolidated_lith = drivers_numeric_consolidated_lith_FNYield,
+  model_name = "Yield",
+  selected_features = yield_features_vars
 )
 
-# 8.4 Combine all PDP plots
+# 8.6 Create global_pdp output directory
+global_pdp_dir <- "global_pdp"
+dir.create(global_pdp_dir, showWarnings = FALSE, recursive = TRUE)
+
+# 8.7 Combine all PDP plots
 all_pdp_plots <- c(pdp_plots_conc, pdp_plots_yield)
 
-# 8.5 Create multi-panel figure with top drivers for each model
-# Get top 6 most important features for each model
-get_top_features <- function(rf_model, n = 6) {
-  importance_scores <- importance(rf_model)
-  top_features <- names(sort(importance_scores[,1], decreasing = TRUE))[1:n]
-  return(top_features)
-}
-
-top_features_conc <- get_top_features(rf_model2_FNConc, 6)
-top_features_yield <- get_top_features(rf_model2_FNYield, 6)
-
-# Create combined plot for concentration
-conc_pdp_list <- list()
-for (i in seq_along(top_features_conc)) {
-  feature <- top_features_conc[i]
-  plot_name <- paste0(feature, "_Concentration")
-  if (plot_name %in% names(all_pdp_plots)) {
-    conc_pdp_list[[i]] <- all_pdp_plots[[plot_name]]
-  }
-}
-
-# Create combined plot for yield
-yield_pdp_list <- list()
-for (i in seq_along(top_features_yield)) {
-  feature <- top_features_yield[i]
-  plot_name <- paste0(feature, "_Yield")
-  if (plot_name %in% names(all_pdp_plots)) {
-    yield_pdp_list[[i]] <- all_pdp_plots[[plot_name]]
-  }
-}
-
-# 8.6 Arrange plots in grids
-if (length(conc_pdp_list) > 0) {
-  conc_pdp_grid <- cowplot::plot_grid(plotlist = conc_pdp_list, ncol = 3, nrow = 2)
-  
-  # Add title
-  conc_pdp_final <- cowplot::plot_grid(
-    cowplot::ggdraw() + 
-      cowplot::draw_label("Partial Dependence Plots - FN Concentration", 
-                          fontsize = 20, fontface = "bold"),
-    conc_pdp_grid,
-    ncol = 1,
-    rel_heights = c(0.1, 1)
-  )
-  
-  # Save concentration PDP figure
-  ggsave(
-    file.path(output_dir, "PDP_FNConc_Top_Drivers.png"),
-    conc_pdp_final,
-    width = 18,
-    height = 12,
-    dpi = 300,
-    bg = "white"
-  )
-}
-
-if (length(yield_pdp_list) > 0) {
-  yield_pdp_grid <- cowplot::plot_grid(plotlist = yield_pdp_list, ncol = 3, nrow = 2)
-  
-  # Add title
-  yield_pdp_final <- cowplot::plot_grid(
-    cowplot::ggdraw() + 
-      cowplot::draw_label("Partial Dependence Plots - FN Yield", 
-                          fontsize = 20, fontface = "bold"),
-    yield_pdp_grid,
-    ncol = 1,
-    rel_heights = c(0.1, 1)
-  )
-  
-  # Save yield PDP figure
-  ggsave(
-    file.path(output_dir, "PDP_FNYield_Top_Drivers.png"),
-    yield_pdp_final,
-    width = 18,
-    height = 12,
-    dpi = 300,
-    bg = "white"
-  )
-}
-
-# 8.7 Save individual PDP plots if needed
-# Uncomment the following lines if you want to save individual plots
+# 8.8 Save individual PDP plots to global_pdp folder
 for (plot_name in names(all_pdp_plots)) {
   ggsave(
-    file.path(output_dir, paste0("PDP_", plot_name, ".png")),
+    file.path(global_pdp_dir, paste0("PDP_", plot_name, ".png")),
     all_pdp_plots[[plot_name]],
-    width = 8,
-    height = 6,
+    width = 10,
+    height = 8,
     dpi = 300,
     bg = "white"
   )
 }
 
 cat("Partial dependence plots completed and saved!\n")
-cat("Files created:\n")
-cat("- PDP_FNConc_Top_Drivers.png (top 6 drivers for concentration)\n")
-cat("- PDP_FNYield_Top_Drivers.png (top 6 drivers for yield)\n")
+cat("Files created in 'global_pdp' folder:\n")
+for (plot_name in names(all_pdp_plots)) {
+  cat(paste0("- PDP_", plot_name, ".png\n"))
+}
