@@ -587,12 +587,12 @@ conc_litho_bar <- ggplot(conc_shap_litho,
   theme(
     plot.title       = element_text(hjust = 0.5, size = 24),
     plot.tag         = element_text(size = 24, hjust = 0, vjust = 1),
-    axis.text        = element_text(size = 20),
+    axis.text        = element_text(size = 22),
     axis.title.x     = element_text(size = 22),
     legend.position  = "bottom",
     legend.direction = "horizontal",
     legend.title     = element_blank(),
-    legend.text      = element_text(size = 18)
+    legend.text      = element_text(size = 22)
   )
 
 ###############################################################################
@@ -674,12 +674,12 @@ yield_litho_bar <- ggplot(yield_shap_litho,
   theme(
     plot.title       = element_text(hjust = 0.5, size = 24),
     plot.tag         = element_text(size = 24, hjust = 0, vjust = 1),
-    axis.text        = element_text(size = 20),
+    axis.text        = element_text(size = 22),
     axis.title.x     = element_text(size = 22),
     legend.position  = "bottom",
     legend.direction = "horizontal",
     legend.title     = element_blank(),
-    legend.text      = element_text(size = 18)
+    legend.text      = element_text(size = 22)
   )
 
 ###############################################################################
@@ -698,3 +698,4 @@ ggsave(
   dpi    = 300,
   bg     = "white"
 )
+
