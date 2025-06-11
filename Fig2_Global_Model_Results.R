@@ -556,9 +556,9 @@ make_shap_loess_full <- function(shap_matrix, drivers_data, model_name, base_out
     
     feat_label <- if (feat %in% names(recode_map)) recode_map[feat] else feat
     
+    # — base plot (no x-scale yet) —
     p <- ggplot(df, aes(x = driver_value, y = shap_value)) +
       geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
-      geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
       geom_point(alpha = 0.6, size = 2) +
       geom_smooth(method = "loess", se = FALSE, size = 1) +
       labs(
@@ -573,40 +573,42 @@ make_shap_loess_full <- function(shap_matrix, drivers_data, model_name, base_out
         axis.text  = element_text(size = 14)
       )
     
-    # — log-scale ET & NOx —
-    if (feat %in% c("NOx")) {
+    # — for linear axes, add the 0‐line —
+    if (!feat %in% c("NOx", "P")) {
+      p <- p + geom_vline(xintercept = 0, linetype = "dashed", color = "grey40")
+    }
+    
+    # — log-scale NOx exactly like P —
+    if (feat == "NOx" || feat == "P") {
+      # enforce lower cutoff for P
+      limits <- if (feat == "P") c(1e-3, NA) else NULL
+      
       p <- p +
         scale_x_log10(
-          name = "NOx",
-          breaks = scales::trans_breaks("log", function(x) 10^x),
-          labels = scales::trans_format("log", scales::math_format(10^.x))
+          limits = limits,
+          breaks = scales::trans_breaks("log10", function(x) 10^x),
+          labels = scales::trans_format("log10", scales::math_format(10^.x))
         ) +
         labs(x = paste0("log(", feat_label, ")"))
     }
     
-    # — log-scale P and enforce lower cutoff at 1e-3 —
-    if (feat == "P") {
-      p <- p +
-        scale_x_log10(
-          limits = c(1e-3, NA),
-          breaks = scales::trans_breaks("log10", function(x) 10^x),
-          labels = scales::trans_format("log10", scales::math_format(10^.x))
-        )
-    }
-    
-    
-    # — cap x at 35 for Wetland Marsh —
+    # — cap x at 35 & y at 1000 only for Marsh —
     if (feat == "land_Wetland_Marsh") {
       p <- p +
-        scale_x_continuous(limits = c(0, 35.0))
-    }
+        if (feat == "land_Wetland_Marsh") {
+          # 1) zoom to x = [0,35] without dropping data
+          p <- p +
+            coord_cartesian(xlim = c(0, 35), ylim = c(NA, 3200), expand = FALSE)
+        }    }
     
+    # — save —
     fname <- file.path(out_dir, paste0("SHAP_loess_full_", model_name, "_", feat, ".png"))
     ggsave(fname, p, width = 8, height = 6, dpi = 300, bg = "white")
   }
   
   message("Full-data LOESS shap scatterplots saved to ", out_dir)
 }
+
 
 
 # 10.2 Generate full‐data LOESS plots for both models
@@ -660,8 +662,8 @@ legend_panel3 <- {
       guide  = guide_colourbar(
         title.position = "top",
         title.hjust    = 0.5,
-        title.theme    = element_text(size = 14),
-        label.theme    = element_text(size = 10),
+        title.theme    = element_text(size = 16),
+        label.theme    = element_text(size = 16),
         barwidth       = unit(10, "lines"),
         barheight      = unit(0.6, "cm")
       )
@@ -672,12 +674,13 @@ legend_panel3 <- {
       legend.position   = "right",
       legend.direction = "horizontal",
       legend.title.align= 0.5,
-      legend.title      = element_text(size = 14),
-      legend.text       = element_text(size = 10),
+      legend.title      = element_text(size = 16),
+      legend.text       = element_text(size = 16),
       axis.title        = element_text(size = 16),
       axis.text         = element_text(size = 14)
     )
 }
+
 shared_leg_conc <- cowplot::get_legend(legend_panel3)
 
 # 2) build the six panels (no internal legends or tags)
@@ -716,7 +719,7 @@ p_list3 <- lapply(seq_along(conc_feats), function(i) {
       legend.position = "none",
       axis.title.y    = element_text(size = 16),
       axis.text       = element_text(size = 14),
-      plot.margin     = ggplot2::margin(t = 5, r = 5, b = 5, l = 30, unit = "pt")
+      plot.margin = ggplot2::margin(t = 20, r = 5, b = 5, l = 30, unit = "pt")
     )
   
   if (feat == "P") {
@@ -736,7 +739,9 @@ p_list3 <- lapply(seq_along(conc_feats), function(i) {
     p <- p + scale_x_continuous(limits = c(0, 35.0))
   }
   p
+  
 })
+
 p_list3 <- p_list3[!sapply(p_list3, is.null)]
 
 # 3) assemble with plain‐face cowplot labels A–F
@@ -758,12 +763,12 @@ fig3 <- plot_grid(
   six_panels,
   shared_leg_conc,
   ncol        = 1,
-  rel_heights = c(1, 0.15)
+  rel_heights = c(1, 0.1)
 )
 
 ggsave(
   file.path(output_dir, "Fig3_Concentration_SHAP_grid_tagged.png"),
-  fig3, width = 10, height = 12, dpi = 300, bg = "white"
+  fig3, width = 12, height = 14, dpi = 300, bg = "white"
 )
 
 
@@ -847,18 +852,35 @@ p_list4 <- lapply(seq_along(yield_feats), function(i) {
     labs(x = recode_map[[feat]], y = if (i %% 2 == 1) "SHAP value" else NULL) +
     theme_classic(base_size = 18) +
     theme(
-      legend.position   = "none",
-      axis.title.y      = element_text(size = 16),
-      axis.text         = element_text(size = 14),
-      plot.margin       = ggplot2::margin(t = 5, r = 5, b = 5, l = 30, unit = "pt")
+      legend.position = "none",
+      axis.title.y    = element_text(size = 16),
+      axis.text       = element_text(size = 14),
+      plot.margin = ggplot2::margin(t = 20, r = 5, b = 5, l = 30, unit = "pt")
     )
-  
-  # apply y-scale cap for marsh if desired
   if (feat == "land_Wetland_Marsh") {
-    p <- p + scale_y_continuous(limits = c(NA, 1000))
+    # 1) zoom to x = [0,35] without dropping data
+    p <- p +
+      coord_cartesian(xlim = c(0, 35), ylim = c(NA, 3200), expand = FALSE)
   }
+  if (feat == "NOx") {
+    p <- p + scale_x_log10(
+      breaks = scales::trans_breaks("log10", function(x) 10^x),
+      labels = scales::trans_format("log10", scales::math_format(10^.x))
+    )
+  }
+  
+  if (feat == "land_Wetland_Marsh") {
+    # 1) zoom to x = [0,35] without dropping data
+    p <- p +
+      if (feat == "land_Wetland_Marsh") {
+        # 1) zoom to x = [0,35] without dropping data
+        p <- p +
+          coord_cartesian(xlim = c(0, 35), ylim = c(NA, 3200), expand = FALSE)
+      }  }
+  
   p
 })
+
 p_list4 <- p_list4[!sapply(p_list4, is.null)]
 
 # assemble with cowplot labels A–D
@@ -879,10 +901,10 @@ fig4 <- plot_grid(
   four_panels,
   shared_leg_yield,
   ncol        = 1,
-  rel_heights = c(1, 0.15)
+  rel_heights = c(1, 0.1)
 )
 
 ggsave(
   file.path(output_dir, "Fig4_Yield_SHAP_grid_tagged.png"),
-  fig4, width = 10, height = 8, dpi = 300, bg = "white"
+  fig4, width = 13, height = 12.2, dpi = 300, bg = "white"
 )
