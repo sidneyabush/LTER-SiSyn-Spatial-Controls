@@ -4,7 +4,7 @@
 #                 One Shared Legend, Patchwork Layout
 #                 (jittered points with dark‐gray outline, subtle group shading;
 #                  cluster label in its own left‐hand panel, shifted inward;
-#                  FEATURES ORDERED BY DESCENDING MEAN |SHAP| FOR Y‐AXIS)
+#                  FEATURES ORDERED BY DESCENDING MEAN Absolute SHAP Value FOR Y‐AXIS)
 #                 NOW WITH CORRECT LOG TRANSFORMATIONS FROM drivers_numeric
 ###############################################################################
 ## 1. Load Necessary Packages
@@ -490,9 +490,6 @@ ggsave(
 )
 
 ###############################################################################
-# 12. Lithology‐Stacked Mean |SHAP| Bar Plots (by driver, colored by final_cluster)
-###############################################################################
-
 # 12.0 Define the exact legend/bar order and corresponding colors
 cluster_levels <- c(
   "Volcanic",
@@ -507,7 +504,9 @@ my_cluster_colors <- setNames(
   cluster_levels
 )
 
-# 12.1 Prepare Concentration data
+###############################################################################
+# 12.1 Prepare Concentration data (compute weighted values)
+###############################################################################
 conc_shap_litho <- as.data.frame(shap_values_FNConc) %>%
   mutate(id = row_number()) %>%
   pivot_longer(
@@ -523,27 +522,35 @@ conc_shap_litho <- as.data.frame(shap_values_FNConc) %>%
   ) %>%
   filter(!grepl("^rocks_", feature)) %>%
   group_by(feature, final_cluster) %>%
-  summarize(mean_abs = mean(abs(shap_value), na.rm = TRUE), .groups = "drop") %>%
+  summarize(
+    mean_abs = mean(abs(shap_value), na.rm = TRUE),
+    .groups  = "drop"
+  ) %>%
   group_by(feature) %>%
-  mutate(total = sum(mean_abs)) %>%
+  mutate(
+    total = sum(mean_abs),
+    proportion = mean_abs / total,
+    # Weighted value: proportion multiplied by this lithology's actual mean_abs value
+    weighted_value = proportion * mean_abs
+  ) %>%
   ungroup() %>%
   mutate(
     feature       = recode(feature, !!!recode_map_box),
     final_cluster = factor(final_cluster, levels = cluster_levels)
   )
 
-# Order features so that least‐important (smallest total) is first, most‐important last
+# Keep features ordered by descending total (largest at top)
 feature_order <- conc_shap_litho %>%
   distinct(feature, total) %>%
-  arrange(total) %>%    # ascending: smallest → largest
+  arrange(total) %>%
   pull(feature)
+conc_shap_litho$feature <- factor(conc_shap_litho$feature, levels = feature_order)
 
-conc_shap_litho <- conc_shap_litho %>%
-  mutate(feature = factor(feature, levels = feature_order))
-
-# 12.2 Plot Concentration (horizontal bars, legend at bottom)
+###############################################################################
+# 12.2 Plot Concentration weighted values
+###############################################################################
 conc_litho_bar <- ggplot(conc_shap_litho,
-                         aes(x = mean_abs, y = feature, fill = final_cluster)) +
+                         aes(x = weighted_value, y = feature, fill = final_cluster)) +
   geom_col(position = position_stack(reverse = TRUE)) +
   scale_fill_manual(
     name   = "Lithology",
@@ -551,25 +558,28 @@ conc_litho_bar <- ggplot(conc_shap_litho,
     breaks = cluster_levels,
     limits = cluster_levels
   ) +
+  scale_x_continuous(expand = c(0, 0)) +
   labs(
-    x     = "Mean Absolute SHAP Value",
+    x     = "Weighted Mean |SHAP| Value",
     y     = NULL,
     title = "Concentration",
     tag   = "A"
   ) +
   theme_classic(base_size = 22) +
   theme(
-    plot.title      = element_text(hjust = 0.5, size = 24),
-    plot.tag        = element_text(size = 24, hjust = 0, vjust = 1),
-    axis.text       = element_text(size = 20),
-    axis.title.x    = element_text(size = 22),
-    legend.position = "bottom",
+    plot.title       = element_text(hjust = 0.5, size = 24),
+    plot.tag         = element_text(size = 24, hjust = 0, vjust = 1),
+    axis.text        = element_text(size = 20),
+    axis.title.x     = element_text(size = 22),
+    legend.position  = "bottom",
     legend.direction = "horizontal",
-    legend.title    = element_blank(),
-    legend.text     = element_text(size = 18)
+    legend.title     = element_blank(),
+    legend.text      = element_text(size = 18)
   )
 
-# 12.3 Prepare Yield data
+###############################################################################
+# 12.3 Prepare Yield data (compute weighted values)
+###############################################################################
 yield_shap_litho <- as.data.frame(shap_values_FNYield) %>%
   mutate(id = row_number()) %>%
   pivot_longer(
@@ -585,9 +595,17 @@ yield_shap_litho <- as.data.frame(shap_values_FNYield) %>%
   ) %>%
   filter(!grepl("^rocks_", feature)) %>%
   group_by(feature, final_cluster) %>%
-  summarize(mean_abs = mean(abs(shap_value), na.rm = TRUE), .groups = "drop") %>%
+  summarize(
+    mean_abs = mean(abs(shap_value), na.rm = TRUE),
+    .groups  = "drop"
+  ) %>%
   group_by(feature) %>%
-  mutate(total = sum(mean_abs)) %>%
+  mutate(
+    total = sum(mean_abs),
+    proportion = mean_abs / total,
+    # Weighted value: proportion multiplied by this lithology's actual mean_abs value
+    weighted_value = proportion * mean_abs
+  ) %>%
   ungroup() %>%
   mutate(
     feature       = recode(feature, !!!recode_map_box),
@@ -596,15 +614,15 @@ yield_shap_litho <- as.data.frame(shap_values_FNYield) %>%
 
 feature_order_yield <- yield_shap_litho %>%
   distinct(feature, total) %>%
-  arrange(total) %>%    # ascending
+  arrange(total) %>%
   pull(feature)
+yield_shap_litho$feature <- factor(yield_shap_litho$feature, levels = feature_order_yield)
 
-yield_shap_litho <- yield_shap_litho %>%
-  mutate(feature = factor(feature, levels = feature_order_yield))
-
-# 12.4 Plot Yield (horizontal bars, legend at bottom)
+###############################################################################
+# 12.4 Plot Yield weighted values
+###############################################################################
 yield_litho_bar <- ggplot(yield_shap_litho,
-                          aes(x = mean_abs, y = feature, fill = final_cluster)) +
+                          aes(x = weighted_value, y = feature, fill = final_cluster)) +
   geom_col(position = position_stack(reverse = TRUE)) +
   scale_fill_manual(
     name   = "Lithology",
@@ -612,36 +630,38 @@ yield_litho_bar <- ggplot(yield_shap_litho,
     breaks = cluster_levels,
     limits = cluster_levels
   ) +
+  scale_x_continuous(expand = c(0, 0)) +
   labs(
-    x     = "Mean Absolute Shap Value",
+    x     = "Weighted Mean |SHAP| Value",
     y     = NULL,
     title = "Yield",
     tag   = "B"
   ) +
   theme_classic(base_size = 22) +
   theme(
-    plot.title      = element_text(hjust = 0.5, size = 24),
-    plot.tag        = element_text(size = 24, hjust = 0, vjust = 1),
-    axis.text       = element_text(size = 20),
-    axis.title.x    = element_text(size = 22),
-    legend.position = "bottom",
+    plot.title       = element_text(hjust = 0.5, size = 24),
+    plot.tag         = element_text(size = 24, hjust = 0, vjust = 1),
+    axis.text        = element_text(size = 20),
+    axis.title.x     = element_text(size = 22),
+    legend.position  = "bottom",
     legend.direction = "horizontal",
-    legend.title    = element_blank(),
-    legend.text     = element_text(size = 18)
+    legend.title     = element_blank(),
+    legend.text      = element_text(size = 18)
   )
 
-# 12.5 Combine and save
+###############################################################################
+# 12.5 Combine and save both panels
+###############################################################################
 library(patchwork)
 fig_litho_shap <- conc_litho_bar + yield_litho_bar +
   plot_layout(ncol = 2, guides = "collect") &
   theme(legend.position = "bottom")
 
 ggsave(
-  file.path(output_dir, "FigX_Lithology_Stacked_SHAP.png"),
+  file.path(output_dir, "FigX_Lithology_Stacked_SHAP_WeightedValues.png"),
   fig_litho_shap,
-  width  = 18,
+  width  = 19,
   height = 10,
   dpi    = 300,
   bg     = "white"
 )
-

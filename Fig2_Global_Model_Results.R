@@ -577,6 +577,7 @@ make_shap_loess_full <- function(shap_matrix, drivers_data, model_name, base_out
     if (feat %in% c("NOx")) {
       p <- p +
         scale_x_log10(
+          name = "log(NOx)",
           breaks = scales::trans_breaks("log", function(x) 10^x),
           labels = scales::trans_format("log", scales::math_format(10^.x))
         ) +
@@ -587,6 +588,7 @@ make_shap_loess_full <- function(shap_matrix, drivers_data, model_name, base_out
     if (feat == "P") {
       p <- p +
         scale_x_log10(
+          name   = "log(P)",
           limits = c(1e-3, NA),
           breaks = scales::trans_breaks("log", function(x) 10^x),
           labels = scales::trans_format("log", scales::math_format(10^.x))
@@ -625,119 +627,149 @@ make_shap_loess_full(
 
 library(patchwork)
 
-# 10.3 Helper to build one full-data LOESS plot (P/NOx log scales, Marsh cap, custom y-label)
-single_loess_plot <- function(feat, shap_matrix, drivers_data, model_name) {
-  df <- data.frame(
+###############################################################################
+# 10.3 Helper to build one full‐data LOESS plot, coloring points by scaled driver value
+###############################################################################
+single_loess_plot <- function(feat,
+                              shap_matrix,
+                              drivers_data,
+                              drivers_scaled,
+                              model_name,
+                              global_scaled_min,
+                              global_scaled_max) {
+  df <- tibble::tibble(
     driver_value = drivers_data[[feat]],
-    shap_value   = shap_matrix[, feat]
-  ) %>% 
+    shap_value   = shap_matrix[, feat],
+    scaled_value = drivers_scaled[[feat]]
+  ) %>%
     filter(is.finite(driver_value), is.finite(shap_value))
   
-  # drop P below 1e-3
-  if (feat == "P") df <- df %>% filter(driver_value >= 1e-3)
+  if (feat == "P")   df <- df %>% filter(driver_value >= 1e-3)
+  if (feat == "NOx") df <- df %>% filter(driver_value > 0)
   if (nrow(df) < 10) return(NULL)
   
-  feat_label <- if (feat %in% names(recode_map)) recode_map[feat] else feat
+  feat_label <- recode(feat, !!!recode_map)
   
-  p <- ggplot(df, aes(x = driver_value, y = shap_value)) +
+  ggplot(df, aes(x = driver_value, y = shap_value)) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
     geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
-    geom_point(alpha = 0.6, size = 2) +
+    geom_point(aes(fill = scaled_value),
+               shape = 21, color = "darkgray", size = 2.7, alpha = 0.9) +
     geom_smooth(method = "loess", se = FALSE, size = 1, color = "#6699CC") +
-    labs(
-      x = feat_label,
-      y = paste(model_name, "SHAP Value")
+    scale_fill_gradient(
+      low    = "white",
+      high   = "black",
+      limits = c(global_scaled_min, global_scaled_max),
+      name   = "Scaled Value",
+      guide  = guide_colourbar(
+        barheight      = unit(0.6, "cm"),
+        barwidth       = unit(10, "lines"),
+        title.position = "top",
+        title.theme    = element_text(size = 16, hjust = 0.5),
+        label.theme    = element_text(size = 14)
+      )
     ) +
+    labs(x = feat_label, y = paste(model_name, "SHAP Value")) +
     theme_classic(base_size = 18) +
     theme(
       axis.title = element_text(size = 16),
-      axis.text  = element_text(size = 14)
-    )
-  
-  # log-scale NOx
-  if (feat == "NOx") {
-    p <- p +
-      scale_x_log10(
-        breaks = scales::trans_breaks("log", function(x) 10^x),
-        labels = scales::trans_format("log", scales::math_format(10^.x))
-      ) +
-      labs(x = paste0("log(", feat_label, ")"))
-  }
-  
-  # log-scale P with lower-cut at 1e-3
-  if (feat == "P") {
-    p <- p +
-      scale_x_log10(
-        limits = c(1e-3, NA),
-        breaks = scales::trans_breaks("log", function(x) 10^x),
-        labels = scales::trans_format("log", scales::math_format(10^.x))
-      ) +
-      labs(x = paste0("log(", feat_label, ")"))
-  }
-  
-  # cap Wetland Marsh
-  if (feat == "land_Wetland_Marsh") {
-    p <- p + scale_x_continuous(limits = c(0, 0.35))
-  }
-  
-  p
+      axis.text  = element_text(size = 14),
+      legend.position = "bottom"
+    ) +
+    { if (feat == "NOx") scale_x_log10(
+      breaks = scales::trans_breaks("log10", function(x) 10^x),
+      labels = scales::math_format(10^.x)
+    ) } +
+    { if (feat == "P") scale_x_log10(
+      limits = c(1e-3, NA),
+      breaks = scales::trans_breaks("log10", function(x) 10^x),
+      labels = scales::math_format(10^.x)
+    ) } +
+    { if (feat == "land_Wetland_Marsh") scale_x_continuous(limits = c(0, 0.35)) }
 }
 
-library(patchwork)
-
-# 10.4 Build & save Concentration grid (2 cols × 3 rows)
+###############################################################################
+# 10.4 Build & save Concentration grid (2×3) with extra spacing above the colour‐bar
+###############################################################################
 conc_feats <- c(
-  "basin_slope",        "recession_slope",
-  "precip",             "P",
-  "land_Water",         "land_Grassland_Shrubland"
+  "basin_slope", "recession_slope",
+  "land_Water",  "land_Grassland_Shrubland",
+  "precip",      "P"
 )
-conc_plots <- lapply(conc_feats, single_loess_plot,
-                     shap_matrix  = shap_values_FNConc,
-                     drivers_data = kept_drivers_FNConc,
-                     model_name   = "Concentration")
-# drop NULLs
+
+# 1. Generate panels without their own legends
+conc_plots <- lapply(seq_along(conc_feats), function(i) {
+  p <- single_loess_plot(
+    conc_feats[i],
+    shap_matrix       = shap_values_FNConc,
+    drivers_data      = kept_drivers_FNConc,
+    drivers_scaled    = kept_FNConc_scaled,
+    model_name        = "Concentration",
+    global_scaled_min = global_scaled_min,
+    global_scaled_max = global_scaled_max
+  ) +
+    theme(legend.position = "none")
+  if (i %% 2 == 0) p <- p + theme(axis.title.y = element_blank())
+  p
+})
 conc_plots <- conc_plots[!sapply(conc_plots, is.null)]
-# remove y-axis title only on right-column panels (2, 4, 6)
-conc_plots <- Map(function(p, idx) {
-  if (idx %% 2 == 0) {
-    p + theme(axis.title.y = element_blank())
-  } else p
-}, conc_plots, seq_along(conc_plots))
 
-conc_grid <- wrap_plots(conc_plots, ncol = 2)
+# 2. Assemble with one shared legend and extra top margin
+conc_grid <- wrap_plots(conc_plots, ncol = 2, guides = "collect") & 
+  theme(
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    legend.key.width = unit(1.5, "cm"),
+    legend.key.height= unit(0.3, "cm"),
+    legend.spacing.x = unit(0.2, "cm"),
+    legend.title     = element_text(size = 12, margin = ggplot2::margin(b = 5)),
+    legend.text      = element_text(size = 10),
+    legend.margin    = ggplot2::margin(t = 15, unit = "pt")
+  )
+
+# 3. Save Figure 3
 ggsave(
-  file.path(output_dir, "Fig3_Concentration_SHAP_grid.png"),
+  file.path(output_dir, "Fig3_Concentration_SHAP_grid_colored.png"),
   conc_grid,
-  width  = 10, 
-  height = 12, 
-  dpi = 300, 
-  bg = "white"
+  width  = 10, height = 12, dpi = 300, bg = "white"
 )
 
-# 10.5 Build & save Yield grid (2 cols × 2 rows)
-yield_feats <- c(
-  "recession_slope",    "land_Wetland_Marsh",
-  "npp",                "NOx"
-)
-yield_plots <- lapply(yield_feats, single_loess_plot,
-                      shap_matrix  = shap_values_FNYield,
-                      drivers_data = kept_drivers_FNYield,
-                      model_name   = "Yield")
-# drop NULLs
+
+###############################################################################
+# 10.5 Build & save Yield grid (2×2) with extra spacing above the colour‐bar
+###############################################################################
+yield_feats <- c("recession_slope", "land_Wetland_Marsh", "npp", "NOx")
+
+yield_plots <- lapply(seq_along(yield_feats), function(i) {
+  p <- single_loess_plot(
+    yield_feats[i],
+    shap_matrix       = shap_values_FNYield,
+    drivers_data      = kept_drivers_FNYield,
+    drivers_scaled    = kept_FNYield_scaled,
+    model_name        = "Yield",
+    global_scaled_min = global_scaled_min,
+    global_scaled_max = global_scaled_max
+  ) +
+    theme(legend.position = "none")
+  if (i %% 2 == 0) p <- p + theme(axis.title.y = element_blank())
+  p
+})
 yield_plots <- yield_plots[!sapply(yield_plots, is.null)]
-# remove y-axis title only on right-column panels (2, 4)
-yield_plots <- Map(function(p, idx) {
-  if (idx %% 2 == 0) {
-    p + theme(axis.title.y = element_blank())
-  } else p
-}, yield_plots, seq_along(yield_plots))
 
-yield_grid <- wrap_plots(yield_plots, ncol = 2)
+yield_grid <- wrap_plots(yield_plots, ncol = 2, guides = "collect") & 
+  theme(
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    legend.key.width = unit(1.5, "cm"),
+    legend.key.height= unit(0.3, "cm"),
+    legend.spacing.x = unit(0.2, "cm"),
+    legend.title     = element_text(size = 12, margin = ggplot2::margin(b = 5)),
+    legend.text      = element_text(size = 10),
+    legend.margin    = ggplot2::margin(t = 15, unit = "pt")
+  )
+
 ggsave(
-  file.path(output_dir, "Fig4_Yield_SHAP_grid.png"),
+  file.path(output_dir, "Fig4_Yield_SHAP_grid_colored.png"),
   yield_grid,
-  width  = 10, 
-  height = 8, 
-  dpi = 300, 
-  bg = "white"
+  width  = 10, height = 8, dpi = 300, bg = "white"
 )
