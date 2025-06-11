@@ -481,7 +481,7 @@ final_grid_dot <- (y_axis_label | dot_plots_with_title) +
 
 ## 12. Save & Print Final Figure
 ggsave(
-  filename = "Fig3_Combined_Grid_DotPlots.png",
+  filename = "FigSX_Combined_Grid_DotPlots.png",
   plot     = final_grid_dot,
   width    = 26,
   height   = 28,
@@ -689,8 +689,8 @@ fig_litho_shap <- conc_litho_bar + yield_litho_bar +
 ggsave(
   file.path(output_dir, "Fig5_Lithology_Stacked_SHAP_WeightedValues.png"),
   fig_litho_shap,
-  width  = 18,
-  height = 8,
+  width  = 20,
+  height = 10,
   dpi    = 300,
   bg     = "white"
 )

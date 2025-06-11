@@ -153,7 +153,7 @@ var_order <- c(
 var_labels <- c(
   "NOx", "P", "NPP", "ET", "Greenup Day", "Precip", "Temp",
   "Snow Cover", "Permafrost", "Elevation", "Basin Slope",
-  "Flashiness (RBI)", "Recession Slope", "Land: Bare", "Land: Cropland",
+  "Flashiness (RBI)", "Recession Curve Slope", "Land: Bare", "Land: Cropland",
   "Land: Forest", "Land: Grass & Shrub", "Land: Ice & Snow",
   "Land: Impervious", "Land: Salt Water", "Land: Tidal Wetland",
   "Land: Water Body", "Land: Wetland Marsh"
@@ -688,88 +688,131 @@ single_loess_plot <- function(feat,
     { if (feat == "land_Wetland_Marsh") scale_x_continuous(limits = c(0, 0.35)) }
 }
 
-###############################################################################
-# 10.4 Build & save Concentration grid (2×3) with extra spacing above the colour‐bar
-###############################################################################
+library(patchwork)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 10.4 Build & save Concentration grid (2×3) with manual tags A–F
+# ─────────────────────────────────────────────────────────────────────────────
+
+# 1) Define which features to plot
 conc_feats <- c(
   "basin_slope", "recession_slope",
   "land_Water",  "land_Grassland_Shrubland",
   "precip",      "P"
 )
 
-# 1. Generate panels without their own legends
+# 2) Generate each panel without its internal legend
 conc_plots <- lapply(seq_along(conc_feats), function(i) {
   p <- single_loess_plot(
-    conc_feats[i],
-    shap_matrix       = shap_values_FNConc,
-    drivers_data      = kept_drivers_FNConc,
-    drivers_scaled    = kept_FNConc_scaled,
-    model_name        = "Concentration",
-    global_scaled_min = global_scaled_min,
-    global_scaled_max = global_scaled_max
+    feat                = conc_feats[i],
+    shap_matrix         = shap_values_FNConc,
+    drivers_data        = kept_drivers_FNConc,
+    drivers_scaled      = kept_FNConc_scaled,
+    model_name          = "Concentration",
+    global_scaled_min   = global_scaled_min,
+    global_scaled_max   = global_scaled_max
   ) +
     theme(legend.position = "none")
-  if (i %% 2 == 0) p <- p + theme(axis.title.y = element_blank())
+  if (i %% 2 == 0) {
+    p <- p + theme(axis.title.y = element_blank())
+  }
   p
 })
+# drop any NULL panels (in case single_loess_plot returned NULL)
 conc_plots <- conc_plots[!sapply(conc_plots, is.null)]
 
-# 2. Assemble with one shared legend and extra top margin
-conc_grid <- wrap_plots(conc_plots, ncol = 2, guides = "collect") & 
-  theme(
-    legend.position = "bottom",
-    legend.direction = "horizontal",
-    legend.key.width = unit(1.5, "cm"),
-    legend.key.height= unit(0.3, "cm"),
-    legend.spacing.x = unit(0.2, "cm"),
-    legend.title     = element_text(size = 12, margin = ggplot2::margin(b = 5)),
-    legend.text      = element_text(size = 10),
-    legend.margin    = ggplot2::margin(t = 15, unit = "pt")
-  )
+# 3) Extract a shared legend from the first panel
+shared_leg_conc <- cowplot::get_legend(
+  conc_plots[[1]] + theme(legend.position = "bottom")
+)
 
-# 3. Save Figure 3
+# 4) Tag each panel A–F
+pA <- conc_plots[[1]] + labs(tag = "A") + theme(plot.tag = element_text(size = 16), plot.tag.position = c(0.02, 0.98))
+pB <- conc_plots[[2]] + labs(tag = "B") + theme(plot.tag = element_text(size = 16), plot.tag.position = c(0.02, 0.98))
+pC <- conc_plots[[3]] + labs(tag = "C") + theme(plot.tag = element_text(size = 16), plot.tag.position = c(0.02, 0.98))
+pD <- conc_plots[[4]] + labs(tag = "D") + theme(plot.tag = element_text(size = 16), plot.tag.position = c(0.02, 0.98))
+pE <- conc_plots[[5]] + labs(tag = "E") + theme(plot.tag = element_text(size = 16), plot.tag.position = c(0.02, 0.98))
+pF <- conc_plots[[6]] + labs(tag = "F") + theme(plot.tag = element_text(size = 16), plot.tag.position = c(0.02, 0.98))
+
+# 5) Arrange into 3 rows of 2
+row1 <- cowplot::plot_grid(pA, pB, ncol = 2)
+row2 <- cowplot::plot_grid(pC, pD, ncol = 2)
+row3 <- cowplot::plot_grid(pE, pF, ncol = 2)
+
+# 6) Stack rows + shared legend
+final_fig3 <- cowplot::plot_grid(
+  row1, row2, row3, shared_leg_conc,
+  ncol        = 1,
+  rel_heights = c(1, 1, 1, 0.2),
+  align       = "v"
+)
+
+# 7) Save
 ggsave(
-  file.path(output_dir, "Fig3_Concentration_SHAP_grid_colored.png"),
-  conc_grid,
-  width  = 10, height = 12, dpi = 300, bg = "white"
+  file.path(output_dir, "Fig3_Concentration_SHAP_grid_cowplot.png"),
+  final_fig3,
+  width  = 10,
+  height = 12,
+  dpi    = 300,
+  bg     = "white"
 )
 
 
-###############################################################################
-# 10.5 Build & save Yield grid (2×2) with extra spacing above the colour‐bar
-###############################################################################
+# ─────────────────────────────────────────────────────────────────────────────
+# 10.5 Build & save Yield grid (2×2) with manual tags A–D
+# ─────────────────────────────────────────────────────────────────────────────
+
+# 1) Define yield features
 yield_feats <- c("recession_slope", "land_Wetland_Marsh", "npp", "NOx")
 
+# 2) Generate panels without legends
 yield_plots <- lapply(seq_along(yield_feats), function(i) {
   p <- single_loess_plot(
-    yield_feats[i],
-    shap_matrix       = shap_values_FNYield,
-    drivers_data      = kept_drivers_FNYield,
-    drivers_scaled    = kept_FNYield_scaled,
-    model_name        = "Yield",
-    global_scaled_min = global_scaled_min,
-    global_scaled_max = global_scaled_max
+    feat                = yield_feats[i],
+    shap_matrix         = shap_values_FNYield,
+    drivers_data        = kept_drivers_FNYield,
+    drivers_scaled      = kept_FNYield_scaled,
+    model_name          = "Yield",
+    global_scaled_min   = global_scaled_min,
+    global_scaled_max   = global_scaled_max
   ) +
     theme(legend.position = "none")
-  if (i %% 2 == 0) p <- p + theme(axis.title.y = element_blank())
+  if (i %% 2 == 0) {
+    p <- p + theme(axis.title.y = element_blank())
+  }
   p
 })
 yield_plots <- yield_plots[!sapply(yield_plots, is.null)]
 
-yield_grid <- wrap_plots(yield_plots, ncol = 2, guides = "collect") & 
-  theme(
-    legend.position = "bottom",
-    legend.direction = "horizontal",
-    legend.key.width = unit(1.5, "cm"),
-    legend.key.height= unit(0.3, "cm"),
-    legend.spacing.x = unit(0.2, "cm"),
-    legend.title     = element_text(size = 12, margin = ggplot2::margin(b = 5)),
-    legend.text      = element_text(size = 10),
-    legend.margin    = ggplot2::margin(t = 15, unit = "pt")
-  )
+# 3) Shared legend
+shared_leg_yield <- cowplot::get_legend(
+  yield_plots[[1]] + theme(legend.position = "bottom")
+)
 
+# 4) Tag panels A–D
+qA <- yield_plots[[1]] + labs(tag = "A") + theme(plot.tag = element_text(size = 16), plot.tag.position = c(0.02, 0.98))
+qB <- yield_plots[[2]] + labs(tag = "B") + theme(plot.tag = element_text(size = 16), plot.tag.position = c(0.02, 0.98))
+qC <- yield_plots[[3]] + labs(tag = "C") + theme(plot.tag = element_text(size = 16), plot.tag.position = c(0.02, 0.98))
+qD <- yield_plots[[4]] + labs(tag = "D") + theme(plot.tag = element_text(size = 16), plot.tag.position = c(0.02, 0.98))
+
+# 5) Two rows of two
+yrow1 <- cowplot::plot_grid(qA, qB, ncol = 2)
+yrow2 <- cowplot::plot_grid(qC, qD, ncol = 2)
+
+# 6) Stack rows + legend
+final_fig4 <- cowplot::plot_grid(
+  yrow1, yrow2, shared_leg_yield,
+  ncol        = 1,
+  rel_heights = c(1, 1, 0.2),
+  align       = "v"
+)
+
+# 7) Save
 ggsave(
-  file.path(output_dir, "Fig4_Yield_SHAP_grid_colored.png"),
-  yield_grid,
-  width  = 10, height = 8, dpi = 300, bg = "white"
+  file.path(output_dir, "Fig4_Yield_SHAP_grid_cowplot.png"),
+  final_fig4,
+  width  = 10,
+  height = 8,
+  dpi    = 300,
+  bg     = "white"
 )

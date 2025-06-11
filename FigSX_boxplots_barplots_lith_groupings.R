@@ -83,7 +83,7 @@ var_labels <- c(
   "Elevation",
   "Basin Slope",   # Topo
   "Flashiness (RBI)",
-  "Recession Slope", # Q
+  "Recession Curve Slope", # Q
   "Land: Bare",
   "Land: Cropland",
   "Land: Forest",
@@ -106,7 +106,7 @@ clim_end   <- which(var_labels == "Permafrost") + 0.5
 topo_start <- which(var_labels == "Elevation") - 0.5
 topo_end   <- which(var_labels == "Basin Slope") + 0.5
 disc_start <- which(var_labels == "Flashiness (RBI)") - 0.5
-disc_end   <- which(var_labels == "Recession Slope") + 0.5
+disc_end   <- which(var_labels == "Recession Curve Slope") + 0.5
 land_start_index <- which(var_labels == "Land: Bare") - 0.5
 land_end_index   <- which(var_labels == "Land: Wetland Marsh") + 0.5
 
@@ -271,7 +271,7 @@ cluster_boxplots <- lapply(unique_clusters, function(cl) {
     ) +
     annotate(
       "text",
-      x = (which(var_labels == "Flashiness (RBI)") + which(var_labels == "Recession Slope")) / 2,
+      x = (which(var_labels == "Flashiness (RBI)") + which(var_labels == "Recession Curve Slope")) / 2,
       y = Inf, label = "Q",
       color    = disc_text,
       fontface = "plain",
