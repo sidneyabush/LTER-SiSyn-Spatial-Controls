@@ -570,7 +570,8 @@ make_shap_loess_full <- function(shap_matrix, drivers_data, model_name, base_out
       theme(
         plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
         axis.title = element_text(size = 16),
-        axis.text  = element_text(size = 14)
+        axis.text  = element_text(size = 14),
+        plot.margin = ggplot2::margin(t = 20, r = 5, b = 5, l = 30, unit = "pt")
       )
     
     # — for linear axes, add the 0‐line —
@@ -592,14 +593,11 @@ make_shap_loess_full <- function(shap_matrix, drivers_data, model_name, base_out
         labs(x = paste0("log(", feat_label, ")"))
     }
     
-    # — cap x at 35 & y at 1000 only for Marsh —
+    # — cap x at 35 & y at 3200 only for Marsh —
     if (feat == "land_Wetland_Marsh") {
       p <- p +
-        if (feat == "land_Wetland_Marsh") {
-          # 1) zoom to x = [0,35] without dropping data
-          p <- p +
-            coord_cartesian(xlim = c(0, 35), ylim = c(NA, 3200), expand = FALSE)
-        }    }
+        coord_cartesian(xlim = c(0, 35), ylim = c(NA, 3200), expand = FALSE)
+    }
     
     # — save —
     fname <- file.path(out_dir, paste0("SHAP_loess_full_", model_name, "_", feat, ".png"))
@@ -608,8 +606,6 @@ make_shap_loess_full <- function(shap_matrix, drivers_data, model_name, base_out
   
   message("Full-data LOESS shap scatterplots saved to ", out_dir)
 }
-
-
 
 # 10.2 Generate full‐data LOESS plots for both models
 make_shap_loess_full(
@@ -664,7 +660,7 @@ legend_panel3 <- {
         title.hjust    = 0.5,
         title.theme    = element_text(size = 16),
         label.theme    = element_text(size = 16),
-        barwidth       = unit(10, "lines"),
+        barwidth       = unit(20, "lines"),
         barheight      = unit(0.6, "cm")
       )
     ) +
@@ -706,7 +702,7 @@ p_list3 <- lapply(seq_along(conc_feats), function(i) {
         title.hjust    = 0.5,
         title.theme    = element_text(size = 14),
         label.theme    = element_text(size = 10),
-        barwidth       = unit(10, "lines"),
+        barwidth       = unit(20, "lines"),
         barheight      = unit(0.6, "cm")
       )
     ) +
@@ -739,7 +735,6 @@ p_list3 <- lapply(seq_along(conc_feats), function(i) {
     p <- p + scale_x_continuous(limits = c(0, 35.0))
   }
   p
-  
 })
 
 p_list3 <- p_list3[!sapply(p_list3, is.null)]
@@ -770,7 +765,6 @@ ggsave(
   file.path(output_dir, "Fig3_Concentration_SHAP_grid_tagged.png"),
   fig3, width = 12, height = 14, dpi = 300, bg = "white"
 )
-
 
 ## 10.5 Build & save Yield grid (2×2) with auto-labels A–D
 
@@ -804,7 +798,7 @@ legend_panel4 <- {
         title.hjust    = 0.5,
         title.theme    = element_text(size = 16),
         label.theme    = element_text(size = 12),
-        barwidth       = unit(10, "lines"),
+        barwidth       = unit(20, "lines"),
         barheight      = unit(0.6, "cm")
       )
     ) +
@@ -845,7 +839,7 @@ p_list4 <- lapply(seq_along(yield_feats), function(i) {
         title.hjust    = 0.5,
         title.theme    = element_text(size = 16),
         label.theme    = element_text(size = 12),
-        barwidth       = unit(10, "lines"),
+        barwidth       = unit(20, "lines"),
         barheight      = unit(0.6, "cm")
       )
     ) +
@@ -857,8 +851,8 @@ p_list4 <- lapply(seq_along(yield_feats), function(i) {
       axis.text       = element_text(size = 14),
       plot.margin = ggplot2::margin(t = 20, r = 5, b = 5, l = 30, unit = "pt")
     )
+  
   if (feat == "land_Wetland_Marsh") {
-    # 1) zoom to x = [0,35] without dropping data
     p <- p +
       coord_cartesian(xlim = c(0, 35), ylim = c(NA, 3200), expand = FALSE)
   }
@@ -868,15 +862,6 @@ p_list4 <- lapply(seq_along(yield_feats), function(i) {
       labels = scales::trans_format("log10", scales::math_format(10^.x))
     )
   }
-  
-  if (feat == "land_Wetland_Marsh") {
-    # 1) zoom to x = [0,35] without dropping data
-    p <- p +
-      if (feat == "land_Wetland_Marsh") {
-        # 1) zoom to x = [0,35] without dropping data
-        p <- p +
-          coord_cartesian(xlim = c(0, 35), ylim = c(NA, 3200), expand = FALSE)
-      }  }
   
   p
 })
@@ -906,5 +891,134 @@ fig4 <- plot_grid(
 
 ggsave(
   file.path(output_dir, "Fig4_Yield_SHAP_grid_tagged.png"),
-  fig4, width = 13, height = 12.2, dpi = 300, bg = "white"
+  fig4, width = 12, height = 11.2, dpi = 300, bg = "white"
 )
+
+## 10.6 Build & save Yield grid (2×2) with auto-labels A–D (LINEAR SCALE)
+
+# define features
+yield_feats <- c("recession_slope","land_Wetland_Marsh","npp","NOx")
+
+# compute Yield range for fill scale
+global_yield_min <- min(drivers_numeric_FNYield$FNYield, na.rm = TRUE)
+global_yield_max <- max(drivers_numeric_FNYield$FNYield, na.rm = TRUE)
+
+# extract shared legend
+legend_panel5 <- {
+  feat <- yield_feats[1]
+  df <- tibble::tibble(
+    driver_value = kept_drivers_FNYield[[feat]],
+    shap_value   = shap_values_FNYield[, feat],
+    response     = drivers_numeric_FNYield$FNYield
+  ) %>% dplyr::filter(is.finite(driver_value), is.finite(shap_value))
+  
+  ggplot(df, aes(driver_value, shap_value, fill = response)) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+    geom_point(shape = 21, color = "darkgray", size = 2.7, alpha = 0.9) +
+    geom_smooth(method = "loess", se = FALSE, size = 1, color = "#6699CC") +
+    scale_fill_gradient(
+      low    = "white", high = "black",
+      # NO trans = "log10" - linear scale
+      name   = expression("Yield (kg " * km^{-2} * " yr"^{-1} * ")"),
+      guide  = guide_colourbar(
+        title.position = "top",
+        title.hjust    = 0.5,
+        title.theme    = element_text(size = 16),
+        label.theme    = element_text(size = 12),
+        barwidth       = unit(20, "lines"),
+        barheight      = unit(0.6, "cm")
+      )
+    ) +
+    labs(x = recode_map[[feat]], y = "SHAP value") +
+    theme_classic(base_size = 18) +
+    theme(
+      legend.position   = "right",
+      legend.direction = "horizontal",
+      legend.title.align= 0.5,
+      legend.title      = element_text(size = 16),
+      legend.text       = element_text(size = 12),
+      axis.title        = element_text(size = 16),
+      axis.text         = element_text(size = 14)
+    )
+}
+shared_leg_yield_linear <- cowplot::get_legend(legend_panel5)
+
+# build the four panels (no internal legends/tags)
+p_list5 <- lapply(seq_along(yield_feats), function(i) {
+  feat <- yield_feats[i]
+  df <- tibble::tibble(
+    driver_value = kept_drivers_FNYield[[feat]],
+    shap_value   = shap_values_FNYield[, feat],
+    response     = drivers_numeric_FNYield$FNYield
+  ) %>% dplyr::filter(is.finite(driver_value), is.finite(shap_value))
+  
+  p <- ggplot(df, aes(driver_value, shap_value, fill = response)) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+    geom_point(shape = 21, color = "darkgray", size = 2.7, alpha = 0.9) +
+    geom_smooth(method = "loess", se = FALSE, size = 1, color = "#6699CC") +
+    scale_fill_gradient(
+      low    = "white", high = "black",
+      # NO trans = "log10" - linear scale
+      name   = expression("Yield (kg " * km^{-2} * " yr"^{-1} * ")"),
+      guide  = guide_colourbar(
+        title.position = "top",
+        title.hjust    = 0.5,
+        title.theme    = element_text(size = 16),
+        label.theme    = element_text(size = 12),
+        barwidth       = unit(20, "lines"),
+        barheight      = unit(0.6, "cm")
+      )
+    ) +
+    labs(x = recode_map[[feat]], y = if (i %% 2 == 1) "SHAP value" else NULL) +
+    theme_classic(base_size = 18) +
+    theme(
+      legend.position = "none",
+      axis.title.y    = element_text(size = 16),
+      axis.text       = element_text(size = 14),
+      plot.margin = ggplot2::margin(t = 20, r = 5, b = 5, l = 30, unit = "pt")
+    )
+  
+  if (feat == "land_Wetland_Marsh") {
+    p <- p +
+      coord_cartesian(xlim = c(0, 35), ylim = c(NA, 3200), expand = FALSE)
+  }
+  if (feat == "NOx") {
+    p <- p + scale_x_log10(
+      breaks = scales::trans_breaks("log10", function(x) 10^x),
+      labels = scales::trans_format("log10", scales::math_format(10^.x))
+    )
+  }
+  
+  p
+})
+
+p_list5 <- p_list5[!sapply(p_list5, is.null)]
+
+# assemble with cowplot labels A–D
+four_panels_linear <- plot_grid(
+  p_list5[[1]], p_list5[[2]],
+  p_list5[[3]], p_list5[[4]],
+  ncol            = 2,
+  align           = "hv",
+  axis            = "tblr",
+  labels          = LETTERS[1:4],
+  label_size      = 16,
+  label_x         = 0.02,
+  label_y         = 0.98,
+  label_fontface  = "plain"
+)
+
+fig5 <- plot_grid(
+  four_panels_linear,
+  shared_leg_yield_linear,
+  ncol        = 1,
+  rel_heights = c(1, 0.1)
+)
+
+ggsave(
+  file.path(output_dir, "Fig4_Yield_SHAP_grid_tagged_linear.png"),
+  fig5, width = 12, height = 11.2, dpi = 300, bg = "white"
+)
+
