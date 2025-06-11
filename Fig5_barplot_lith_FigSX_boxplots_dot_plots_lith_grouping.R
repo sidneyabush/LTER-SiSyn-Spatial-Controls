@@ -114,6 +114,7 @@ my_cluster_colors <- c(
   "Metamorphic"         = "#C26F86",
   "Carbonate Evaporite" = "#5E88B0"
 )
+
 unique_clusters <- levels(full_scaled$final_cluster)
 
 ## 5. Precompute Numeric Positions for Each Group's Shading
