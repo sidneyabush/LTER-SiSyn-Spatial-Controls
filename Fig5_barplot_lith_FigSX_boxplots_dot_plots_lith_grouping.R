@@ -500,8 +500,11 @@ cluster_levels <- c(
   "Metamorphic",
   "Carbonate Evaporite"
 )
+library(colorspace)
+# Lighten existing colors by increasing luminance
+original_colors <- c("#AC7B32", "#579C8E", "#89C8A0", "#8D9A40", "#C26F86", "#5E88B0")
 my_cluster_colors <- setNames(
-  c("#AC7B32", "#579C8E", "#89C8A0", "#8D9A40", "#C26F86", "#5E88B0"),
+  lighten(original_colors, amount = 0.1),  # Adjust amount as needed (0-1)
   cluster_levels
 )
 

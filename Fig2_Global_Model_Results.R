@@ -385,13 +385,13 @@ row3 <- cowplot::plot_grid(E_tagged, F_tagged, ncol=2)
 final_3x2 <- cowplot::plot_grid(
   row1, row2, row3, shared_legend,
   ncol       = 1,
-  rel_heights= c(1, 1.1, 1.2, 0.2),
+  rel_heights= c(1.15, 1.1, 1.2, 0.2),
   align      = "v"
 )
 
 # 7.6 Save FIG 2
 ggsave(
-  file.path(output_dir, "Fig2_Global_3row2col_FNConc_FNYield.png"),
+  file.path(output_dir, "Fig2_Global_FNConc_FNYield.png"),
   final_3x2,
   width  = 20,
   height = 25,
@@ -762,7 +762,7 @@ fig3 <- plot_grid(
 )
 
 ggsave(
-  file.path(output_dir, "Fig3_Concentration_SHAP_grid_tagged.png"),
+  file.path(output_dir, "Fig3_Concentration_SHAP_grid.png"),
   fig3, width = 12, height = 14, dpi = 300, bg = "white"
 )
 
@@ -890,7 +890,7 @@ fig4 <- plot_grid(
 )
 
 ggsave(
-  file.path(output_dir, "Fig4_Yield_SHAP_grid_tagged.png"),
+  file.path(output_dir, "Fig4_Yield_SHAP_grid_log.png"),
   fig4, width = 12, height = 11.2, dpi = 300, bg = "white"
 )
 
@@ -1018,7 +1018,7 @@ fig5 <- plot_grid(
 )
 
 ggsave(
-  file.path(output_dir, "Fig4_Yield_SHAP_grid_tagged_linear.png"),
+  file.path(output_dir, "Fig4_Yield_SHAP_grid_linear.png"),
   fig5, width = 12, height = 11.2, dpi = 300, bg = "white"
 )
 
