@@ -598,7 +598,7 @@ make_shap_loess_full <- function(shap_matrix, drivers_data, model_name, base_out
     # — cap x at 35 for Wetland Marsh —
     if (feat == "land_Wetland_Marsh") {
       p <- p +
-        scale_x_continuous(limits = c(0, 35))
+        scale_x_continuous(limits = c(0, 35.0))
     }
     
     fname <- file.path(out_dir, paste0("SHAP_loess_full_", model_name, "_", feat, ".png"))
@@ -733,7 +733,7 @@ p_list3 <- lapply(seq_along(conc_feats), function(i) {
     )
   }
   if (feat == "land_Wetland_Marsh") {
-    p <- p + scale_x_continuous(limits = c(0, 35))
+    p <- p + scale_x_continuous(limits = c(0, 35.0))
   }
   p
 })
