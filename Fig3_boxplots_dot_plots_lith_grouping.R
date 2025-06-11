@@ -689,7 +689,7 @@ fig_litho_shap <- conc_litho_bar + yield_litho_bar +
 ggsave(
   file.path(output_dir, "Fig5_Lithology_Stacked_SHAP_WeightedValues.png"),
   fig_litho_shap,
-  width  = 16,
+  width  = 18,
   height = 8,
   dpi    = 300,
   bg     = "white"
