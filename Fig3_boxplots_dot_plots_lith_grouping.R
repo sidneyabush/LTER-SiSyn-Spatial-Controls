@@ -507,6 +507,18 @@ my_cluster_colors <- setNames(
 ###############################################################################
 # 12.1 Prepare Concentration data (compute weighted values)
 ###############################################################################
+# First calculate overall mean absolute SHAP for each driver (across all lithologies)
+conc_driver_importance <- as.data.frame(shap_values_FNConc) %>%
+  select(-any_of("final_cluster")) %>%
+  select(-matches("^rocks_")) %>%
+  summarise(across(everything(), ~ mean(abs(.x), na.rm = TRUE))) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "feature", 
+    values_to = "driver_mean_abs_shap"
+  )
+
+# Now calculate lithology contributions and weight by driver importance
 conc_shap_litho <- as.data.frame(shap_values_FNConc) %>%
   mutate(id = row_number()) %>%
   pivot_longer(
@@ -523,15 +535,17 @@ conc_shap_litho <- as.data.frame(shap_values_FNConc) %>%
   filter(!grepl("^rocks_", feature)) %>%
   group_by(feature, final_cluster) %>%
   summarize(
-    mean_abs = mean(abs(shap_value), na.rm = TRUE),
+    litho_mean_abs = mean(abs(shap_value), na.rm = TRUE),
     .groups  = "drop"
   ) %>%
+  # Add driver importance
+  left_join(conc_driver_importance, by = "feature") %>%
+  # Calculate proportion and weighted value
   group_by(feature) %>%
   mutate(
-    total = sum(mean_abs),
-    proportion = mean_abs / total,
-    # Weighted value: proportion multiplied by this lithology's actual mean_abs value
-    weighted_value = proportion * mean_abs
+    proportion = litho_mean_abs / sum(litho_mean_abs),
+    # Weighted value: proportion of lithology contribution × driver's overall importance
+    weighted_value = proportion * driver_mean_abs_shap
   ) %>%
   ungroup() %>%
   mutate(
@@ -539,12 +553,12 @@ conc_shap_litho <- as.data.frame(shap_values_FNConc) %>%
     final_cluster = factor(final_cluster, levels = cluster_levels)
   )
 
-# Keep features ordered by descending total (largest at top)
-feature_order <- conc_shap_litho %>%
-  distinct(feature, total) %>%
-  arrange(total) %>%
+# Order features by descending driver importance (highest to lowest)
+feature_order_conc <- conc_shap_litho %>%
+  distinct(feature, driver_mean_abs_shap) %>%
+  arrange(driver_mean_abs_shap) %>%
   pull(feature)
-conc_shap_litho$feature <- factor(conc_shap_litho$feature, levels = feature_order)
+conc_shap_litho$feature <- factor(conc_shap_litho$feature, levels = feature_order_conc)
 
 ###############################################################################
 # 12.2 Plot Concentration weighted values
@@ -560,7 +574,7 @@ conc_litho_bar <- ggplot(conc_shap_litho,
   ) +
   scale_x_continuous(expand = c(0, 0)) +
   labs(
-    x     = "Weighted Mean |SHAP| Value",
+    x     = "Weighted Mean Absolute SHAP Value",
     y     = NULL,
     title = "Concentration",
     tag   = "A"
@@ -580,6 +594,18 @@ conc_litho_bar <- ggplot(conc_shap_litho,
 ###############################################################################
 # 12.3 Prepare Yield data (compute weighted values)
 ###############################################################################
+# First calculate overall mean absolute SHAP for each driver (across all lithologies)
+yield_driver_importance <- as.data.frame(shap_values_FNYield) %>%
+  select(-any_of("final_cluster")) %>%
+  select(-matches("^rocks_")) %>%
+  summarise(across(everything(), ~ mean(abs(.x), na.rm = TRUE))) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "feature", 
+    values_to = "driver_mean_abs_shap"
+  )
+
+# Now calculate lithology contributions and weight by driver importance
 yield_shap_litho <- as.data.frame(shap_values_FNYield) %>%
   mutate(id = row_number()) %>%
   pivot_longer(
@@ -596,15 +622,17 @@ yield_shap_litho <- as.data.frame(shap_values_FNYield) %>%
   filter(!grepl("^rocks_", feature)) %>%
   group_by(feature, final_cluster) %>%
   summarize(
-    mean_abs = mean(abs(shap_value), na.rm = TRUE),
+    litho_mean_abs = mean(abs(shap_value), na.rm = TRUE),
     .groups  = "drop"
   ) %>%
+  # Add driver importance
+  left_join(yield_driver_importance, by = "feature") %>%
+  # Calculate proportion and weighted value
   group_by(feature) %>%
   mutate(
-    total = sum(mean_abs),
-    proportion = mean_abs / total,
-    # Weighted value: proportion multiplied by this lithology's actual mean_abs value
-    weighted_value = proportion * mean_abs
+    proportion = litho_mean_abs / sum(litho_mean_abs),
+    # Weighted value: proportion of lithology contribution × driver's overall importance
+    weighted_value = proportion * driver_mean_abs_shap
   ) %>%
   ungroup() %>%
   mutate(
@@ -612,9 +640,10 @@ yield_shap_litho <- as.data.frame(shap_values_FNYield) %>%
     final_cluster = factor(final_cluster, levels = cluster_levels)
   )
 
+# Order features by descending driver importance (highest to lowest)
 feature_order_yield <- yield_shap_litho %>%
-  distinct(feature, total) %>%
-  arrange(total) %>%
+  distinct(feature, driver_mean_abs_shap) %>%
+  arrange(driver_mean_abs_shap) %>%
   pull(feature)
 yield_shap_litho$feature <- factor(yield_shap_litho$feature, levels = feature_order_yield)
 
@@ -632,7 +661,7 @@ yield_litho_bar <- ggplot(yield_shap_litho,
   ) +
   scale_x_continuous(expand = c(0, 0)) +
   labs(
-    x     = "Weighted Mean |SHAP| Value",
+    x     = "Weighted Mean Absolute SHAP Value",
     y     = NULL,
     title = "Yield",
     tag   = "B"
@@ -658,10 +687,10 @@ fig_litho_shap <- conc_litho_bar + yield_litho_bar +
   theme(legend.position = "bottom")
 
 ggsave(
-  file.path(output_dir, "FigX_Lithology_Stacked_SHAP_WeightedValues.png"),
+  file.path(output_dir, "Fig5_Lithology_Stacked_SHAP_WeightedValues.png"),
   fig_litho_shap,
-  width  = 19,
-  height = 10,
+  width  = 16,
+  height = 8,
   dpi    = 300,
   bg     = "white"
 )
