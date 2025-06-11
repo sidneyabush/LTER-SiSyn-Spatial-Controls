@@ -204,7 +204,7 @@ global_shap_max_yield <- max(shap_values_FNYield, na.rm = TRUE)
 # ——— 6.5 SX‐style “create_shap_dot_global” function (with rocks_ recoding) ———
 create_shap_dot_global <- function(shap_matrix, kept_scaled, 
                                    global_shap_min, global_shap_max) {
-  # shap_matrix: raw SHAP values (rows = observations, cols = features)
+  # shap_matrix: raw SHAP Values (rows = observations, cols = features)
   # kept_scaled: data.frame of same shape, but with features scaled [0,1]
   
   # 6.5a. Pivot SHAP into long form
@@ -483,7 +483,7 @@ ggsave(
 #         scale_color_manual(values = colors, name = "Lithology") +
 #         labs(
 #           x     = feat_label,
-#           y     = paste("SHAP value\n(", model_name, ")", sep = ""),
+#           y     = paste("SHAP Value\n(", model_name, ")", sep = ""),
 #           title = paste("SHAP vs", feat_label)
 #         ) +
 #         theme_classic(base_size = 18) +
@@ -563,7 +563,7 @@ make_shap_loess_full <- function(shap_matrix, drivers_data, model_name, base_out
       geom_smooth(method = "loess", se = FALSE, size = 1) +
       labs(
         x     = feat_label,
-        y     = paste0("SHAP value\n(", model_name, ")"),
+        y     = paste0("SHAP Value\n(", model_name, ")"),
         title = paste("SHAP vs", feat_label, "(LOESS – full dataset)")
       ) +
       theme_classic(base_size = 18) +
@@ -595,10 +595,10 @@ make_shap_loess_full <- function(shap_matrix, drivers_data, model_name, base_out
     }
     
     
-    # — cap x at 0.35 for Wetland Marsh —
+    # — cap x at 35 for Wetland Marsh —
     if (feat == "land_Wetland_Marsh") {
       p <- p +
-        scale_x_continuous(limits = c(0, 0.35))
+        scale_x_continuous(limits = c(0, 35))
     }
     
     fname <- file.path(out_dir, paste0("SHAP_loess_full_", model_name, "_", feat, ".png"))
@@ -626,27 +626,28 @@ make_shap_loess_full(
 
 library(patchwork)
 
-# 10.4 Build & save Concentration grid (2×3) with manual tags A–F, points colored by FNConc
+## 10.4 Build & save Concentration grid (2×3) with auto-labels A–F
 
 # compute FNConc range for color scale
 global_fn_min <- min(drivers_numeric_FNConc$FNConc, na.rm = TRUE)
 global_fn_max <- max(drivers_numeric_FNConc$FNConc, na.rm = TRUE)
 
-# define features to plot
+# define features
 conc_feats <- c(
   "basin_slope", "recession_slope",
   "land_Water",  "land_Grassland_Shrubland",
   "precip",      "P"
 )
 
-# extract shared legend from one panel
+# 1) extract shared legend from a temporary panel
 legend_panel3 <- {
   feat <- conc_feats[1]
   df <- tibble::tibble(
     driver_value = kept_drivers_FNConc[[feat]],
     shap_value   = shap_values_FNConc[, feat],
     response     = drivers_numeric_FNConc$FNConc
-  ) %>% filter(is.finite(driver_value), is.finite(shap_value))
+  ) %>% dplyr::filter(is.finite(driver_value), is.finite(shap_value))
+  
   ggplot(df, aes(driver_value, shap_value, fill = response)) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
     geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
@@ -655,35 +656,38 @@ legend_panel3 <- {
     scale_fill_gradient(
       low    = "white", high = "black",
       limits = c(global_fn_min, global_fn_max),
-      name   = "Concentration",
+      name   = expression("Concentration (mg " * L^-1 * ")"),
       guide  = guide_colourbar(
         title.position = "top",
         title.hjust    = 0.5,
-        barwidth       = unit(8, "lines"),
-        barheight      = unit(0.4, "cm"),
-        label.theme    = element_text(size = 12)
+        title.theme    = element_text(size = 14),
+        label.theme    = element_text(size = 10),
+        barwidth       = unit(10, "lines"),
+        barheight      = unit(0.6, "cm")
       )
     ) +
     labs(x = recode_map[[feat]], y = "SHAP value") +
-    theme_classic(base_size = 16) +
+    theme_classic(base_size = 18) +
     theme(
-      legend.position    = "right",
+      legend.position   = "right",
       legend.direction = "horizontal",
-      legend.title.align = 0.5,
-      axis.title         = element_text(size = 16),
-      axis.text          = element_text(size = 14)
+      legend.title.align= 0.5,
+      legend.title      = element_text(size = 14),
+      legend.text       = element_text(size = 10),
+      axis.title        = element_text(size = 16),
+      axis.text         = element_text(size = 14)
     )
 }
 shared_leg_conc <- cowplot::get_legend(legend_panel3)
 
-# generate, color, and tag panels A–F
+# 2) build the six panels (no internal legends or tags)
 p_list3 <- lapply(seq_along(conc_feats), function(i) {
   feat <- conc_feats[i]
   df <- tibble::tibble(
     driver_value = kept_drivers_FNConc[[feat]],
     shap_value   = shap_values_FNConc[, feat],
     response     = drivers_numeric_FNConc$FNConc
-  ) %>% filter(is.finite(driver_value), is.finite(shap_value))
+  ) %>% dplyr::filter(is.finite(driver_value), is.finite(shap_value))
   
   p <- ggplot(df, aes(driver_value, shap_value, fill = response)) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
@@ -693,73 +697,82 @@ p_list3 <- lapply(seq_along(conc_feats), function(i) {
     scale_fill_gradient(
       low    = "white", high = "black",
       limits = c(global_fn_min, global_fn_max),
-      name   = "Concentration",
+      name   = expression("Concentration (mg " * L^-1 * ")"),
       guide  = guide_colourbar(
         title.position = "top",
         title.hjust    = 0.5,
-        barwidth       = unit(8, "lines"),
-        barheight      = unit(0.4, "cm"),
-        label.theme    = element_text(size = 12)
+        title.theme    = element_text(size = 14),
+        label.theme    = element_text(size = 10),
+        barwidth       = unit(10, "lines"),
+        barheight      = unit(0.6, "cm")
       )
     ) +
     labs(
-      x   = recode_map[[feat]],
-      y   = if (i %% 2 == 1) "SHAP value" else NULL,
-      tag = LETTERS[i]
+      x = recode_map[[feat]],
+      y = if (i %% 2 == 1) "SHAP value" else NULL
     ) +
     theme_classic(base_size = 18) +
     theme(
-      legend.position   = "none",
-      plot.tag          = element_text(size = 16),
-      plot.tag.position = c(0.02, 0.98),
-      axis.title.y      = element_text(size = 16),
-      axis.text         = element_text(size = 14),
-      plot.margin       = ggplot2::margin(t = 5, r = 5, b = 5, l = 30, unit = "pt")
+      legend.position = "none",
+      axis.title.y    = element_text(size = 16),
+      axis.text       = element_text(size = 14),
+      plot.margin     = ggplot2::margin(t = 5, r = 5, b = 5, l = 30, unit = "pt")
     )
   
   if (feat == "P") {
-    p <- p +
-      scale_x_log10(
-        limits = c(1e-3, NA),
-        breaks = scales::trans_breaks("log10", function(x) 10^x),
-        labels = scales::trans_format("log10", scales::math_format(10^.x))
-      )
+    p <- p + scale_x_log10(
+      limits = c(1e-3, NA),
+      breaks = scales::trans_breaks("log10", function(x) 10^x),
+      labels = scales::trans_format("log10", scales::math_format(10^.x))
+    )
   }
-  
   if (feat == "NOx") {
     p <- p + scale_x_log10(
       breaks = scales::trans_breaks("log10", function(x) 10^x),
       labels = scales::trans_format("log10", scales::math_format(10^.x))
-    ) + labs(x = paste0("log(", recode_map[[feat]], ")"))
+    )
   }
   if (feat == "land_Wetland_Marsh") {
-    p <- p + scale_x_continuous(limits = c(0, 0.35))
+    p <- p + scale_x_continuous(limits = c(0, 35))
   }
   p
 })
 p_list3 <- p_list3[!sapply(p_list3, is.null)]
 
-# arrange into three rows of two
-row1_3 <- cowplot::plot_grid(p_list3[[1]], p_list3[[2]], ncol = 2)
-row2_3 <- cowplot::plot_grid(p_list3[[3]], p_list3[[4]], ncol = 2)
-row3_3 <- cowplot::plot_grid(p_list3[[5]], p_list3[[6]], ncol = 2)
+# 3) assemble with plain‐face cowplot labels A–F
+six_panels <- plot_grid(
+  p_list3[[1]], p_list3[[2]],
+  p_list3[[3]], p_list3[[4]],
+  p_list3[[5]], p_list3[[6]],
+  ncol           = 2,
+  align          = "hv",
+  axis           = "tblr",
+  labels         = LETTERS[1:6],
+  label_size     = 16,
+  label_x        = 0.02,
+  label_y        = 0.98,
+  label_fontface = "plain"
+)
 
-# stack rows + shared legend
-fig3 <- cowplot::plot_grid(
-  row1_3, row2_3, row3_3, shared_leg_conc,
+fig3 <- plot_grid(
+  six_panels,
+  shared_leg_conc,
   ncol        = 1,
-  rel_heights = c(1, 1, 1, 0.15),
-  align       = "v"
+  rel_heights = c(1, 0.15)
 )
+
 ggsave(
-  file.path(output_dir, "Fig3_Concentration_SHAP_grid_with_dashed_lines.png"),
-  fig3, width = 15, height = 17, dpi = 300, bg = "white"
+  file.path(output_dir, "Fig3_Concentration_SHAP_grid_tagged.png"),
+  fig3, width = 10, height = 12, dpi = 300, bg = "white"
 )
 
 
-# 10.5 Build & save Yield grid (2×2) with manual tags A–D, points colored by FNYield
+## 10.5 Build & save Yield grid (2×2) with auto-labels A–D
 
-yield_feats <- c("recession_slope", "land_Wetland_Marsh", "npp", "NOx")
+# define features
+yield_feats <- c("recession_slope","land_Wetland_Marsh","npp","NOx")
+
+# compute Yield range for fill scale
 global_yield_min <- min(drivers_numeric_FNYield$FNYield, na.rm = TRUE)
 global_yield_max <- max(drivers_numeric_FNYield$FNYield, na.rm = TRUE)
 
@@ -770,7 +783,8 @@ legend_panel4 <- {
     driver_value = kept_drivers_FNYield[[feat]],
     shap_value   = shap_values_FNYield[, feat],
     response     = drivers_numeric_FNYield$FNYield
-  ) %>% filter(is.finite(driver_value), is.finite(shap_value))
+  ) %>% dplyr::filter(is.finite(driver_value), is.finite(shap_value))
+  
   ggplot(df, aes(driver_value, shap_value, fill = response)) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
     geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
@@ -778,36 +792,39 @@ legend_panel4 <- {
     geom_smooth(method = "loess", se = FALSE, size = 1, color = "#6699CC") +
     scale_fill_gradient(
       low    = "white", high = "black",
-      limits = c(global_yield_min, global_yield_max),
-      name   = "Yield",
+      trans  = "log10",
+      name   = expression("log(Yield) (kg " * km^{-2} * " yr"^{-1} * ")"),
       guide  = guide_colourbar(
         title.position = "top",
         title.hjust    = 0.5,
-        barwidth       = unit(8, "lines"),
-        barheight      = unit(0.4, "cm"),
-        label.theme    = element_text(size = 12)
+        title.theme    = element_text(size = 16),
+        label.theme    = element_text(size = 12),
+        barwidth       = unit(10, "lines"),
+        barheight      = unit(0.6, "cm")
       )
     ) +
     labs(x = recode_map[[feat]], y = "SHAP value") +
     theme_classic(base_size = 18) +
     theme(
-      legend.position    = "right",
+      legend.position   = "right",
       legend.direction = "horizontal",
-      legend.title.align = 0.5,
-      axis.title         = element_text(size = 16),
-      axis.text          = element_text(size = 14)
+      legend.title.align= 0.5,
+      legend.title      = element_text(size = 16),
+      legend.text       = element_text(size = 12),
+      axis.title        = element_text(size = 16),
+      axis.text         = element_text(size = 14)
     )
 }
 shared_leg_yield <- cowplot::get_legend(legend_panel4)
 
-# generate, color, and tag panels A–D
+# build the four panels (no internal legends/tags)
 p_list4 <- lapply(seq_along(yield_feats), function(i) {
   feat <- yield_feats[i]
   df <- tibble::tibble(
     driver_value = kept_drivers_FNYield[[feat]],
     shap_value   = shap_values_FNYield[, feat],
     response     = drivers_numeric_FNYield$FNYield
-  ) %>% filter(is.finite(driver_value), is.finite(shap_value))
+  ) %>% dplyr::filter(is.finite(driver_value), is.finite(shap_value))
   
   p <- ggplot(df, aes(driver_value, shap_value, fill = response)) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
@@ -816,57 +833,56 @@ p_list4 <- lapply(seq_along(yield_feats), function(i) {
     geom_smooth(method = "loess", se = FALSE, size = 1, color = "#6699CC") +
     scale_fill_gradient(
       low    = "white", high = "black",
-      limits = c(global_yield_min, global_yield_max),
-      name   = "Yield",
+      trans  = "log10",
+      name   = expression("Yield (kg " * km^{-2} * " yr"^{-1} * ")"),
       guide  = guide_colourbar(
         title.position = "top",
         title.hjust    = 0.5,
-        barwidth       = unit(8, "lines"),
-        barheight      = unit(0.4, "cm"),
-        label.theme    = element_text(size = 12)
+        title.theme    = element_text(size = 16),
+        label.theme    = element_text(size = 12),
+        barwidth       = unit(10, "lines"),
+        barheight      = unit(0.6, "cm")
       )
     ) +
-    labs(
-      x   = recode_map[[feat]],
-      y   = if (i %% 2 == 1) "SHAP value" else NULL,
-      tag = LETTERS[i]
-    ) +
-    theme_classic(base_size = 16) +
+    labs(x = recode_map[[feat]], y = if (i %% 2 == 1) "SHAP value" else NULL) +
+    theme_classic(base_size = 18) +
     theme(
       legend.position   = "none",
-      plot.tag          = element_text(size = 16),
-      plot.tag.position = c(0.02, 0.98),
       axis.title.y      = element_text(size = 16),
       axis.text         = element_text(size = 14),
       plot.margin       = ggplot2::margin(t = 5, r = 5, b = 5, l = 30, unit = "pt")
     )
   
-  if (feat %in% c("P", "NOx")) {
-    p <- p + scale_x_log10(
-      breaks = scales::trans_breaks("log10", function(x) 10^x),
-      labels = scales::trans_format("log10", scales::math_format(10^.x))
-    )
-  }
+  # apply y-scale cap for marsh if desired
   if (feat == "land_Wetland_Marsh") {
-    p <- p + scale_x_continuous(limits = c(0, 0.35))
+    p <- p + scale_y_continuous(limits = c(NA, 1000))
   }
   p
 })
 p_list4 <- p_list4[!sapply(p_list4, is.null)]
 
-# arrange into two rows of two
-row1_4 <- cowplot::plot_grid(p_list4[[1]], p_list4[[2]], ncol = 2)
-row2_4 <- cowplot::plot_grid(p_list4[[3]], p_list4[[4]], ncol = 2)
+# assemble with cowplot labels A–D
+four_panels <- plot_grid(
+  p_list4[[1]], p_list4[[2]],
+  p_list4[[3]], p_list4[[4]],
+  ncol            = 2,
+  align           = "hv",
+  axis            = "tblr",
+  labels          = LETTERS[1:4],
+  label_size      = 16,
+  label_x         = 0.02,
+  label_y         = 0.98,
+  label_fontface  = "plain"
+)
 
-# stack rows + shared legend
-fig4 <- cowplot::plot_grid(
-  row1_4, row2_4, shared_leg_yield,
+fig4 <- plot_grid(
+  four_panels,
+  shared_leg_yield,
   ncol        = 1,
-  rel_heights = c(1, 1, 0.15),
-  align       = "v"
-)
-ggsave(
-  file.path(output_dir, "Fig4_Yield_SHAP_grid_with_dashed_lines.png"),
-  fig4, width = 12, height = 11, dpi = 300, bg = "white"
+  rel_heights = c(1, 0.15)
 )
 
+ggsave(
+  file.path(output_dir, "Fig4_Yield_SHAP_grid_tagged.png"),
+  fig4, width = 10, height = 8, dpi = 300, bg = "white"
+)
