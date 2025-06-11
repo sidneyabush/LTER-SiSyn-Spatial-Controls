@@ -5,7 +5,7 @@ librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr, stri
 rm(list = ls())
 
 # Set working directory (change this path as needed)
-setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files")
 
 # -----------------------------------------------------------
 # 1. Load the Chemistry Sites Data (key file with Stream_Name) ----
