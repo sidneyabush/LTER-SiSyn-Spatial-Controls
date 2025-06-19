@@ -141,11 +141,6 @@ rf_stability_selection_parallel <- function(x, y, n_bootstrap = 100, threshold =
   sorted_frequencies <- sort(selection_frequencies, decreasing = TRUE)
   stable_features <- names(selection_frequencies[selection_frequencies >= threshold])
   
-  cat("\nStability Selection Results:\n")
-  cat("Features selected above", threshold, "threshold:", length(stable_features), "\n")
-  cat("\nAll features by selection frequency:\n")
-  print(sorted_frequencies)
-  
   return(list(
     features = stable_features,
     frequencies = selection_frequencies,

@@ -10,8 +10,6 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmoniz
 # -----------------------------------------------------------
 # 1. Load the Chemistry Sites Data (key file with Stream_Name) ----
 # -----------------------------------------------------------
-# daily_kalman <- read_csv("Full_Results_WRTDS_kalman_daily_filtered.csv") 
-
 cols_needed <- c("LTER.x", "Stream_Name", "Date", "Q")
 daily_kalman <- read_csv("Full_Results_WRTDS_kalman_daily_filtered.csv", 
                          col_select = all_of(cols_needed)) %>%
@@ -28,7 +26,7 @@ daily_kalman <- read_csv("Full_Results_WRTDS_kalman_daily_filtered.csv",
     Date = as.Date(Date),
     Stream_ID = paste0(LTER, "__", Stream_Name)
   ) %>%
-  filter(Date >= as.Date("2001-01-01") & Date <= as.Date("2023-12-31")) %>%
+  # filter(Date >= as.Date("2001-01-01") & Date <= as.Date("2023-12-31")) %>%
   # drop all MCM rows
   filter(LTER != "MCM")
 
@@ -142,4 +140,4 @@ print(p_dQ_dt)
 # ----------------------------------------------------------------------------
 # 5. Export the Results
 # ----------------------------------------------------------------------------
-write.csv(recession_slopes, "Recession_Slopes_by_StreamID_Aggregate.csv")
+write.csv(recession_slopes, "Recession_Slopes_by_StreamID_Aggregate_no_date_limits.csv")
