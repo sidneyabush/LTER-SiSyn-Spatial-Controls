@@ -69,33 +69,37 @@ rmse_val_FNConc <- format(
   digits = 3
 )
 
-lm_plot_FNConc <- ggplot(df_FNConc, aes(x = predicted, y = observed)) +
-  geom_point(shape = 16, size = 3) +
-  geom_abline(intercept = 0, slope = 1, color = "#6699CC",
-              linetype = "dashed", size = 1.2) +
-  labs(
-    x     = "Predicted",
-    y     = "Observed",
-    title = "Concentration"
-  ) +
-  theme_classic(base_size = 22) +
-  theme(
-    plot.title = element_text(hjust = 0.5, size = 22, face = "plain"),
-    axis.title = element_text(size = 22, face = "plain"),
-    axis.text  = element_text(size = 22, face = "plain")
-  ) +
+# after rmse_val_FNConc …
+mean_obs_FNConc  <- mean(df_FNConc$observed)
+rrmse_val_FNConc <- format(
+  sqrt(mean((df_FNConc$predicted - df_FNConc$observed)^2)) / mean_obs_FNConc,
+  digits = 3
+)
+
+# Panel A (Concentration)
+lm_plot_FNConc <- ggplot(df_FNConc, aes(predicted, observed)) +
+  geom_point(shape=16, size=3) +
+  geom_abline(slope=1, intercept=0, linetype="dashed", color="#6699CC", size=1.2) +
+  labs(x="Predicted", y="Observed", title="Concentration") +
+  theme_classic(base_size=22) +
+  # R² stays as-is, using parse
   annotate("text",
-           x     = max(df_FNConc$predicted) * 0.2,
-           y     = max(df_FNConc$observed) * 0.95,
-           label = paste("R² =", r2_val_FNConc),
-           hjust = 0.5, size = 8
+           x     = max(df_FNConc$predicted)*0.2,
+           y     = max(df_FNConc$observed)*0.95,
+           label = paste0("R^2 == ", r2_val_FNConc),
+           parse = TRUE, hjust=0.5, size=8
   ) +
+  # single annotate for both errors, newline + unicode superscripts
   annotate("text",
-           x     = max(df_FNConc$predicted) * 0.95,
-           y     = min(df_FNConc$observed) * 1.05,
-           label = paste("RMSE =", rmse_val_FNConc),
-           hjust = 1, size = 8
+           x     = max(df_FNConc$predicted)*0.95,
+           y     = min(df_FNConc$observed)*0.05,
+           label = paste0(
+             "RMSE = ", rmse_val_FNConc, " mg L\u207B\u00B9\n",
+             "RRMSE = ", rrmse_val_FNConc
+           ),
+           hjust = 1, vjust=-0.5, size = 8
   )
+
 
 # 5b. FNYield (Yield)
 df_FNYield <- data.frame(
@@ -109,33 +113,36 @@ rmse_val_FNYield <- format(
   digits = 3
 )
 
-lm_plot_FNYield <- ggplot(df_FNYield, aes(x = predicted, y = observed)) +
-  geom_point(shape = 16, size = 3) +
-  geom_abline(intercept = 0, slope = 1, color = "#6699CC",
-              linetype = "dashed", size = 1.2) +
-  labs(
-    x     = "Predicted",
-    y     = NULL,
-    title = "Yield"
-  ) +
-  theme_classic(base_size = 22) +
-  theme(
-    plot.title = element_text(hjust = 0.5, size = 22, face = "plain"),
-    axis.title = element_text(size = 22, face = "plain"),
-    axis.text  = element_text(size = 22, face = "plain")
+# after rmse_val_FNYield …
+mean_obs_FNYield  <- mean(df_FNYield$observed)
+rrmse_val_FNYield <- format(
+  sqrt(mean((df_FNYield$predicted - df_FNYield$observed)^2)) / mean_obs_FNYield,
+  digits = 3
+)
+
+# Panel B (Yield)
+lm_plot_FNYield <- ggplot(df_FNYield, aes(predicted, observed)) +
+  geom_point(shape=16, size=3) +
+  geom_abline(slope=1, intercept=0, linetype="dashed", color="#6699CC", size=1.2) +
+  labs(x="Predicted", y=NULL, title="Yield") +
+  theme_classic(base_size=22) +
+  annotate("text",
+           x     = max(df_FNYield$predicted)*0.2,
+           y     = max(df_FNYield$observed)*0.95,
+           label = paste0("R^2 == ", r2_val_FNYield),
+           parse = TRUE, hjust=0.5, size=8
   ) +
   annotate("text",
-           x     = max(df_FNYield$predicted) * 0.2,
-           y     = max(df_FNYield$observed) * 0.95,
-           label = paste("R² =", r2_val_FNYield),
-           hjust = 0.5, size = 8
-  ) +
-  annotate("text",
-           x     = max(df_FNYield$predicted) * 0.95,
-           y     = min(df_FNYield$observed) * 1.05,
-           label = paste("RMSE =", rmse_val_FNYield),
-           hjust = 1, size = 8
+           x     = max(df_FNYield$predicted)*0.95,
+           y     = min(df_FNYield$observed)*0.05,
+           label = paste0(
+             "RMSE = ", rmse_val_FNYield, 
+             " kg km\u00B2 yr\u207B\u00B9\n",
+             "RRMSE = ", rrmse_val_FNYield
+           ),
+           hjust = 1, vjust=-0.5, size = 8
   )
+
 
 ###############################################################################
 # 6. Replace “create_shap_plots()” with SX‐style jittered dot‐plot function
@@ -151,7 +158,7 @@ var_order <- c(
   "land_Wetland_Marsh"
 )
 var_labels <- c(
-  "NOx", "P", "NPP", "ET", "Greenup Day", "Precip", "Temp",
+  "N", "P", "NPP", "ET", "Greenup Day", "Precip", "Temp",
   "Snow Cover", "Permafrost", "Elevation", "Basin Slope",
   "Flashiness (RBI)", "Recession Curve Slope", "Land: Bare", "Land: Cropland",
   "Land: Forest", "Land: Grass & Shrub", "Land: Ice & Snow",

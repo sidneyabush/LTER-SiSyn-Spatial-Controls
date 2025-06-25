@@ -44,7 +44,7 @@ var_order <- c(
 )
 
 var_labels <- c(
-  "NOx", "P", "NPP", "ET", "Greenup Day", "Precip", "Temp",
+  "N", "P", "NPP", "ET", "Greenup Day", "Precip", "Temp",
   "Snow Cover", "Permafrost", "Elevation", "Basin Slope",
   "Flashiness (RBI)", "Recession Curve Slope", "Land: Bare", "Land: Cropland",
   "Land: Forest", "Land: Grass & Shrub", "Land: Ice & Snow",

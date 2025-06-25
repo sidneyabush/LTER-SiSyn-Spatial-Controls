@@ -1070,75 +1070,148 @@ write.csv(drivers_df,
           sprintf("All_Drivers_Harmonized_Yearly_FNConc_FNYield_%d_years.csv", record_length), 
           row.names = FALSE)
 
-save_correlation_plot <- function(driver_cor, output_dir) {
-  png(sprintf("%s/correlation_plot_FNYield_Yearly_5_years.png", output_dir),
-      width = 10, height = 10, units = "in", res = 300)
-  corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = FALSE)
-  title("All Data")
-  dev.off()
-}
+library(dplyr)
+library(stringr)
+library(tibble)
 
-drivers_numeric <- drivers_df %>%
-  dplyr::select(-Year, -contains("Gen"), -contains("FN"), -contains("major"), -Stream_ID)
+# 1) Total obs (site‐year rows) and total unique sites
+total_obs   <- nrow(drivers_df)
+total_sites <- drivers_df %>% pull(Stream_ID) %>% unique() %>% length()
 
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures"
-
-# numeric_drivers <- 2:24 # Change this range to reflect data frame length
-driver_cor <- cor(drivers_numeric) 
-save_correlation_plot(driver_cor, output_dir)
-
-# Create the tot_average dataframe with mean, q_5, and q_95
-tot_average <- drivers_df %>%
-  dplyr::group_by(Stream_ID) %>%
-  dplyr::summarise(
-    # Numerical variables: calculate the mean across all years
-    drainage_area = mean(drainage_area, na.rm = TRUE),
-    NOx = mean(NOx, na.rm = TRUE),
-    P = mean(P, na.rm = TRUE),
-    precip = mean(precip, na.rm = TRUE),
-    Q = mean(Q, na.rm = TRUE),
-    temp = mean(temp, na.rm = TRUE),
-    Max_Daylength = mean(Max_Daylength, na.rm = TRUE),
-    snow_cover = mean(snow_cover, na.rm = TRUE),
-    npp = mean(npp, na.rm = TRUE),
-    evapotrans = mean(evapotrans, na.rm = TRUE),
-    # silicate_weathering = mean(silicate_weathering, na.rm = TRUE),
-    greenup_day = mean(greenup_day, na.rm = TRUE),
-    permafrost = mean(permafrost, na.rm = TRUE),
-    elevation = mean(elevation, na.rm = TRUE),
-    basin_slope = mean(basin_slope, na.rm = TRUE),
-    FNConc = mean(FNConc, na.rm = TRUE),
-    FNYield = mean(FNYield, na.rm = TRUE),
-    GenConc = mean(GenConc, na.rm = TRUE),
-    GenYield = mean(GenYield, na.rm = TRUE),
-
-    # Calculate q_5 (5th percentile) and q_95 (95th percentile) for numerical variables
-    q_5 = quantile(Q, 0.05, na.rm = TRUE),
-    q_95 = quantile(Q, 0.95, na.rm = TRUE),
-
-    # Categorical variables: grab the first value
-    dplyr::across(contains("rocks"), ~ first(.)),
-    dplyr::across(contains("land_"), ~ first(.))
+# 2) Raw N/P gap‐filled obs
+raw_obs_count <- drivers_df %>%
+  left_join(
+    combined_NP %>% select(Stream_ID, Year, P_source, NOx_source),
+    by = c("Stream_ID","Year")
   ) %>%
-  ungroup() %>%
-  # Replace NaN with NA in all columns
-  mutate(across(everything(), ~ ifelse(is.nan(.), NA, .)))
+  filter(P_source == "raw" | NOx_source == "raw") %>%
+  nrow()
+raw_obs_pct <- 100 * raw_obs_count / total_obs
 
-# Print a preview
-print(head(tot_average))
+# 3) Slope gap‐filled sites
+slope_sites_in_final <- intersect(
+  tot_with_slope_filled$Stream_ID %>% unique(),
+  drivers_df$Stream_ID %>% unique()
+)
+slope_site_count <- length(slope_sites_in_final)
+slope_site_pct   <- 100 * slope_site_count / total_sites
 
+# 4) Australian sites in final
+aus_sites      <- drivers_df %>%
+  filter(str_starts(Stream_ID, "Australia")) %>%
+  distinct(Stream_ID) %>%
+  pull(Stream_ID)
+aus_site_count <- length(aus_sites)
+aus_site_pct   <- 100 * aus_site_count / total_sites
 
-# Count the number of unique Stream_IDs
-num_unique_stream_ids <- tot_average %>%
-  pull(Stream_ID) %>%
-  n_distinct()
+# 5) MD sites in final
+md_sites      <- drivers_df %>%
+  filter(str_starts(Stream_ID, "MD")) %>%
+  distinct(Stream_ID) %>%
+  pull(Stream_ID)
+md_site_count <- length(md_sites)
+md_site_pct   <- 100 * md_site_count / total_sites
 
-print(num_unique_stream_ids)
+# 6) Build a combined summary
+summary_df <- tibble(
+  Category         = c(
+    "Raw_NP (obs)",
+    "Slope (sites)",
+    "Australian sites",
+    "MD sites"
+  ),
+  Count            = c(
+    raw_obs_count,
+    slope_site_count,
+    aus_site_count,
+    md_site_count
+  ),
+  Percent_of_Total = c(
+    raw_obs_pct,
+    slope_site_pct,
+    aus_site_pct,
+    md_site_pct
+  )
+)
 
-# Export average data with dynamic filename
-write.csv(as.data.frame(tot_average),
-          sprintf("AllDrivers_Harmonized_Average_filtered_%d_years.csv", record_length),
-          row.names = FALSE)
+# 7) Print
+print(summary_df)
 
-gc()
+## Create Correlation Plot for Supplement
 
+library(dplyr)
+library(corrplot)
+
+# 0) Set output directory & record length
+output_dir    <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures"
+# record_length <- 5   # already defined earlier
+
+# 1) Manual ordering and labels
+var_order  <- c(
+  "NOx", "P", "npp", "evapotrans", "greenup_day", "precip", "temp",
+  "snow_cover", "permafrost", "elevation", "basin_slope", "RBI",
+  "recession_slope", "land_Bare", "land_Cropland", "land_Forest",
+  "land_Grassland_Shrubland", "land_Ice_Snow", "land_Impervious",
+  "land_Salt_Water", "land_Tidal_Wetland", "land_Water",
+  "land_Wetland_Marsh"
+)
+
+pretty_labels <- c(
+  "N",
+  "P",
+  "NPP",
+  "ET",
+  "Greenup Day",
+  "Precip",
+  "Temp",
+  "Snow Cover",
+  "Permafrost",
+  "Elevation",
+  "Basin Slope",
+  "Flashiness (RBI)",
+  "Recession Curve Slope",
+  "Land: Bare",
+  "Land: Cropland",
+  "Land: Forest",
+  "Land: Grass & Shrub",
+  "Land: Ice & Snow",
+  "Land: Impervious",
+  "Land: Salt Water",
+  "Land: Tidal Wetland",
+  "Land: Water Body",
+  "Land: Wetland Marsh"
+)
+
+# 2) Subset & reorder drivers_numeric then compute correlation
+drivers_numeric <- drivers_df %>%
+  select(all_of(var_order)) %>%
+  mutate(across(everything(), as.numeric))
+
+driver_cor <- cor(drivers_numeric, use = "pairwise.complete.obs")
+driver_cor_ord <- driver_cor[var_order, var_order]
+
+# 3) Overwrite dimnames with pretty labels
+dimnames(driver_cor_ord) <- list(pretty_labels, pretty_labels)
+
+# Open device with extra bottom margin
+png(
+  filename = file.path(output_dir,
+                       sprintf("correlation_plot_FNYield_Yearly_%d_years.png", record_length)
+  ),
+  width  = 10, height = 10, units = "in", res = 300
+)
+par(mar = c(6, 5, 2, 1))  # more space at bottom
+
+# Plot with larger text
+corrplot(
+  driver_cor_ord,
+  type    = "lower",
+  order   = "original",
+  tl.col  = "black",
+  tl.cex  = 1.2,        # bigger tile labels
+  cl.cex  = 1.2,        # bigger color legend text
+  tl.pos  = "ld",       # columns down, rows left
+  tl.srt  = 90,         
+  diag    = FALSE
+)
+dev.off()
