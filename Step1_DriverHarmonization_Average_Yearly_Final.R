@@ -1137,17 +1137,18 @@ summary_df <- tibble(
 # 7) Print
 print(summary_df)
 
-## Create Correlation Plot for Supplement
-
+## Create Correlation Plot for Supplement (including rock vars)
 library(dplyr)
 library(corrplot)
+library(Cairo)    # make sure you’ve installed the Cairo package
 
-# 0) Set output directory & record length
-output_dir    <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures"
-# record_length <- 5   # already defined earlier
+# 0) record_length and output directory
+record_length <- 5
+output_dir    <- "Final_Figures"
+if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
 
 # 1) Manual ordering and labels
-var_order  <- c(
+base_vars  <- c(
   "NOx", "P", "npp", "evapotrans", "greenup_day", "precip", "temp",
   "snow_cover", "permafrost", "elevation", "basin_slope", "RBI",
   "recession_slope", "land_Bare", "land_Cropland", "land_Forest",
@@ -1155,63 +1156,137 @@ var_order  <- c(
   "land_Salt_Water", "land_Tidal_Wetland", "land_Water",
   "land_Wetland_Marsh"
 )
+rock_vars  <- c(
+  "rocks_volcanic", "rocks_sedimentary",
+  "rocks_carbonate_evaporite", "rocks_metamorphic", "rocks_plutonic"
+)
+var_order <- c(base_vars, rock_vars)
 
 pretty_labels <- c(
-  "N",
-  "P",
-  "NPP",
-  "ET",
-  "Greenup Day",
-  "Precip",
-  "Temp",
-  "Snow Cover",
-  "Permafrost",
-  "Elevation",
-  "Basin Slope",
-  "Flashiness (RBI)",
-  "Recession Curve Slope",
-  "Land: Bare",
-  "Land: Cropland",
-  "Land: Forest",
-  "Land: Grass & Shrub",
-  "Land: Ice & Snow",
-  "Land: Impervious",
-  "Land: Salt Water",
-  "Land: Tidal Wetland",
-  "Land: Water Body",
-  "Land: Wetland Marsh"
+  # base
+  "N", "P", "NPP", "ET", "Greenup Day", "Precip", "Temp",
+  "Snow Cover", "Permafrost", "Elevation", "Basin Slope",
+  "Flashiness (RBI)", "Recession Curve Slope", "Land: Bare",
+  "Land: Cropland", "Land: Forest", "Land: Grass & Shrub",
+  "Land: Ice & Snow", "Land: Impervious", "Land: Salt Water",
+  "Land: Tidal Wetland", "Land: Water Body", "Land: Wetland Marsh",
+  # rock
+  "Rock: Volcanic", "Rock: Sedimentary", "Rock: Carbonate Evaporite",
+  "Rock: Metamorphic", "Rock: Plutonic"
 )
 
-# 2) Subset & reorder drivers_numeric then compute correlation
+# 2) Build numeric matrix and compute correlation
 drivers_numeric <- drivers_df %>%
   select(all_of(var_order)) %>%
   mutate(across(everything(), as.numeric))
 
-driver_cor <- cor(drivers_numeric, use = "pairwise.complete.obs")
+driver_cor     <- cor(drivers_numeric, use = "pairwise.complete.obs")
 driver_cor_ord <- driver_cor[var_order, var_order]
-
-# 3) Overwrite dimnames with pretty labels
 dimnames(driver_cor_ord) <- list(pretty_labels, pretty_labels)
 
-# Open device with extra bottom margin
-png(
+# 3) Use CairoPNG to write
+CairoPNG(
   filename = file.path(output_dir,
-                       sprintf("correlation_plot_FNYield_Yearly_%d_years.png", record_length)
-  ),
-  width  = 10, height = 10, units = "in", res = 300
+                       sprintf("FigSX_corr_plot_%d_years.png", record_length)),
+  width    = 12, height = 12, units = "in", res = 300
 )
-par(mar = c(6, 5, 2, 1))  # more space at bottom
-
-# Plot with larger text
+par(mar = c(6, 5, 1, 1))  # more bottom margin
 corrplot(
   driver_cor_ord,
   type    = "lower",
   order   = "original",
   tl.col  = "black",
-  tl.cex  = 1.2,        # bigger tile labels
-  cl.cex  = 1.2,        # bigger color legend text
-  tl.pos  = "ld",       # columns down, rows left
-  tl.srt  = 90,         
+  tl.cex  = 1.2,
+  cl.cex  = 1.2,
+  tl.pos  = "ld",
+  tl.srt  = 90,
   diag    = FALSE
 )
 dev.off()
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 11. Faceted histograms for all drivers (using drivers_df), with log10(N) & log10(P)
+# ──────────────────────────────────────────────────────────────────────────────
+# 0) load libraries
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# 1) set working + output dir
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
+output_dir <- "Final_Figures"
+dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
+# 2) define order + pretty labels (update N & P)
+var_order <- c(
+  "NOx", "P", "npp", "evapotrans", "greenup_day", "precip", "temp",
+  "snow_cover", "permafrost", "elevation", "basin_slope", "RBI",
+  "recession_slope", "land_Bare", "land_Cropland", "land_Forest",
+  "land_Grassland_Shrubland", "land_Ice_Snow", "land_Impervious",
+  "land_Salt_Water", "land_Tidal_Wetland", "land_Water",
+  "land_Wetland_Marsh",
+  "rocks_volcanic", "rocks_sedimentary",
+  "rocks_carbonate_evaporite", "rocks_metamorphic", "rocks_plutonic"
+)
+
+pretty_labels <- c(
+  "log(N)",         # for NOx
+  "log(P)",         # for P
+  "NPP", "ET", "Greenup Day", "Precip", "Temp",
+  "Snow Cover", "Permafrost", "Elevation", "Basin Slope",
+  "Flashiness (RBI)", "Recession Curve Slope", "Land: Bare",
+  "Land: Cropland", "Land: Forest", "Land: Grass & Shrub",
+  "Land: Ice & Snow", "Land: Impervious", "Land: Salt Water",
+  "Land: Tidal Wetland", "Land: Water Body", "Land: Wetland Marsh",
+  "Rock: Volcanic", "Rock: Sedimentary", "Rock: Carbonate Evaporite",
+  "Rock: Metamorphic", "Rock: Plutonic"
+)
+names(pretty_labels) <- var_order
+
+# 3) pivot drivers_df into long, recoding to pretty factor, and log‐transform N,P
+all_drivers_long <- drivers_df %>%
+  select(all_of(var_order)) %>%
+  pivot_longer(
+    cols      = everything(),
+    names_to  = "driver",
+    values_to = "value"
+  ) %>%
+  mutate(
+    value = case_when(
+      driver == "NOx" ~ log10(value),
+      driver == "P"   ~ log10(value),
+      TRUE            ~ value
+    ),
+    driver = factor(driver, levels = var_order, labels = pretty_labels)
+  )
+
+# 4) compute per-driver means
+# compute per‐driver means
+means_df <- all_drivers_long %>%
+  group_by(driver) %>%
+  summarize(mean_val = mean(value, na.rm=TRUE), .groups="drop")
+
+# build the histogram with mean‐lines
+hist_all <- ggplot(all_drivers_long, aes(x = value)) +
+  geom_histogram(bins = 30, fill = "grey85", color = "black") +
+  # dashed mean line
+  geom_vline(data = means_df,
+             aes(xintercept = mean_val),
+             linetype = "dashed", color = "steelblue", size = 0.9) +
+  facet_wrap(~ driver, scales = "free", ncol = 6) +
+  labs(x = "Value", y = "Count") +
+  theme_classic(base_size = 20) +
+  theme(
+    strip.text       = element_text(size = 18, face = "plain"),
+    axis.text        = element_text(size = 16),
+    axis.title       = element_text(size = 18),
+    panel.spacing.x   = unit(0.5, "lines"),
+    panel.spacing.y   = unit(0.5, "lines")
+  )
+
+print(hist_all)
+ggsave(
+  file.path(output_dir, "FigSX_Hist_All.png"),
+  hist_all,
+  width  = 24, height = 16, dpi = 300, bg = "white"
+)
