@@ -4,7 +4,7 @@
 
 # 1. Load needed packages
 librarian::shelf(
-  iml, ggplot2, dplyr, tidyr, reshape2, parallel, foreach,
+  iml, ggplot2, dplyr, tidyr, reshape2, parallel, foreach, pdp,
   randomForest, tibble, viridis, RColorBrewer, patchwork, scales, cowplot
 )
 
@@ -1029,3 +1029,156 @@ ggsave(
   fig5, width = 12, height = 11.2, dpi = 300, bg = "white"
 )
 
+# ──────────────────────────────────────────────────────────────────────────────
+# 10c. Full‐data LOESS SHAP scatter grids for “other” features (white→black + legend)
+# ──────────────────────────────────────────────────────────────────────────────
+library(cowplot)
+
+make_shap_loess_grid <- function(shap_matrix, drivers_data, response,
+                                 units_expr, recode_map) {
+  # shared fill‐scale limits
+  lims <- range(response, na.rm = TRUE)
+  
+  # axis‐label helper (including rocks_)
+  label_for <- function(feat) {
+    if (grepl("^rocks_", feat)) {
+      switch(feat,
+             rocks_volcanic            = "Rock: Volcanic",
+             rocks_sedimentary         = "Rock: Sedimentary",
+             rocks_carbonate_evaporite = "Rock: Carbonate Evaporite",
+             rocks_metamorphic         = "Rock: Metamorphic",
+             rocks_plutonic            = "Rock: Plutonic",
+             feat
+      )
+    } else {
+      lab <- recode_map[[feat]]
+      if (is.null(lab) || is.na(lab)) feat else lab
+    }
+  }
+  
+  # build each panel
+  panels <- lapply(colnames(shap_matrix), function(feat) {
+    df <- tibble::tibble(
+      driver_value = drivers_data[[feat]],
+      shap_value   = shap_matrix[, feat],
+      response     = response
+    ) %>% filter(is.finite(driver_value), is.finite(shap_value))
+    
+    p <- ggplot(df, aes(driver_value, shap_value, fill = response)) +
+      geom_hline(yintercept = 0, linetype = "dashed") +
+      geom_vline(xintercept = 0, linetype = "dashed") +
+      geom_point(shape = 21, color = "darkgray", size = 2.7, alpha = 0.9) +
+      geom_smooth(method = "loess", se = FALSE, size = 1, color = "#6699CC") +
+      scale_fill_gradient(
+        low    = "white",
+        high   = "black",
+        limits = lims,
+        guide  = "none"
+      ) +
+      labs(x = label_for(feat), y = "SHAP value") +
+      theme_classic(base_size = 18) +
+      theme(
+        plot.title      = element_blank(),
+        legend.position = "none",
+        axis.title      = element_text(size = 16, face = "plain"),
+        axis.text       = element_text(size = 14, face = "plain")
+      )
+    
+    if (feat %in% c("P", "NOx")) {
+      p <- p + scale_x_log10(
+        breaks = scales::trans_breaks("log10", function(x) 10^x),
+        labels = scales::trans_format("log10", scales::math_format(10^.x))
+      )
+    }
+    if (feat == "land_Wetland_Marsh") {
+      p <- p + coord_cartesian(xlim = c(0, 35), expand = FALSE)
+    }
+    p
+  })
+  
+  # extract a single legend
+  legend_plot <- ggplot(
+    data.frame(x = 1, y = 1, response = response),
+    aes(x, y, fill = response)
+  ) +
+    geom_tile() +
+    scale_fill_gradient(
+      low    = "white",
+      high   = "black",
+      limits = lims,
+      name   = units_expr,
+      guide  = guide_colourbar(
+        title.position = "top",
+        title.hjust    = 0.5,
+        barwidth       = unit(15, "lines"),
+        barheight      = unit(0.6, "cm")
+      )
+    ) +
+    theme_void() +
+    theme(
+      legend.position   = "right",
+      legend.direction  = "horizontal",
+      legend.title      = element_text(size = 14, face = "plain", hjust = 0.5),
+      legend.text       = element_text(size = 12, face = "plain")
+    )
+  
+  shared_leg <- cowplot::get_legend(legend_plot)
+  
+  # tile panels with plain‐face tags
+  grid <- plot_grid(
+    plotlist       = panels,
+    ncol           = 2,
+    labels         = LETTERS[1:length(panels)],
+    label_size     = 16,
+    label_fontface = "plain",
+    align          = "hv"
+  )
+  
+  # combine and return
+  plot_grid(grid, shared_leg, ncol = 1, rel_heights = c(1, 0.1))
+}
+
+
+# define “other” features
+conc_feats  <- c("basin_slope","recession_slope","land_Water",
+                 "land_Grassland_Shrubland","precip","P")
+yield_feats <- c("recession_slope","land_Wetland_Marsh","npp","NOx")
+
+remaining_conc  <- setdiff(colnames(shap_values_FNConc),  conc_feats)
+remaining_yield <- setdiff(colnames(shap_values_FNYield), yield_feats)
+
+shap_mat_conc_other  <- shap_values_FNConc[,  remaining_conc]
+drivers_conc_other   <- kept_drivers_FNConc[, remaining_conc]
+
+shap_mat_yield_other <- shap_values_FNYield[, remaining_yield]
+drivers_yield_other  <- kept_drivers_FNYield[, remaining_yield]
+
+
+# build & save Concentration “other” grid
+figX_conc_other <- make_shap_loess_grid(
+  shap_matrix  = shap_mat_conc_other,
+  drivers_data = drivers_conc_other,
+  response     = drivers_numeric_FNConc$FNConc,
+  units_expr   = expression("Concentration (mg " * L^-1 * ")"),
+  recode_map   = recode_map
+)
+ggsave(
+  file.path(output_dir, "FigSX_Conc_SHAP_Grid.png"),
+  figX_conc_other,
+  width  = 12, height = 15, dpi = 300, bg = "white"
+)
+
+
+# build & save Yield “other” grid
+figX_yield_other <- make_shap_loess_grid(
+  shap_matrix  = shap_mat_yield_other,
+  drivers_data = drivers_yield_other,
+  response     = drivers_numeric_FNYield$FNYield,
+  units_expr   = expression("Yield (kg " * km^-2 * " yr"^-1 * ")"),
+  recode_map   = recode_map)
+  
+ggsave(
+  file.path(output_dir, "FigSX_Yield_SHAP_Grid.png"),
+  figX_yield_other,
+  width  = 12, height = 15, dpi = 300, bg = "white"
+)

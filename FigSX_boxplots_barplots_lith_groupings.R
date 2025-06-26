@@ -71,7 +71,7 @@ var_order <- c(
 )
 # 5.2 "Pretty" labels (same length/order as var_order):
 var_labels <- c(
-  "NOx",
+  "N",
   "P",
   "NPP",
   "ET",
