@@ -411,44 +411,56 @@ drivers_df <- tot_si %>%
 # -----------------------------------------------------------------------------
 # 12) Correlation plot & full histograms
 # -----------------------------------------------------------------------------
-var_order <- c("NOx","P","npp","evapotrans","greenup_day","precip","temp",
-               "snow_cover","permafrost","elevation","basin_slope","RBI",
-               "recession_slope", grep("^land_|^rocks_", names(drivers_df), value=TRUE))
+var_order <- c(
+  "NOx","P","npp","evapotrans","greenup_day","precip","temp",
+  "snow_cover","permafrost","elevation","basin_slope","RBI",
+  "recession_slope",
+  grep("^land_|^rocks_", names(drivers_df), value = TRUE)
+)
 
-driver_mat <- cor(drivers_df[var_order], use="pairwise.complete.obs")
-CairoPNG("Final_Figures/FigSX_corr_plot.png", width=12, height=12, units="in", res=300)
-par(mar=c(6,5,1,1))
-corrplot(driver_mat, type="lower", order="original", tl.col="black", diag=FALSE)
+# correlation matrix
+driver_mat <- cor(drivers_df[var_order], use = "pairwise.complete.obs")
+CairoPNG("Final_Figures/FigSX_corr_plot.png", width = 12, height = 12, units = "in", res = 300)
+par(mar = c(6,5,1,1))
+corrplot(driver_mat, type = "lower", order = "original", tl.col = "black", diag = FALSE)
 dev.off()
 
+# full‑dataset histogram
 long_full <- drivers_df %>%
-  tidyr::pivot_longer(all_of(var_order), names_to="driver", values_to="value") %>%
+  tidyr::pivot_longer(all_of(var_order), names_to = "driver", values_to = "value") %>%
   dplyr::mutate(
-    value  = if_else(driver %in% c("NOx","P"), log10(value), value),
-    driver = factor(driver, levels=var_order)
+    value  = if_else(driver %in% c("NOx", "P"), log10(value), value),
+    driver = factor(driver, levels = var_order)
   )
 
 means_full <- long_full %>%
   dplyr::group_by(driver) %>%
-  dplyr::summarise(mean_val=mean(value, na.rm=TRUE), .groups="drop")
+  dplyr::summarise(mean_val = mean(value, na.rm = TRUE), .groups = "drop")
 
 hist_full <- ggplot2::ggplot(long_full, ggplot2::aes(value)) +
-  ggplot2::geom_histogram(bins=30, fill="grey85", color="black") +
-  ggplot2::geom_vline(data=means_full, ggplot2::aes(xintercept=mean_val), linetype="dashed") +
-  ggplot2::facet_wrap(~driver, scales="free", ncol=6) +
+  ggplot2::geom_histogram(bins = 30, fill = "grey85", color = "black") +
+  ggplot2::geom_vline(data = means_full, ggplot2::aes(xintercept = mean_val), linetype = "dashed") +
+  ggplot2::facet_wrap(~driver, scales = "free", ncol = 6) +
   ggplot2::theme_classic()
 
-ggplot2::ggsave("Final_Figures/FigSX_Hist_All.png", hist_full, width=24, height=16, dpi=300)
+ggplot2::ggsave(
+  "Final_Figures/FigSX_Hist_All.png",
+  hist_full,
+  width  = 24,
+  height = 16,
+  dpi    = 300
+)
 
 # -----------------------------------------------------------------------------
-# 13) Split into unseen10 / older70 / recent30 and recalc NP-medians
+# 13) Split into unseen10 / older70 / recent30, generate subset histograms, and recalc NP‑medians
 # -----------------------------------------------------------------------------
 set.seed(42)
 all_sites <- unique(drivers_df$Stream_ID)
 n_unseen  <- ceiling(0.10 * length(all_sites))
 unseen    <- sample(all_sites, n_unseen)
 
-unseen10  <- drivers_df %>% dplyr::filter(Stream_ID %in% unseen)
+unseen10 <- drivers_df %>%
+  dplyr::filter(Stream_ID %in% unseen)
 
 trainval <- drivers_df %>%
   dplyr::filter(!Stream_ID %in% unseen) %>%
@@ -462,16 +474,61 @@ trainval <- drivers_df %>%
   ) %>%
   dplyr::ungroup()
 
-older70  <- trainval %>% dplyr::filter(split=="older")  %>% dplyr::select(-tot_count, -n_recent, -idx, -split)
-recent30 <- trainval %>% dplyr::filter(split=="recent") %>% dplyr::select(-tot_count, -n_recent, -idx, -split)
+older70  <- trainval %>%
+  dplyr::filter(split == "older") %>%
+  dplyr::select(-tot_count, -n_recent, -idx, -split)
 
-calc_med <- function(df){
+recent30 <- trainval %>%
+  dplyr::filter(split == "recent") %>%
+  dplyr::select(-tot_count, -n_recent, -idx, -split)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Generate histograms for each subset
+# ──────────────────────────────────────────────────────────────────────────────
+subsets <- list(
+  full     = drivers_df,
+  unseen10 = unseen10,
+  older70  = older70,
+  recent30 = recent30
+)
+
+for(name in names(subsets)) {
+  df <- subsets[[name]]
+  
+  long_df <- df %>%
+    tidyr::pivot_longer(all_of(var_order), names_to = "driver", values_to = "value") %>%
+    dplyr::mutate(
+      value  = if_else(driver %in% c("NOx", "P"), log10(value), value),
+      driver = factor(driver, levels = var_order)
+    )
+  
+  means_df <- long_df %>%
+    dplyr::group_by(driver) %>%
+    dplyr::summarise(mean_val = mean(value, na.rm = TRUE), .groups = "drop")
+  
+  p <- ggplot2::ggplot(long_df, ggplot2::aes(value)) +
+    ggplot2::geom_histogram(bins = 30, fill = "grey85", color = "black") +
+    ggplot2::geom_vline(data = means_df, ggplot2::aes(xintercept = mean_val), linetype = "dashed") +
+    ggplot2::facet_wrap(~driver, scales = "free", ncol = 6) +
+    ggplot2::theme_classic()
+  
+  ggplot2::ggsave(
+    filename = sprintf("Final_Figures/FigSX_Hist_%s.png", name),
+    plot     = p,
+    width    = 24,
+    height   = 16,
+    dpi      = 300
+  )
+}
+
+# Recalculate N and P medians for each group
+calc_med <- function(df) {
   df %>%
     dplyr::group_by(Stream_ID) %>%
     dplyr::summarise(
-      NOx_med = median(NOx, na.rm=TRUE),
-      P_med   = median(P,   na.rm=TRUE),
-      .groups="drop"
+      NOx_med = median(NOx, na.rm = TRUE),
+      P_med   = median(P,   na.rm = TRUE),
+      .groups = "drop"
     )
 }
 
@@ -480,6 +537,7 @@ med_unseen <- calc_med(unseen10)
 med_older  <- calc_med(older70)
 med_recent <- calc_med(recent30)
 
-write.csv(unseen10, "AllDrivers_Harmonized_unseen10.csv", row.names=FALSE)
-write.csv(older70,  "AllDrivers_Harmonized_older70.csv", row.names=FALSE)
-write.csv(recent30, "AllDrivers_Harmonized_recent30.csv", row.names=FALSE)
+# (Optional) write out the subset data
+write.csv(unseen10, "AllDrivers_Harmonized_unseen10.csv", row.names = FALSE)
+write.csv(older70,  "AllDrivers_Harmonized_older70.csv",  row.names = FALSE)
+write.csv(recent30, "AllDrivers_Harmonized_recent30.csv", row.names = FALSE)
