@@ -189,7 +189,8 @@ for (sub in subset_names) {
   # zero‐fill again
   df <- df %>% dplyr::mutate(across(dplyr::all_of(rl_cols), ~ replace_na(.,0)))
   df <- df %>% dplyr::select(
-    -dplyr::contains("Yield"), -dplyr::contains("Gen"),
+    # -dplyr::contains("Yield"), 
+    -dplyr::contains("Gen"),
     -dplyr::contains("major"),
     -Max_Daylength, -Q, -drainage_area
   ) %>% dplyr::mutate(greenup_day = as.numeric(greenup_day))
