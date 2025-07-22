@@ -1,10 +1,13 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# FULL RF PIPELINE WITH SHARED THRESHOLDS, pRMSE, FALLBACK & FACETED PLOTS
+# FULL RF PIPELINE WITH SHARED THRESHOLDS, pRMSE, FALLBACK,
+# FACETED PLOTS & RETAINED FEATURES LOG
+#
 #  - single importance_threshold for both FNConc & FNYield
 #  - normalized RMSE (pRMSE) for unitless comparison
 #  - tuneRF → stability → tuneRF per subset & response
 #  - FALLBACK to all predictors if no stable features found
 #  - collects R², RMSE, pRMSE and plots observed vs predicted in a 3×2 grid
+#  - records which variables survive stability selection for each model
 # ──────────────────────────────────────────────────────────────────────────────
 
 # 0) Load required packages & set seed ----------------------------------------
@@ -16,7 +19,8 @@ library(doParallel)
 library(foreach)
 library(corrplot)
 library(ggplot2)
-library(tibble)
+library(tibble)   # for enframe()
+library(purrr)    # for map_chr()
 
 set.seed(666)
 
@@ -43,15 +47,16 @@ tot_si   <- tot_si %>% mutate(across(all_of(rl_cols), ~ replace_na(., 0)))
 importance_threshold <- 1.5   # %IncMSE bar, same for FNConc & FNYield
 stability_threshold  <- 0.6   # must exceed bar in ≥60% of bootstraps
 
-# 3) Prepare storage for metrics & predictions --------------------------------
-metrics_list <- list()
-preds_list   <- list()
+# 3) Prepare storage for metrics, predictions & retained features --------------
+metrics_list   <- list()
+preds_list     <- list()
+features_list  <- list()
 
 # 4) Helper: tune mtry & ntree for RF1 -----------------------------------------
 tune_rf1 <- function(df, resp, preds,
                      ntree_try = 200,
                      ntree_grid = seq(100, 500, by = 100)) {
-  x <- df %>% dplyr::select(dplyr::all_of(preds))
+  x <- df %>% select(all_of(preds))
   y <- df[[resp]]
   tr <- randomForest::tuneRF(
     x, y,
@@ -72,7 +77,7 @@ tune_rf1 <- function(df, resp, preds,
 stability_feats <- function(df, resp, preds,
                             mtry, ntree, thr_imp, thr_freq,
                             n_boot = 100) {
-  x <- df %>% dplyr::select(dplyr::all_of(preds))
+  x <- df %>% select(all_of(preds))
   y <- df[[resp]]
   sel_mat <- replicate(n_boot, {
     idx <- sample(nrow(x), replace = TRUE)
@@ -90,8 +95,8 @@ stability_feats <- function(df, resp, preds,
 }
 
 # 6) Start parallel backend ---------------------------------------------------
-cores <- parallel::detectCores() - 1
-cl    <- parallel::makeCluster(cores)
+cores <- detectCores() - 1
+cl    <- makeCluster(cores)
 doParallel::registerDoParallel(cl)
 
 # 7) Loop over subsets & responses --------------------------------------------
@@ -106,8 +111,8 @@ for (sub in subset_names) {
   ) %>%
     mutate(across(starts_with("land_"),  ~ replace_na(., 0))) %>%
     mutate(across(starts_with("rocks_"), ~ replace_na(., 0))) %>%
-    dplyr::select(-dplyr::contains("Gen"), -dplyr::contains("major"),
-                  -Max_Daylength, -Q, -drainage_area) %>%
+    select(-contains("Gen"), -contains("major"),
+           -Max_Daylength, -Q, -drainage_area) %>%
     mutate(greenup_day = as.numeric(greenup_day))
   
   for (resp in responses) {
@@ -115,8 +120,8 @@ for (sub in subset_names) {
     
     # 7a) Complete cases for this response
     df_cc <- df_sub %>%
-      dplyr::select(dplyr::all_of(c(resp, predictors))) %>%
-      tidyr::drop_na()
+      select(all_of(c(resp, predictors))) %>%
+      drop_na()
     if (nrow(df_cc) < 10) {
       message("   insufficient data; skipping.")
       next
@@ -139,6 +144,10 @@ for (sub in subset_names) {
       feats <- predictors
     }
     
+    # record which features survived
+    key <- paste(sub, resp, sep = "_")
+    features_list[[key]] <- feats
+    
     # 7d) RF2 tuning on selected features
     df2     <- df_cc[, c(resp, feats), drop = FALSE]
     params2 <- tune_rf1(df2, resp, feats)
@@ -156,10 +165,8 @@ for (sub in subset_names) {
     out_dir <- file.path("Final_Models", sub, resp)
     dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
     png(file.path(out_dir, "corrplot.png"), width = 800, height = 800, res = 150)
-    corrplot(
-      cor(df_cc[, predictors], use = "pairwise.complete.obs"),
-      type = "lower", diag = FALSE, tl.col = "black"
-    )
+    corrplot(cor(df_cc[, predictors], use = "pairwise.complete.obs"),
+             type = "lower", diag = FALSE, tl.col = "black")
     dev.off()
     png(file.path(out_dir, "RF2_varImp.png"), width = 1000, height = 600, res = 150)
     varImpPlot(rf2, main = paste(sub, resp, "RF2 Variable Importance"))
@@ -172,7 +179,6 @@ for (sub in subset_names) {
     RMSE  <- sqrt(mean((obs - preds)^2, na.rm = TRUE))
     pRMSE <- 100 * RMSE / mean(obs, na.rm = TRUE)
     
-    key <- paste(sub, resp, sep = "_")
     metrics_list[[key]] <- tibble(
       subset   = sub,
       response = resp,
@@ -193,10 +199,6 @@ for (sub in subset_names) {
 stopCluster(cl)
 
 # 9) Combine & plot outside of loops ------------------------------------------
-if (length(preds_list) == 0) {
-  stop("No predictions collected. Check thresholds or data availability.")
-}
-
 metrics_df <- bind_rows(metrics_list)
 preds_df   <- bind_rows(preds_list)
 
@@ -204,17 +206,9 @@ preds_df   <- bind_rows(preds_list)
 print(metrics_df)
 
 # 9b) Faceted observed vs predicted with R² & pRMSE
-ggplot() +
-  geom_point(
-    data = preds_df,
-    aes(x = observed, y = predicted),
-    alpha = 0.6
-  ) +
-  geom_abline(
-    slope     = 1,
-    intercept = 0,
-    linetype  = "dashed"
-  ) +
+ggplot(preds_df, aes(x = observed, y = predicted)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
   facet_grid(subset ~ response) +
   theme_minimal() +
   labs(x = "Observed", y = "Predicted") +
@@ -223,9 +217,27 @@ ggplot() +
     aes(
       x     = Inf,
       y     = -Inf,
-      label = paste0("R²=", round(R2,2),
-                     "\npRMSE=", round(pRMSE,1), "%")
+      label = paste0("R²=", round(R2, 2),
+                     "\n pRMSE=", round(pRMSE, 1), "%")
     ),
-    hjust = 1.1, vjust = -0.1, size = 3,
-    inherit.aes = FALSE
+    inherit.aes = FALSE,
+    hjust = 1.1, vjust = -0.1, size = 3
   )
+
+# 10) Record retained features per model --------------------------------------
+features_df <- enframe(
+  features_list,
+  name  = "key",
+  value = "features"
+) %>%
+  separate(key, into = c("subset", "response"), sep = "_") %>%
+  mutate(
+    kept_vars = map_chr(features, ~ paste(.x, collapse = "; "))
+  ) %>%
+  select(-features)
+
+# Print & optionally export
+print(features_df)
+write.csv(features_df,
+          "Retained_Variables_Per_Model.csv",
+          row.names = FALSE)
