@@ -1,23 +1,29 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# FULL RF PIPELINE WITH ZERO IMPORTANCE CUT AND 50% STABILITY
-# Ensures every model keeps ≥1 feature; variable‐importance plots will reveal noise
+# TRAIN ON older70, TEST ON recent30 & unseen10
 # ──────────────────────────────────────────────────────────────────────────────
 
-# 0) Load required packages & set seed ----------------------------------------
-librarian::shelf(
-  dplyr, tidyr, randomForest, corrplot,
-  parallel, doParallel, foreach, ggplot2, tibble
-)
-set.seed(666)
+library(dplyr)
+library(tidyr)
+library(randomForest)
+library(parallel)
+library(doParallel)
+library(foreach)
+library(corrplot)
+library(ggplot2)
+library(tibble)
 
-# 1) Read harmonized data & define predictors --------------------------------
+set.seed(666)
+# 0) thresholds & predictors ---------------------------------------------------
+importance_threshold <- 0    # keep all (zero cut)
+stability_threshold  <- 0.5  # ≥50% bootstrap freq
+
+# read full harmonized (just to get column names)
 record_length <- 5
 tot_si <- read.csv(
   sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years_uncleaned.csv",
           record_length),
   stringsAsFactors = FALSE
 )
-
 var_order <- c(
   "NOx","P","npp","evapotrans","greenup_day","precip","temp",
   "snow_cover","permafrost","elevation","basin_slope","RBI","recession_slope",
@@ -25,152 +31,155 @@ var_order <- c(
 )
 predictors <- intersect(var_order, names(tot_si))
 
-# zero‑fill land_/rocks_ so you don't lose rows
-rl_cols <- grep("^(land_|rocks_)", names(tot_si), value = TRUE)
-tot_si   <- tot_si %>% mutate(across(all_of(rl_cols), ~ replace_na(., 0)))
-
-# 2) Set shared thresholds ----------------------------------------------------
-importance_threshold <- 0    # no %IncMSE cutoff
-stability_threshold  <- 0.5  # require feature in ≥50% of bootstraps
-
-# 3) Prepare storage for metrics & predictions --------------------------------
-metrics_list <- list()
-preds_list   <- list()
-
-# 4) Helper: tune mtry & ntree for RF1 -----------------------------------------
-tune_rf1 <- function(df, resp, preds,
-                     ntree_try = 200,
-                     ntree_grid = seq(100, 500, by = 100)) {
-  x <- df %>% dplyr::select(dplyr::all_of(preds))
-  y <- df[[resp]]
-  tr <- randomForest::tuneRF(
-    x, y,
-    ntreeTry   = ntree_try,
-    stepFactor = 1.5,
-    improve    = 0.01,
-    plot       = FALSE
-  )
-  best_mtry <- tr[which.min(tr[, 2]), 1]
-  mse_vec <- foreach(nt = ntree_grid, .combine = "c", .packages = "randomForest") %dopar% {
-    mean(randomForest(x, y, ntree = nt, mtry = best_mtry)$mse)
-  }
-  best_nt <- ntree_grid[which.min(mse_vec)]
-  list(mtry = best_mtry, ntree = best_nt)
+# helper to zero‐fill
+zero_fill <- function(df){
+  rl <- grep("^(land_|rocks_)", names(df), value=TRUE)
+  df %>% mutate(across(all_of(rl), ~ replace_na(.,0)))
 }
 
-# 5) Helper: stability selection ------------------------------------------------
+# 1) RF1 tuning helper ---------------------------------------------------------
+tune_rf1 <- function(df, resp, preds,
+                     ntree_try  = 200,
+                     ntree_grid = seq(100,500,100)){
+  x <- df %>% dplyr::select(all_of(preds))
+  y <- df[[resp]]
+  tr <- randomForest::tuneRF(x,y,
+                             ntreeTry   = ntree_try,
+                             stepFactor = 1.5,
+                             improve    = 0.01,
+                             plot       = FALSE
+  )
+  best_mtry <- tr[which.min(tr[,2]),1]
+  mse_vec <- foreach(nt=ntree_grid, .combine='c', .packages='randomForest') %dopar% {
+    mean(randomForest(x,y,ntree=nt,mtry=best_mtry)$mse)
+  }
+  best_nt <- ntree_grid[which.min(mse_vec)]
+  list(mtry=best_mtry, ntree=best_nt)
+}
+
+# 2) stability‐selection helper ------------------------------------------------
 stability_feats <- function(df, resp, preds,
-                            mtry, ntree, thr_imp, thr_freq,
-                            n_boot = 100) {
-  x <- df %>% dplyr::select(dplyr::all_of(preds))
+                            mtry, ntree,
+                            thr_imp, thr_freq,
+                            n_boot = 100){
+  x <- df %>% dplyr::select(all_of(preds))
   y <- df[[resp]]
   sel_mat <- replicate(n_boot, {
-    idx <- sample(nrow(x), replace = TRUE)
-    m   <- randomForest(
-      x[idx, , drop = FALSE],
-      y[idx],
-      ntree      = ntree,
-      mtry       = mtry,
-      importance = TRUE
-    )
+    idx <- sample(nrow(x),replace=TRUE)
+    m   <- randomForest(x[idx,], y[idx],
+                        ntree      = ntree,
+                        mtry       = mtry,
+                        importance = TRUE)
     as.numeric(randomForest::importance(m)[, "%IncMSE"] > thr_imp)
   })
   freqs <- rowMeans(sel_mat)
   names(freqs[freqs >= thr_freq])
 }
 
-# 6) Start parallel backend ---------------------------------------------------
-cores <- parallel::detectCores() - 1
-cl    <- parallel::makeCluster(cores)
-doParallel::registerDoParallel(cl)
+# 3) set up parallel -----------------------------------------------------------
+cores <- detectCores()-1
+cl    <- makeCluster(cores); registerDoParallel(cl)
 
-# 7) Loop over subsets & responses --------------------------------------------
-subset_names <- c("unseen10", "older70", "recent30")
-responses    <- c("FNConc", "FNYield")
+# 4) read & prep older70 (the single training set) ----------------------------
+train70 <- read.csv("AllDrivers_cc_older70.csv", stringsAsFactors=FALSE) %>%
+  zero_fill() %>%
+  dplyr::select(-contains("Gen"), -contains("major"),
+                -Max_Daylength, -Q, -drainage_area) %>%
+  mutate(greenup_day = as.numeric(greenup_day))
 
-for (sub in subset_names) {
-  message("==== SUBSET: ", sub, " ====")
-  df_sub <- read.csv(
-    sprintf("AllDrivers_cc_%s.csv", sub),
-    stringsAsFactors = FALSE
-  ) %>%
-    mutate(across(starts_with("land_"),  ~ replace_na(., 0))) %>%
-    mutate(across(starts_with("rocks_"), ~ replace_na(., 0))) %>%
-    dplyr::select(-dplyr::contains("Gen"), -dplyr::contains("major"),
-                  -Max_Daylength, -Q, -drainage_area) %>%
-    mutate(greenup_day = as.numeric(greenup_day))
+metrics_list <- list()
+preds_list   <- list()
+
+for(resp in c("FNConc","FNYield")){
   
-  for (resp in responses) {
-    message(">> RESPONSE: ", resp)
+  message(">>> TRAINING on older70 for ", resp)
+  
+  # 4a) complete‐cases for training
+  train_cc <- train70 %>%
+    dplyr::select(all_of(c(resp, predictors))) %>%
+    tidyr::drop_na()
+  if(nrow(train_cc)<10){
+    stop("Not enough training data for ",resp)
+  }
+  
+  # 4b) RF1 tuning on older70
+  params1 <- tune_rf1(train_cc, resp, predictors)
+  
+  # 4c) stability‐select on older70
+  feats <- stability_feats(
+    train_cc, resp, predictors,
+    mtry        = params1$mtry,
+    ntree       = params1$ntree,
+    thr_imp     = importance_threshold,
+    thr_freq    = stability_threshold,
+    n_boot      = 200
+  )
+  if(length(feats)==0){
+    message("  → no stable features, falling back to all predictors")
+    feats <- predictors
+  }
+  
+  # 4d) RF2 tuning (re‐use tune_rf1) on older70 with only `feats`
+  train2 <- train_cc[, c(resp, feats), drop=FALSE]
+  params2 <- tune_rf1(train2, resp, feats)
+  
+  # 4e) final RF2 fit on older70
+  rf2 <- randomForest(
+    as.formula(paste(resp,"~ .")),
+    data       = train2,
+    ntree      = params2$ntree,
+    mtry       = params2$mtry,
+    importance = TRUE
+  )
+  
+  # 4f) store TRAINING‐set OOB metrics & varImp
+  oob_R2  <- tail(rf2$rsq,1)
+  oob_RMSE<- sqrt(tail(rf2$mse,1))
+  metrics_list[[paste0("older70_",resp)]] <- tibble(
+    subset   = "older70",
+    response = resp,
+    R2       = oob_R2,
+    RMSE     = oob_RMSE,
+    pRMSE    = 100*oob_RMSE/mean(train2[[resp]]),
+    n        = nrow(train2)
+  )
+  preds_list[[paste0("older70_",resp)]] <- tibble(
+    subset    = "older70",
+    response  = resp,
+    observed  = train2[[resp]],
+    predicted = predict(rf2, train2)
+  )
+  
+  # 4g) now APPLY to each test set
+  for(sub in c("recent30","unseen10")){
+    message("    → TESTING on ",sub)
+    test_df <- read.csv(sprintf("AllDrivers_cc_%s.csv",sub), stringsAsFactors=FALSE) %>%
+      zero_fill() %>%
+      dplyr::select(-contains("Gen"), -contains("major"),
+                    -Max_Daylength, -Q, -drainage_area) %>%
+      mutate(greenup_day = as.numeric(greenup_day))
     
-    # 7a) Complete cases for this response
-    df_cc <- df_sub %>%
-      dplyr::select(dplyr::all_of(c(resp, predictors))) %>%
+    test_cc <- test_df %>%
+      dplyr::select(all_of(c(resp, feats))) %>%
       tidyr::drop_na()
-    if (nrow(df_cc) < 10) {
-      message("   insufficient data; skipping.")
-      next
+    if(nrow(test_cc)<5){
+      message("       insufficient test cases for ",sub,"/",resp); next
     }
     
-    # 7b) RF1 tuning
-    params1 <- tune_rf1(df_cc, resp, predictors)
+    preds <- predict(rf2, test_cc)
+    obs   <- test_cc[[resp]]
+    R2_t  <- cor(obs,preds)^2
+    RMSE_t<- sqrt(mean((obs-preds)^2))
     
-    # 7c) Stability selection (thr_imp=0 keeps all, then filter by 50% freq)
-    feats <- stability_feats(
-      df_cc, resp, predictors,
-      mtry     = params1$mtry,
-      ntree    = params1$ntree,
-      thr_imp  = importance_threshold,
-      thr_freq = stability_threshold,
-      n_boot   = 100
-    )
-    if (length(feats) == 0) {
-      message("   no stable features? This shouldn't happen with thr_imp=0.")
-      feats <- predictors
-    }
-    
-    # 7d) RF2 tuning on selected features
-    df2     <- df_cc[, c(resp, feats), drop = FALSE]
-    params2 <- tune_rf1(df2, resp, feats)
-    
-    # 7e) Final RF2 model
-    rf2 <- randomForest(
-      as.formula(paste(resp, "~ .")),
-      data       = df2,
-      ntree      = params2$ntree,
-      mtry       = params2$mtry,
-      importance = TRUE
-    )
-    
-    # 7f) Save Corrplot & VarImp
-    out_dir <- file.path("Final_Models", sub, resp)
-    dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
-    png(file.path(out_dir, "corrplot.png"), width = 800, height = 800, res = 150)
-    corrplot(
-      cor(df_cc[, predictors], use = "pairwise.complete.obs"),
-      type = "lower", diag = FALSE, tl.col = "black"
-    )
-    dev.off()
-    png(file.path(out_dir, "RF2_varImp.png"), width = 1000, height = 600, res = 150)
-    varImpPlot(rf2, main = paste(sub, resp, "RF2 Variable Importance"))
-    dev.off()
-    
-    # 7g) Collect predictions & metrics (including pRMSE)
-    preds <- predict(rf2, df2)
-    obs   <- df2[[resp]]
-    R2    <- cor(obs, preds, use = "complete.obs")^2
-    RMSE  <- sqrt(mean((obs - preds)^2, na.rm = TRUE))
-    pRMSE <- 100 * RMSE / mean(obs, na.rm = TRUE)
-    
-    key <- paste(sub, resp, sep = "_")
-    metrics_list[[key]] <- tibble(
+    metrics_list[[paste0(sub,"_",resp)]] <- tibble(
       subset   = sub,
       response = resp,
-      R2       = R2,
-      RMSE     = RMSE,
-      pRMSE    = pRMSE
+      R2       = R2_t,
+      RMSE     = RMSE_t,
+      pRMSE    = 100*RMSE_t/mean(obs),
+      n        = nrow(test_cc)
     )
-    preds_list[[key]] <- tibble(
+    preds_list[[paste0(sub,"_",resp)]] <- tibble(
       subset    = sub,
       response  = resp,
       observed  = obs,
@@ -179,29 +188,20 @@ for (sub in subset_names) {
   }
 }
 
-# 8) Stop parallel ------------------------------------------------------------
 stopCluster(cl)
 
-# 9) Combine & plot outside of loops ------------------------------------------
+# 5) combine and plot ---------------------------------------------------------
 metrics_df <- bind_rows(metrics_list)
 preds_df   <- bind_rows(preds_list)
 
-# Print metrics
+# a) print metrics
 print(metrics_df)
 
-# Faceted observed vs predicted with R² & pRMSE
-ggplot() +
-  geom_point(
-    data = preds_df,
-    aes(x = observed, y = predicted),
-    alpha = 0.6
-  ) +
-  geom_abline(
-    slope     = 1,
-    intercept = 0,
-    linetype  = "dashed"
-  ) +
-  facet_grid(subset ~ response) +
+# b) build the plot and save it
+p_obs_pred <- ggplot(preds_df, aes(x = observed, y = predicted)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  facet_wrap(~ subset + response, scales = "free", ncol = 2) +
   theme_minimal() +
   labs(x = "Observed", y = "Predicted") +
   geom_text(
@@ -209,9 +209,22 @@ ggplot() +
     aes(
       x     = Inf,
       y     = -Inf,
-      label = paste0("R²=", round(R2,2),
-                     "\npRMSE=", round(pRMSE,1), "%")
+      label = sprintf("R²=%.3f\nn=%d", R2, n)
     ),
-    hjust = 1.1, vjust = -0.1, size = 3,
-    inherit.aes = FALSE
+    inherit.aes = FALSE,
+    hjust = 1.1,
+    vjust = -0.1,
+    size = 3
   )
+
+print(p_obs_pred)
+
+# c) save to disk
+ggsave(
+  filename = "Final_Models/obs_vs_predicted.png",
+  plot     = p_obs_pred,
+  width    = 12,
+  height   = 8,
+  units    = "in",
+  dpi      = 300
+)

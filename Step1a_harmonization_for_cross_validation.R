@@ -484,22 +484,60 @@ ggplot2::ggsave("Final_Figures/FigSX_Hist_All.png", hist_full,
                 width = 24, height = 16, dpi = 300)
 
 # -------------------------------------------------------
-# 13) Split into unseen10 / older70 / recent30 using complete cases
+# 13) Stratified split by final_cluster: take 10% of each cluster as unseen10
 # -------------------------------------------------------
 drivers_required <- var_order
 
+# pull out only those rows with complete drivers
 complete_df <- tot_si %>%
   tidyr::drop_na(dplyr::all_of(drivers_required))
 
+# 13a) build a one‑row/site lookup with major_rock + rock‑fractions 
+site_clusters <- complete_df %>%
+  dplyr::distinct(
+    Stream_ID, major_rock,
+    rocks_volcanic, rocks_sedimentary,
+    rocks_carbonate_evaporite, rocks_metamorphic,
+    rocks_plutonic
+  ) %>%
+  
+  # 13b) same consolidation logic as in your plotting script
+  dplyr::mutate(
+    consolidated_rock = dplyr::case_when(
+      major_rock %in% c("volcanic", "volcanic; plutonic")                                   ~ "Volcanic",
+      major_rock %in% c("sedimentary",                                                       
+                        "volcanic; sedimentary; carbonate_evaporite",
+                        "sedimentary; carbonate_evaporite",
+                        "sedimentary; plutonic; carbonate_evaporite; metamorphic",
+                        "sedimentary; metamorphic")                                         ~ "Sedimentary",
+      major_rock %in% c("plutonic", "plutonic; metamorphic", "volcanic; plutonic; metamorphic") ~ "Plutonic",
+      major_rock %in% c("metamorphic", "carbonate_evaporite; metamorphic")                   ~ "Metamorphic",
+      major_rock %in% c("carbonate_evaporite", "volcanic; carbonate_evaporite")               ~ "Carbonate Evaporite",
+      TRUE                                                                                   ~ NA_character_
+    ),
+    final_cluster = dplyr::case_when(
+      consolidated_rock == "Sedimentary" & rocks_sedimentary >= 70 ~ "Sedimentary",
+      consolidated_rock == "Sedimentary" & rocks_sedimentary <  70 ~ "Mixed Sedimentary",
+      TRUE                                                         ~ consolidated_rock
+    )
+  ) %>%
+  dplyr::select(Stream_ID, final_cluster)
+
+# 13c) do the 10% “unseen” split stratified by final_cluster
 set.seed(42)
-all_sites_cc   <- unique(complete_df$Stream_ID)
-n_unseen_cc    <- ceiling(0.10 * length(all_sites_cc))
-unseen_sites   <- sample(all_sites_cc, n_unseen_cc)
-trainval_sites <- setdiff(all_sites_cc, unseen_sites)
+unseen_sites <- site_clusters %>%
+  dplyr::group_by(final_cluster) %>%
+  dplyr::slice_sample(prop = 0.10) %>%
+  dplyr::ungroup() %>%
+  dplyr::pull(Stream_ID)
+
+# the rest are train+val
+trainval_sites <- setdiff(site_clusters$Stream_ID, unseen_sites)
 
 unseen10_cc <- complete_df %>%
   dplyr::filter(Stream_ID %in% unseen_sites)
 
+# 13d) within train+val, carve off the most‑recent 30% of *each* site
 trainval_split <- complete_df %>%
   dplyr::filter(Stream_ID %in% trainval_sites) %>%
   dplyr::group_by(Stream_ID) %>%
@@ -513,7 +551,7 @@ trainval_split <- complete_df %>%
   dplyr::ungroup()
 
 older70_cc <- trainval_split %>%
-  dplyr::filter(split == "older")  %>%
+  dplyr::filter(split == "older") %>%
   dplyr::select(-tot_count, -n_recent, -idx, -split)
 
 recent30_cc <- trainval_split %>%
@@ -524,3 +562,106 @@ recent30_cc <- trainval_split %>%
 write.csv(unseen10_cc, "AllDrivers_cc_unseen10.csv", row.names = FALSE)
 write.csv(older70_cc,  "AllDrivers_cc_older70.csv",  row.names = FALSE)
 write.csv(recent30_cc, "AllDrivers_cc_recent30.csv", row.names = FALSE)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 14) Histograms with per‐driver fixed axes (via invisible “extremes”)
+# ──────────────────────────────────────────────────────────────────────────────
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# 14a) Compute full‐data long form & driver‐by‐driver min/max/counts
+full_long <- drivers_df %>%
+  pivot_longer(
+    cols      = all_of(var_order),
+    names_to  = "driver",
+    values_to = "value"
+  ) %>%
+  mutate(
+    # only NP get log10-transformed
+    value  = if_else(driver %in% c("NOx","P"), log10(value), value),
+    driver = factor(driver, levels = var_order)
+  )
+
+driver_limits <- full_long %>%
+  group_by(driver) %>%
+  summarise(
+    xmin = min(value, na.rm = TRUE),
+    xmax = max(value, na.rm = TRUE),
+    # find the maximum bin‐count over a 30‐bin histogram
+    ymax = {
+      h <- hist(value, breaks = 30, plot = FALSE)
+      max(h$counts, na.rm = TRUE)
+    },
+    .groups = "drop"
+  )
+
+# 14b) Build the “dummy” extremes DF
+driver_extremes <- driver_limits %>%
+  rowwise() %>%
+  do(data.frame(
+    driver = .$driver,
+    value  = c(.$xmin, .$xmax),
+    y      = c(0,       .$ymax)
+  )) %>% ungroup()
+
+# 14c) Revised helper that injects those extremes invisibly
+make_hist <- function(df, name) {
+  long <- df %>%
+    pivot_longer(
+      cols      = all_of(var_order),
+      names_to  = "driver",
+      values_to = "value"
+    ) %>%
+    mutate(
+      value  = if_else(driver %in% c("NOx","P"), log10(value), value),
+      driver = factor(driver, levels = var_order)
+    )
+  means <- long %>%
+    group_by(driver) %>%
+    summarise(mean_val = mean(value, na.rm = TRUE), .groups = "drop")
+  
+  p <- ggplot() +
+    # real data
+    geom_histogram(
+      data   = long,
+      aes(x = value),
+      bins   = 30,
+      fill   = "grey85",
+      color  = "black"
+    ) +
+    # per‐driver mean
+    geom_vline(
+      data = means,
+      aes(xintercept = mean_val),
+      linetype = "dashed"
+    ) +
+    # invisible “extremes” to fix scales
+    geom_point(
+      data  = driver_extremes,
+      aes(x = value, y = y),
+      shape = NA
+    ) +
+    facet_wrap(~ driver, scales = "free", ncol = 6) +
+    theme_classic() +
+    labs(
+      title = paste0("Histogram: ", name),
+      x     = NULL,
+      y     = "Count"
+    )
+  
+  ggsave(
+    filename = file.path("Final_Figures", paste0("FigSX_Hist_", name, ".png")),
+    plot     = p,
+    width    = 24,
+    height   = 16,
+    dpi      = 300
+  )
+}
+
+# 14d) Save for full data and each subset
+make_hist(drivers_df,  "full")
+make_hist(unseen10_cc, "unseen10")
+make_hist(older70_cc,  "older70")
+make_hist(recent30_cc, "recent30")
