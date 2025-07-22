@@ -1,6 +1,6 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# QUICK‐CHECK: Stability‐Selection Sanity Test with Feature Counts
-# Reports how many (and which) predictors survive your thresholds
+# QUICK‐CHECK: Stability‐Selection Sanity Test with Shared Thresholds
+# Reports how many (and which) predictors survive a single importance threshold
 # ──────────────────────────────────────────────────────────────────────────────
 
 # 0) Load packages & set seed
@@ -25,10 +25,9 @@ var_order <- c(
 )
 var_order_present <- intersect(var_order, names(tot_si))
 
-# 2) Manually set your thresholds
-importance_threshold_conc  <- 1    # %IncMSE bar for FNConc
-importance_threshold_yield <- 1    # %IncMSE bar for FNYield
-stability_threshold        <- 0.5  # require feature in ≥50% of bootstraps
+# 2) Set a single shared importance threshold + stability threshold
+importance_threshold <- 1    # %IncMSE bar for both FNConc & FNYield
+stability_threshold  <- 0.5  # feature must appear in ≥50% of bootstraps
 
 # 3) Quick‐check function returning feature names
 quick_check_features <- function(df, resp, predictors,
@@ -41,7 +40,7 @@ quick_check_features <- function(df, resp, predictors,
       dplyr::mutate(across(dplyr::all_of(rl_cols), ~ replace_na(., 0)))
   }
   
-  # build a complete‑case numeric data.frame
+  # build complete‑case numeric data.frame
   dat <- df %>%
     dplyr::select(dplyr::all_of(c(resp, predictors))) %>%
     dplyr::mutate(across(dplyr::everything(), as.numeric)) %>%
@@ -83,15 +82,14 @@ for (sub in subset_names) {
   )
   
   for (resp in responses) {
-    thr_imp <- if (resp == "FNConc") importance_threshold_conc else importance_threshold_yield
     feats   <- quick_check_features(
-      df        = df,
-      resp      = resp,
-      predictors= var_order_present,
-      thr_imp   = thr_imp,
-      thr_freq  = stability_threshold,
-      n_boot    = 50,
-      ntree     = 100
+      df         = df,
+      resp       = resp,
+      predictors = var_order_present,
+      thr_imp    = importance_threshold,
+      thr_freq   = stability_threshold,
+      n_boot     = 50,
+      ntree      = 100
     )
     n_feats <- length(feats)
     
