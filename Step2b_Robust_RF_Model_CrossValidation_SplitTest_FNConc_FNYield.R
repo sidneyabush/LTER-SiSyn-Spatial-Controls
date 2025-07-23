@@ -48,7 +48,7 @@ save_lm_plot <- function(preds, obs, name) {
 test_numtree_parallel <- function(ntree_list, formula, data) {
   cores <- detectCores()-1; cl <- makeCluster(cores); registerDoParallel(cl)
   MSE <- foreach(nt=ntree_list, .combine='c', .packages='randomForest') %dopar% {
-    set.seed(666); mean(randomForest(formula, data=data, ntree=nt, importance=TRUE)$mse)
+    set.seed(666); mean(randomForest::randomForest(formula, data=data, ntree=nt, importance=TRUE)$mse)
   }
   stopCluster(cl); MSE
 }
@@ -73,7 +73,7 @@ rf_stability_selection_parallel <- function(x, y,
     set.seed(123+i)
     idx <- sample(nrow(x), replace=TRUE)
     m <- randomForest(x[idx,], y[idx], ntree=ntree, mtry=mtry, importance=TRUE)
-    imps <- importance(m)[, '%IncMSE']
+    imps <- randomForest::importance(m)[, '%IncMSE']
     c(as.numeric(imps > importance_threshold), mean(m$mse))
   }
   stopCluster(cl)
@@ -123,7 +123,7 @@ for(resp in c("FNConc","FNYield")) {
   ntree_vals <- seq(100, 2000, by=100)
   mse_rf1   <- test_numtree_parallel(ntree_vals, as.formula(paste(resp, "~ .")), train_cc)
   best_nt1  <- ntree_vals[which.min(mse_rf1)]
-  tune_mtry <- tuneRF(x_train, y_train, ntreeTry=best_nt1, stepFactor=1.5, improve=0.01, plot=FALSE)
+  tune_mtry <- randomForest::tuneRF(x_train, y_train, ntreeTry=best_nt1, stepFactor=1.5, improve=0.01, plot=FALSE)
   best_mtry1<- tune_mtry[which.min(tune_mtry[,2]),1]
   rf1       <- randomForest(x_train, y_train, ntree=best_nt1, mtry=best_mtry1, importance=TRUE)
   
@@ -177,26 +177,41 @@ preds_df    <- bind_rows(preds_list);   write.csv(preds_df,   file.path(output_d
 features_df <- tibble(response=names(features_list), kept_vars=map_chr(features_list, paste, collapse='; '))
 write.csv(features_df, file.path(output_dir, "Retained_Variables_Per_Model.csv"), row.names=FALSE)
 
-# 7) Generate SHAP values on older70 models
-# Load feature list and SHAP dependencies
-library(iml)
+# 7) Generate SHAP values on older70 RF2 models using fastshap
+# Load fastshap for SHAP value computation
+librarian::shelf(fastshap)
+
+# Read retained features
 feat_df <- read.csv(file.path(output_dir, "Retained_Variables_Per_Model.csv"), stringsAsFactors=FALSE)
+
 for(resp in feat_df$response) {
   kept <- strsplit(feat_df$kept_vars[feat_df$response == resp], "; ")[[1]]
   # Load tuned RF2 model for this response
   model_file <- file.path(output_dir, sprintf("%s_RF2_model.RData", resp))
-  load(model_file)  # should load object `rf2`
-  # Prepare data for SHAP (older70)
+  load(model_file)  # expects object `rf2`
+  
+  # Prepare older70 training data subset
   train_cc <- df_train %>% drop_na(c(resp, kept))
   X_train  <- train_cc[, kept, drop=FALSE]
-  y_train  <- train_cc[[resp]]
-  # Create predictor and compute SHAP
-  predictor <- Predictor$new(rf2, data = X_train, y = y_train, type = "regression")
-  shap <- Shapley$new(predictor, sample.size = nrow(X_train))
+  
+  # Define custom prediction wrapper
+  pred_wrapper <- function(object, newdata) {
+    predict(object, newdata = as.data.frame(newdata))
+  }
+  
+  # Compute SHAP values (nsim = 30 for speed)
+  shap_vals <- fastshap::explain(
+    object       = rf2,
+    X            = X_train,
+    pred_wrapper = pred_wrapper,
+    nsim         = 30,
+    .parallel    = TRUE
+  )
+  
   # Save SHAP results
   out_file <- file.path(output_dir, sprintf("%s_older70_shap.csv", resp))
-  write.csv(shap$results, out_file, row.names = FALSE)
-  message("Saved SHAP for ", resp, " to ", out_file)
+  write.csv(shap_vals, out_file, row.names = FALSE)
+  message("Saved SHAP values for ", resp, " to ", out_file)
 }
 
 # End of pipeline
