@@ -85,10 +85,10 @@ for(resp in c("FNConc","FNYield")) {
     ntree=pars$ntree, mtry=pars$mtry, importance=TRUE
   )
   imp_vals <- randomForest::importance(rf1_full)[,"%IncMSE"]
-  thr_imp  <- quantile(imp_vals[imp_vals>0],0.25,na.rm=TRUE)
+  thr_imp  <- quantile(imp_vals[imp_vals > 0], 0.10, na.rm = TRUE)
   # 6b) bootstrap freqs
   freqs    <- selection_freqs(train_cc, resp, predictors, pars$mtry, pars$ntree, thr_imp, n_boot=100)
-  sel      <- names(freqs[freqs>=0.30])
+  sel      <- names(freqs[freqs>=0.20])
   # 6c) fallback to top-5 if needed
   if(length(sel)<5) {
     sel <- names(sort(freqs, decreasing=TRUE))[1:5]
@@ -110,12 +110,15 @@ for(resp in c("FNConc","FNYield")) {
   obs    <- test_cc[[resp]]
   
   metrics_list[[resp]] <- tibble::tibble(
-    subset="recent30", response=resp,
-    thr_imp, thr_freq=0.30, fallback=fb,
-    R2=cor(obs,pred)^2,
-    RMSE=sqrt(mean((obs-pred)^2)),
-    pRMSE=100*RMSE/mean(obs)
-  )
+       subset        = "recent30",
+       response      = resp,
+       thr_imp       = thr_imp,
+       thr_freq      = thr_freq,  # use the variable you set above
+       used_fallback = fb,
+       R2            = cor(obs, pred)^2,
+       RMSE          = sqrt(mean((obs - pred)^2)),
+       pRMSE         = 100 * RMSE / mean(obs)
+    )
   preds_list[[resp]] <- tibble::tibble(
     subset="recent30", response=resp, observed=obs, predicted=pred
   )
