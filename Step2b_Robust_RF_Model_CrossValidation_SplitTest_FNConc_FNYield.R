@@ -1,190 +1,202 @@
 #!/usr/bin/env Rscript
 # 02_final_rf_pipeline.R
 # ──────────────────────────────────────────────────────────────────────────────
-# Train final RF2 on older70 with fixed thresholds, predict on recent30 & unseen10,
-# record retained features per model.
+# Train RF models on older70, stability‐select features, then predict on recent30 & unseen10
+# for both FNConc and FNYield, using the robust workflow.
 # ──────────────────────────────────────────────────────────────────────────────
 
-# 0) Load packages & set seed
+# 0) Load packages, clear environment, set seed
 librarian::shelf(
-  dplyr, tidyr, purrr, tibble,
-  randomForest, parallel, doParallel, foreach,
-  corrplot, ggplot2
+  remotes, RRF, caret, randomForest, DAAG, party, rpart, rpart.plot,
+  mlbench, pROC, tree, dplyr, plot.matrix, reshape2, rcartocolor,
+  arsenal, googledrive, data.table, ggplot2, corrplot, pdp,
+  iml, tidyr, viridis, parallel, doParallel, foreach
 )
+rm(list = ls())
 set.seed(666)
 
-# 1) Read best thresholds
-best_thresh <- read.csv("best_thresholds.csv", stringsAsFactors = FALSE)
+# 1) Output directory
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Models"
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
-# 2) Read all splits & harmonized to define var_order
-tot_si <- read.csv(
-  sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years_uncleaned.csv", 5),
-  stringsAsFactors = FALSE
-)
-var_order <- c(
-  "NOx","P","npp","evapotrans","greenup_day","precip","temp",
-  "snow_cover","permafrost","elevation","basin_slope","RBI","recession_slope",
-  grep("^land_|^rocks_", names(tot_si), value = TRUE)
-)
-var_order_present <- intersect(var_order, names(tot_si))
+# 2) Utility functions
+save_correlation_plot <- function(driver_cor, name) {
+  png(sprintf("%s/%s_corrplot.png", output_dir, name), width=2500, height=2500, res=300)
+  corrplot(driver_cor, type="lower", pch.col="black", tl.col="black", diag=FALSE)
+  title(sprintf("All Data Yearly %s", name))
+  dev.off()
+}
 
-# zero‐fill land_/rocks_
-rl_cols <- grep("^(land_|rocks_)", names(tot_si), value = TRUE)
-tot_si <- tot_si %>% dplyr::mutate(across(all_of(rl_cols), ~ replace_na(., 0)))
+save_rf_importance_plot <- function(model, name) {
+  png(sprintf("%s/%s_varImp.png", output_dir, name), width=1600, height=1200, res=300)
+  randomForest::varImpPlot(model, main=sprintf("RF2 - %s" ,name))
+  dev.off()
+}
 
-# 3) Load splits
-df_train   <- read.csv("AllDrivers_cc_older70.csv", stringsAsFactors = FALSE) %>%
-  dplyr::mutate(across(all_of(rl_cols), ~ replace_na(., 0))) %>%
-  dplyr::select(-dplyr::contains("Gen"), -dplyr::contains("major"),
-                -Max_Daylength, -Q, -drainage_area) %>%
-  dplyr::mutate(greenup_day = as.numeric(greenup_day))
+save_lm_plot <- function(preds, obs, name) {
+  png(sprintf("%s/%s_pred_vs_obs.png", output_dir, name), width=1500, height=1500, res=300)
+  plot(preds, obs,
+       pch=16, cex=1.5,
+       xlab="Predicted", ylab="Observed",
+       main=sprintf("RF2 %s Predicted vs Observed", name),
+       cex.lab=1.5, cex.axis=1.5, cex.main=1.5)
+  abline(0,1, col="#6699CC", lwd=3, lty=2)
+  dev.off()
+}
 
-df_recent30 <- read.csv("AllDrivers_cc_recent30.csv", stringsAsFactors = FALSE) %>%
-  dplyr::mutate(across(all_of(rl_cols), ~ replace_na(., 0))) %>%
-  dplyr::select(-dplyr::contains("Gen"), -dplyr::contains("major"),
-                -Max_Daylength, -Q, -drainage_area) %>%
-  dplyr::mutate(greenup_day = as.numeric(greenup_day))
-
-df_unseen10 <- read.csv("AllDrivers_cc_unseen10.csv", stringsAsFactors = FALSE) %>%
-  dplyr::mutate(across(all_of(rl_cols), ~ replace_na(., 0))) %>%
-  dplyr::select(-dplyr::contains("Gen"), -dplyr::contains("major"),
-                -Max_Daylength, -Q, -drainage_area) %>%
-  dplyr::mutate(greenup_day = as.numeric(greenup_day))
-
-# 4) RF1‐tuning & stability‐selection helpers (same as script 1)
-tune_rf1 <- function(df, resp, preds,
-                     ntree_try = 200,
-                     ntree_grid = seq(100, 500, by = 100)) {
-  x <- df %>% dplyr::select(all_of(preds))
-  y <- df[[resp]]
-  tr <- randomForest::tuneRF(x, y,
-                             ntreeTry   = ntree_try,
-                             stepFactor = 1.5,
-                             improve    = 0.01,
-                             plot       = FALSE)
-  best_mtry <- tr[which.min(tr[,2]),1]
-  mse_vec <- foreach(nt = ntree_grid, .combine = "c", .packages = "randomForest") %dopar% {
-    mean(randomForest(x, y, ntree = nt, mtry = best_mtry)$mse)
+# Parallel test for ntree choices
+test_numtree_parallel <- function(ntree_list, formula, data) {
+  cores <- detectCores()-1; cl <- makeCluster(cores); registerDoParallel(cl)
+  MSE <- foreach(nt=ntree_list, .combine='c', .packages='randomForest') %dopar% {
+    set.seed(666); mean(randomForest(formula, data=data, ntree=nt, importance=TRUE)$mse)
   }
-  best_nt <- ntree_grid[which.min(mse_vec)]
-  list(mtry = best_mtry, ntree = best_nt)
+  stopCluster(cl); MSE
 }
 
-stability_feats <- function(df, resp, preds,
-                            mtry, ntree, thr_imp, thr_freq,
-                            n_boot = 100) {
-  x <- df %>% dplyr::select(all_of(preds))
-  y <- df[[resp]]
-  sel_mat <- replicate(n_boot, {
-    idx <- sample(nrow(x), replace = TRUE)
-    m   <- randomForest(
-      x[idx, , drop = FALSE],
-      y[idx],
-      ntree      = ntree,
-      mtry       = mtry,
-      importance = TRUE
-    )
-    as.numeric(randomForest::importance(m)[, "%IncMSE"] > thr_imp)
-  })
-  freqs <- rowMeans(sel_mat)
-  names(freqs[freqs >= thr_freq])
+test_numtree_parallel_optimized <- function(ntree_list, formula, data) {
+  cores <- detectCores()-1; cl <- makeCluster(cores); registerDoParallel(cl)
+  MSE <- foreach(nt=ntree_list, .combine='c', .packages='randomForest') %dopar% {
+    set.seed(666); mean(randomForest(formula, data=data, ntree=nt, importance=TRUE, proximity=TRUE)$mse)
+  }
+  stopCluster(cl); MSE
 }
 
-# 5) Parallel setup
-cores <- parallel::detectCores() - 1
-cl    <- parallel::makeCluster(cores)
-doParallel::registerDoParallel(cl)
+# RF stability selection with MSE tracking
+rf_stability_selection_parallel <- function(x, y,
+                                            n_bootstrap=500,
+                                            threshold=0.3,
+                                            ntree=500,
+                                            mtry=NULL,
+                                            importance_threshold=0) {
+  cores <- detectCores()-1; cl <- makeCluster(cores); registerDoParallel(cl)
+  sel_and_mse <- foreach(i=1:n_bootstrap, .combine=rbind, .packages='randomForest') %dopar% {
+    set.seed(123+i)
+    idx <- sample(nrow(x), replace=TRUE)
+    m <- randomForest(x[idx,], y[idx], ntree=ntree, mtry=mtry, importance=TRUE)
+    imps <- importance(m)[, '%IncMSE']
+    c(as.numeric(imps > importance_threshold), mean(m$mse))
+  }
+  stopCluster(cl)
+  sel_mat <- sel_and_mse[, 1:ncol(x)]; freqs <- colMeans(sel_mat)
+  features <- names(freqs[freqs >= threshold])
+  # fallback to top 5 if needed
+  if(length(features)<5) features <- names(sort(freqs, decreasing=TRUE))[1:5]
+  list(features=features, freqs=freqs, mse_vec=sel_and_mse[, ncol(sel_and_mse)])
+}
 
-# 6) Train RF2 on older70 & predict on recent30/unseen10
-metrics_list  <- list()
-preds_list    <- list()
-features_list <- list()
+# 3) Read thresholds & harmonized drivers
+best_thresh <- read.csv("best_thresholds.csv", stringsAsFactors=FALSE)
+record_length <- 5
+harm_file <- sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years_uncleaned.csv", record_length)
+drv_all <- read.csv(harm_file, stringsAsFactors=FALSE)
+vars_all <- c("NOx","P","npp","evapotrans","greenup_day","precip","temp",
+              "snow_cover","permafrost","elevation","basin_slope","RBI","recession_slope",
+              grep("^land_|^rocks_", names(drv_all), value=TRUE))
+vars <- intersect(vars_all, names(drv_all))
+rl_cols <- grep("^(land_|rocks_)", names(drv_all), value=TRUE)
+drv_all <- drv_all %>% mutate(across(all_of(rl_cols), ~ replace_na(., 0)))
 
+# 4) Load splits
+load_split <- function(path) {
+  read.csv(path, stringsAsFactors=FALSE) %>%
+    mutate(across(all_of(rl_cols), ~ replace_na(., 0))) %>%
+    select(-contains("Gen"), -contains("major"), -Max_Daylength, -Q, -drainage_area) %>%
+    mutate(greenup_day = as.numeric(greenup_day))
+}
+df_train   <- load_split("AllDrivers_cc_older70.csv")
+df_recent30 <- load_split("AllDrivers_cc_recent30.csv")
+df_unseen10 <- load_split("AllDrivers_cc_unseen10.csv")
+
+# 5) Loop over responses and run pipeline
+metrics_list <- list(); preds_list <- list(); features_list <- list()
 for(resp in c("FNConc","FNYield")) {
-  # pull thresholds
-  thr_imp  <- best_thresh %>% filter(response == resp) %>% pull(importance)
-  thr_freq <- best_thresh %>% filter(response == resp) %>% pull(stability)
+  message("--- Processing ", resp)
+  # threshold settings
+  thr_imp  <- best_thresh %>% filter(response==resp) %>% pull(importance)
+  thr_freq <- best_thresh %>% filter(response==resp) %>% pull(stability)
   
-  message("Training final RF2 on older70 for ", resp)
-  train_cc <- df_train %>% tidyr::drop_na(all_of(c(resp, var_order_present)))
+  # prepare train data
+  train_cc <- df_train %>% drop_na(c(resp, vars))
+  x_train <- train_cc %>% select(all_of(vars)); y_train <- train_cc[[resp]]
   
-  # RF1 tuning
-  params1 <- tune_rf1(train_cc, resp, var_order_present)
+  # 5a) RF1 tuning on older70
+  ntree_vals <- seq(100, 2000, by=100)
+  mse_rf1   <- test_numtree_parallel(ntree_vals, as.formula(paste(resp, "~ .")), train_cc)
+  best_nt1  <- ntree_vals[which.min(mse_rf1)]
+  tune_mtry <- tuneRF(x_train, y_train, ntreeTry=best_nt1, stepFactor=1.5, improve=0.01, plot=FALSE)
+  best_mtry1<- tune_mtry[which.min(tune_mtry[,2]),1]
+  rf1       <- randomForest(x_train, y_train, ntree=best_nt1, mtry=best_mtry1, importance=TRUE)
   
-  # Stability selection
-  feats <- stability_feats(
-    train_cc, resp, var_order_present,
-    mtry     = params1$mtry,
-    ntree    = params1$ntree,
-    thr_imp  = thr_imp,
-    thr_freq = thr_freq,
-    n_boot   = 200
+  # importance cutoff
+  imps      <- importance(rf1)[, '%IncMSE']
+  thr_imp   <- quantile(imps[imps>0], thr_imp)
+  
+  # 5b) Stability selection
+  stab_res  <- rf_stability_selection_parallel(
+    x=x_train, y=y_train,
+    n_bootstrap=500, threshold=thr_freq,
+    ntree=best_nt1, mtry=best_mtry1,
+    importance_threshold=thr_imp
   )
-  if (length(feats) == 0) feats <- var_order_present
-  features_list[[resp]] <- feats
+  feats     <- stab_res$features; features_list[[resp]] <- feats
   
-  # RF2 tuning & fit
-  df2     <- train_cc[, c(resp, feats), drop = FALSE]
-  params2 <- tune_rf1(df2, resp, feats)
-  rf2     <- randomForest(
-    as.formula(paste(resp, "~ .")),
-    data       = df2,
-    ntree      = params2$ntree,
-    mtry       = params2$mtry,
-    importance = TRUE
-  )
+  # 5c) RF2 tuning on older70
+  df2       <- train_cc[, c(resp, feats)];
+  mse_rf2   <- test_numtree_parallel_optimized(ntree_vals,
+                                               as.formula(paste(resp, "~ .")), df2)
+  best_nt2  <- ntree_vals[which.min(mse_rf2)]
+  tune_mtry2<- tuneRF(df2[feats], df2[[resp]], ntreeTry=best_nt2, stepFactor=1.5, improve=0.01, plot=FALSE)
+  best_mtry2<- tune_mtry2[which.min(tune_mtry2[,2]),1]
+  rf2       <- randomForest(as.formula(paste(resp, "~ .")), data=df2,
+                            ntree=best_nt2, mtry=best_mtry2, importance=TRUE)
   
-  # apply to recent30 & unseen10
+  # 5d) Predict on recent30 & unseen10
   for(sub in c("recent30","unseen10")) {
-    df_test <- get(paste0("df_", sub)) %>%
-      tidyr::drop_na(all_of(c(resp, feats)))
-    if (nrow(df_test) < 5) next
-    
-    preds <- predict(rf2, df_test)
-    obs   <- df_test[[resp]]
-    key   <- paste(sub, resp, sep = "_")
-    
+    df_test <- get(paste0("df_", sub)) %>% drop_na(c(resp, feats))
+    if(nrow(df_test)<5) next
+    pred    <- predict(rf2, df_test); obs <- df_test[[resp]]
+    key     <- paste(sub, resp, sep="_")
     metrics_list[[key]] <- tibble(
-      subset   = sub,
-      response = resp,
-      R2       = cor(obs, preds, use = "complete.obs")^2,
-      RMSE     = sqrt(mean((obs - preds)^2)),
-      pRMSE    = 100 * sqrt(mean((obs - preds)^2)) / mean(obs)
+      subset=sub, response=resp,
+      R2=cor(obs, pred)^2,
+      RMSE=sqrt(mean((obs-pred)^2)),
+      pRMSE=100*sqrt(mean((obs-pred)^2))/mean(obs)
     )
-    
-    preds_list[[key]] <- tibble(
-      subset    = sub,
-      response  = resp,
-      observed  = obs,
-      predicted = preds
-    )
+    preds_list[[key]]   <- tibble(subset=sub, response=resp, observed=obs, predicted=pred)
   }
+  
+  # diagnostic plots
+  save_correlation_plot(cor(x_train), paste0(resp, "_older70"))
+  save_rf_importance_plot(rf2, paste0(resp, "_RF2"))
+  save_lm_plot(predict(rf2, train_cc), y_train, paste0(resp, "_train"))
 }
 
-# 7) Tear down parallel
-stopCluster(cl)
+# 6) Save outputs
+metrics_df  <- bind_rows(metrics_list); write.csv(metrics_df, file.path(output_dir, "metrics_final.csv"), row.names=FALSE)
+preds_df    <- bind_rows(preds_list);   write.csv(preds_df,   file.path(output_dir, "predictions_final.csv"), row.names=FALSE)
+features_df <- tibble(response=names(features_list), kept_vars=map_chr(features_list, paste, collapse='; '))
+write.csv(features_df, file.path(output_dir, "Retained_Variables_Per_Model.csv"), row.names=FALSE)
 
-# 8) Combine & save outputs
-metrics_df  <- bind_rows(metrics_list)
-preds_df    <- bind_rows(preds_list)
-features_df <- tibble(
-  response = names(features_list),
-  kept_vars = map_chr(features_list, ~ paste(.x, collapse = "; "))
-)
+# 7) Generate SHAP values on older70 models
+# Load feature list and SHAP dependencies
+library(iml)
+feat_df <- read.csv(file.path(output_dir, "Retained_Variables_Per_Model.csv"), stringsAsFactors=FALSE)
+for(resp in feat_df$response) {
+  kept <- strsplit(feat_df$kept_vars[feat_df$response == resp], "; ")[[1]]
+  # Load tuned RF2 model for this response
+  model_file <- file.path(output_dir, sprintf("%s_RF2_model.RData", resp))
+  load(model_file)  # should load object `rf2`
+  # Prepare data for SHAP (older70)
+  train_cc <- df_train %>% drop_na(c(resp, kept))
+  X_train  <- train_cc[, kept, drop=FALSE]
+  y_train  <- train_cc[[resp]]
+  # Create predictor and compute SHAP
+  predictor <- Predictor$new(rf2, data = X_train, y = y_train, type = "regression")
+  shap <- Shapley$new(predictor, sample.size = nrow(X_train))
+  # Save SHAP results
+  out_file <- file.path(output_dir, sprintf("%s_older70_shap.csv", resp))
+  write.csv(shap$results, out_file, row.names = FALSE)
+  message("Saved SHAP for ", resp, " to ", out_file)
+}
 
-write.csv(metrics_df,  "metrics_final.csv",             row.names = FALSE)
-write.csv(preds_df,    "predictions_final.csv",         row.names = FALSE)
-write.csv(features_df, "Retained_Variables_Per_Model.csv", row.names = FALSE)
-
-# 9) (Optional) quick plot
-ggplot(preds_df, aes(x = observed, y = predicted)) +
-  geom_point(alpha = 0.6) +
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
-  facet_wrap(~ subset + response, scales = "free", ncol = 2) +
-  theme_minimal() +
-  labs(x = "Observed", y = "Predicted") +
-  geom_text(
-    data = metrics_df,
-    aes(x = Inf, y = -Inf, label = sprintf("R²=%.2f\npRMSE=%.1f%%", R2, pRMSE)),
-    inherit.aes = FALSE, hjust = 1.1, vjust = -0.1, size = 3
-  )
+# End of pipeline

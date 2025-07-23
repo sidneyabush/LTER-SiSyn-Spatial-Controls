@@ -88,7 +88,7 @@ for(resp in c("FNConc","FNYield")) {
   thr_imp  <- quantile(imp_vals[imp_vals > 0], 0.10, na.rm = TRUE)
   # 6b) bootstrap freqs
   freqs    <- selection_freqs(train_cc, resp, predictors, pars$mtry, pars$ntree, thr_imp, n_boot=100)
-  sel      <- names(freqs[freqs>=0.20])
+  sel      <- names(freqs[freqs>=0.50])
   # 6c) fallback to top-5 if needed
   if(length(sel)<5) {
     sel <- names(sort(freqs, decreasing=TRUE))[1:5]
