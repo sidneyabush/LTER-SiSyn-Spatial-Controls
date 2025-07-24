@@ -1,5 +1,5 @@
 # Load needed libraries
-librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr, stringr, readr, corrplot)
+librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr, stringr, readr, corrplot, Cairo)
 
 # Clear environment
 rm(list = ls())
@@ -557,6 +557,14 @@ older70_cc <- trainval_split %>%
 recent30_cc <- trainval_split %>%
   dplyr::filter(split == "recent") %>%
   dplyr::select(-tot_count, -n_recent, -idx, -split)
+
+# Now we want to remove variables we do NOT want to include in our RF Model workflow: 
+cols_to_remove <- c(
+  "drainage_area", "Q", "Stream_Name", "LTER", "Stream_ID2",
+  "P_source", "NOx_source"
+  # Add any others you want to strip from all exports
+)
+
 
 # (Optional) write out
 write.csv(unseen10_cc, "AllDrivers_cc_unseen10.csv", row.names = FALSE)
