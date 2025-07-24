@@ -49,6 +49,17 @@ test_numtree_parallel <- function(ntree_list, formula, data) {
   stopCluster(cl); MSE
 }
 
+# Optimized parallel test for ntree (proximity enabled)
+test_numtree_parallel_optimized <- function(ntree_list, formula, data) {
+  cores <- detectCores() - 1; cl <- makeCluster(cores); registerDoParallel(cl)
+  MSE <- foreach(ntree = ntree_list, .combine = 'c', .packages = 'randomForest') %dopar% {
+    set.seed(666)
+    rf_model <- randomForest(formula, data = data, importance = TRUE, proximity = TRUE, ntree = ntree)
+    mean(rf_model$mse)
+  }
+  stopCluster(cl); MSE
+}
+
 rf_stability_selection_parallel <- function(x, y,
                                             n_bootstrap = 500,
                                             threshold    = 0.8,
