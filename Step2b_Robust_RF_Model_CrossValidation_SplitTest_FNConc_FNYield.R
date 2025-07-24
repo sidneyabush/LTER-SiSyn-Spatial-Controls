@@ -34,17 +34,20 @@ save_predobs <- function(pred,obs,name){
   abline(0,1,lty=2); dev.off()
 }
 
-# 3) ntree scan via x/y interface w/ progress bar
+# 3) ntree scan with progress bar (pbmcapply, x/y interface)
 test_numtree_parallel <- function(tree_grid, x, y) {
   ncores <- parallel::detectCores() - 1
+  # pbmclapply runs in parallel AND shows a progress bar
   pbmcapply::pbmclapply(
     tree_grid,
     function(nt) {
       set.seed(666)
       rf <- randomForest::randomForest(
-        x=x, y=y,
-        importance=TRUE, proximity=TRUE,
-        ntree=nt
+        x = x,
+        y = y,
+        importance = TRUE,
+        proximity  = TRUE,
+        ntree      = nt
       )
       mean(rf$mse)
     },
@@ -52,20 +55,21 @@ test_numtree_parallel <- function(tree_grid, x, y) {
   ) %>% unlist()
 }
 
-# 4) Stability selection via x/y interface w/ progress bar
-auto_stability <- function(x, y, ntree, mtry, imp_thr, freq_thr, n_boot=500) {
+# 4) Stability selection with progress bar (pbapply, x/y interface)
+auto_stability <- function(x, y, ntree, mtry, imp_thr, freq_thr, n_boot = 500) {
+  # create a cluster for pbapply
   cl <- parallel::makeCluster(parallel::detectCores() - 1)
   sel_mat <- pbapply::pbsapply(
     1:n_boot,
     function(i) {
       set.seed(123 + i)
-      idx <- sample(nrow(x), replace=TRUE)
+      idx <- sample(nrow(x), replace = TRUE)
       rf  <- randomForest::randomForest(
-        x = x[idx, , drop=FALSE],
-        y = y[idx],
-        ntree      = ntree,
-        mtry       = mtry,
-        importance = TRUE
+        x         = x[idx, , drop = FALSE],
+        y         = y[idx],
+        ntree     = ntree,
+        mtry      = mtry,
+        importance= TRUE
       )
       imps <- randomForest::importance(rf)[, "%IncMSE"]
       as.integer(imps > imp_thr)
@@ -73,11 +77,15 @@ auto_stability <- function(x, y, ntree, mtry, imp_thr, freq_thr, n_boot=500) {
     cl = cl
   )
   parallel::stopCluster(cl)
+  
   freqs <- rowMeans(sel_mat)
   feats <- names(freqs[freqs >= freq_thr])
-  if(length(feats) < 5) feats <- names(sort(freqs, decreasing=TRUE))[1:5]
+  if (length(feats) < 5) 
+    feats <- names(sort(freqs, decreasing = TRUE))[1:5]
+  
   list(features = feats, frequencies = freqs)
 }
+
 
 # 5) Read data & splits
 rec_len   <- 5
