@@ -1,14 +1,6 @@
-#!/usr/bin/env Rscript
 # 01_threshold_tuning_simple.R
 # ──────────────────────────────────────────────────────────────────────────────
-# Simplified threshold tuning with lower‐quartile importance cutoff and
-# enforced top‐5 fallback:
-#   • tune RF1 on older70
-#   • compute 25th‐percentile importance threshold
-#   • compute per‐feature selection freq over 100 bootstraps
-#   • keep those ≥30%; if <5, take top‐5 by freq
-#   • train RF2 & evaluate on recent30
-#   • record fallback flag
+# Simplified threshold tuning with lower‐quartile importance cutoff 
 # ──────────────────────────────────────────────────────────────────────────────
 
 librarian::shelf(dplyr, tidyr, randomForest, foreach, doParallel, tibble, purrr)
@@ -137,4 +129,4 @@ tibble::tibble(
 dplyr::bind_rows(metrics_list) %>%
   write.csv(file.path(output_dir,"Metrics_Recent30.csv"),row.names=FALSE)
 
-message("✅ Done: features, fallback flags & metrics written to ",output_dir)
+message("Done: features, fallback flags & metrics written to ",output_dir)
