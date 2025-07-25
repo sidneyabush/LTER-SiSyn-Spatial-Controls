@@ -64,7 +64,7 @@ auto_stability <- function(x, y, ntree, mtry, imp_thr, freq_thr, n_boot = 500) {
   }
   parallel::stopCluster(cl)
   freqs <- colMeans(sel_mat[, 1:ncol(x)])
-  feats <- names(freqs[freqs >= freq_thr])
+  feats <- names(freqs)[freqs >= freq_thr]
   if (length(feats) < 5) feats <- names(sort(freqs, decreasing=TRUE))[1:5]
   list(features = feats, frequencies = freqs)
 }
