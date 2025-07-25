@@ -1,4 +1,4 @@
-# Train RF for FNConc: older70 → RF1 → stability → RF2 → predict on recent30 & unseen10
+# Train RF for FNConc: older70 (training) → RF1 → stability → RF2 → predict on recent30 (testing) & unseen10 (cross-validation)
 
 # 0) Load packages & clear
 librarian::shelf(
@@ -99,8 +99,13 @@ df_unseen10 <- load_split("AllDrivers_cc_unseen10.csv")
 resp <- "FNConc"; message("Processing ", resp)
 tree_grid <- seq(100, 2000, 100)
 
-# a) RF1 tuning commented (use cached below)
-#    ...
+# a) RF1 tuning (comment out once run when troubleshooting stability selection)
+# mse1  <- test_numtree_parallel(tree_grid, FNConc ~ ., drivers_numeric)
+# nt1   <- tree_grid[which.min(mse1)]
+# t1    <- randomForest::tuneRF(x,y, ntreeTry=nt1, stepFactor=1.5,...)
+# mtry1 <- t1[which.min(t1[,2]),1]
+# rf1   <- randomForest(x, y, ntree=nt1, mtry=mtry1, importance=TRUE)
+
 # b) Load cached RF1
 load(file.path(output_dir, sprintf("%s_RF1.RData", resp)))  # loads rf1, imps
 
@@ -112,6 +117,7 @@ stab     <- rf_stability_selection_parallel(
   n_bootstrap = 500, threshold = freq_thr,
   ntree = rf1$ntree, mtry = rf1$mtry, importance_threshold = imp_thr
 )
+
 feats <- stab$features
 if (length(feats) < 5) {
   message("Low feature count; falling back to top 5 by frequency.")
@@ -155,8 +161,3 @@ write.csv(metrics, file.path(output_dir, sprintf("Metrics_%s.csv", resp)), row.n
 
 # 8) Stop parallel backend
 parallel::stopCluster(cl)
-
-message("✅ FNConc pipeline complete.")
-parallel::stopCluster(cl)
-
-message("✅ FNConc pipeline complete.")
