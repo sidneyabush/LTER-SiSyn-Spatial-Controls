@@ -104,26 +104,29 @@ df_tr <- df_train %>% drop_na(all_of(c(resp, predictors)))
 x     <- df_tr[predictors]
 y     <- df_tr[[resp]]
 
-# RF1 tuning
-mse1     <- test_numtree_parallel(tree_grid, x, y)
-nt1      <- tree_grid[which.min(mse1)]
-t1       <- randomForest::tuneRF(x, y, ntreeTry=nt1, stepFactor=1.5, improve=0.01, plot=FALSE)
-mtry1    <- t1[which.min(t1[,2]), 1]
-rf1      <- randomForest::randomForest(x, y, ntree=nt1, mtry=mtry1, importance=TRUE)
+# # RF1 tuning
+# mse1     <- test_numtree_parallel(tree_grid, x, y)
+# nt1      <- tree_grid[which.min(mse1)]
+# t1       <- randomForest::tuneRF(x, y, ntreeTry=nt1, stepFactor=1.5, improve=0.01, plot=FALSE)
+# mtry1    <- t1[which.min(t1[,2]), 1]
+# rf1      <- randomForest::randomForest(x, y, ntree=nt1, mtry=mtry1, importance=TRUE)
+# 
+# # After RF1 training
+# rf1   <- randomForest::randomForest(x, y, ntree=nt1, mtry=mtry1, importance=TRUE)
+# imps  <- randomForest::importance(rf1)[, "%IncMSE"]
+# 
+# # Save model and importance scores
+# save(rf1, imps, file = file.path(output_dir, paste0(resp, "_RF1.RData")))
+# 
+# # Save variable importance plot
+# png(
+#   file = file.path(output_dir, paste0(resp, "_RF1_varImp.png")),
+#   width = 8, height = 10, units = "in", res = 300
+# )
+# randomForest::varImpPlot(rf1, main = paste(resp, "- RF1 Variable Importance"))
+# dev.off()
 
-# After RF1 training
-rf1   <- randomForest::randomForest(x, y, ntree=nt1, mtry=mtry1, importance=TRUE)
-imps  <- randomForest::importance(rf1)[, "%IncMSE"]
-
-# Save model and importance scores
-save(rf1, imps, file = file.path(output_dir, paste0(resp, "_RF1.RData")))
-
-# Save variable importance plot
-png(file.path(output_dir, paste0(resp, "_RF1_varImp.png")), width = 1600, height = 1200, res = 300)
-randomForest::varImpPlot(rf1, main = paste(resp, "- RF1 Variable Importance"))
-dev.off()
-
-# To prevent constantly re-running RF1, just load this to test stability selection----
+# To prevent constantly re-running RF1, just load this to test stability selection, then comment out section above if no changes are made----
 load(file.path(output_dir, paste0(resp, "_RF1.RData")))
 
 # Stability selection
@@ -142,6 +145,15 @@ mtry2   <- t2[which.min(t2[,2]), 1]
 rf2     <- randomForest::randomForest(x=df2[feats], y=df2[[resp]], ntree=nt2, mtry=mtry2, importance=TRUE)
 
 save(rf2, file=file.path(output_dir, paste0(resp, "_RF2.RData")))
+
+# Save variable importance plot for RF2
+png(
+  file = file.path(output_dir, paste0(resp, "_RF2_varImp.png")),
+  width = 8, height = 10, units = "in", res = 300
+)
+randomForest::varImpPlot(rf2, main = paste(resp, "- RF2 Variable Importance"))
+dev.off()
+
 
 # Evaluate on recent30 & unseen10
 for (sub in c("recent30", "unseen10")) {
