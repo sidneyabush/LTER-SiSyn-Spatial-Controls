@@ -62,7 +62,8 @@ auto_stability <- function(x, y, ntree, mtry, imp_thr, freq_thr, n_boot = 500) {
   }
   parallel::stopCluster(cl)
   freqs <- colMeans(sel_mat[, 1:ncol(x)])
-  feats <- names(freqs[freqs >= freq_thr])
+  # feats <- names(freqs[freqs >= freq_thr]) WRONG SYNTAX
+  feats <- names(freqs)[freqs >= freq_thr]
   if (length(feats) < 5) feats <- names(sort(freqs, decreasing=TRUE))[1:5]
   list(features = feats, frequencies = freqs)
 }
@@ -109,6 +110,21 @@ nt1      <- tree_grid[which.min(mse1)]
 t1       <- randomForest::tuneRF(x, y, ntreeTry=nt1, stepFactor=1.5, improve=0.01, plot=FALSE)
 mtry1    <- t1[which.min(t1[,2]), 1]
 rf1      <- randomForest::randomForest(x, y, ntree=nt1, mtry=mtry1, importance=TRUE)
+
+# After RF1 training
+rf1   <- randomForest::randomForest(x, y, ntree=nt1, mtry=mtry1, importance=TRUE)
+imps  <- randomForest::importance(rf1)[, "%IncMSE"]
+
+# Save model and importance scores
+save(rf1, imps, file = file.path(output_dir, paste0(resp, "_RF1.RData")))
+
+# Save variable importance plot
+png(file.path(output_dir, paste0(resp, "_RF1_varImp.png")), width = 1600, height = 1200, res = 300)
+randomForest::varImpPlot(rf1, main = paste(resp, "- RF1 Variable Importance"))
+dev.off()
+
+# To prevent constantly re-running RF1, just load this to test stability selection----
+load(file.path(output_dir, paste0(resp, "_RF1.RData")))
 
 # Stability selection
 imp_thr  <- quantile(randomForest::importance(rf1)[, "%IncMSE"], 0.50)
