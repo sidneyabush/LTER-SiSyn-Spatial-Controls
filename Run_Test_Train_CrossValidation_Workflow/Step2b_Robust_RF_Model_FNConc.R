@@ -97,9 +97,10 @@ df_unseen10 <- load_split("AllDrivers_cc_unseen10.csv")
 
 # 7) Core pipeline for FNConc
 resp <- "FNConc"; message("Processing ", resp)
-tree_grid <- seq(100, 2000, 100)
+# tree_grid <- seq(100, 2000, 100) # Robust
+tree_grid <- seq(100, 800, 100)    # Testing
 
-# a) RF1 tuning (comment out once run when troubleshooting stability selection)
+# a) RF1 tuning (comment out once run once)
 # mse1  <- test_numtree_parallel(tree_grid, FNConc ~ ., drivers_numeric)
 # nt1   <- tree_grid[which.min(mse1)]
 # t1    <- randomForest::tuneRF(x,y, ntreeTry=nt1, stepFactor=1.5,...)
@@ -112,11 +113,21 @@ load(file.path(output_dir, sprintf("%s_RF1.RData", resp)))  # loads rf1, imps
 # c) Stability selection
 imp_thr  <- quantile(imps, 0.50)
 freq_thr <- 0.80
-stab     <- rf_stability_selection_parallel(
-  x = df_train[predictors], y = df_train[[resp]],
-  n_bootstrap = 500, threshold = freq_thr,
-  ntree = rf1$ntree, mtry = rf1$mtry, importance_threshold = imp_thr
+message("Starting stability selection…")
+start <- Sys.time()
+
+stab <- rf_stability_selection_parallel(
+  x = df_train[predictors], 
+  y = df_train[[resp]],
+  n_bootstrap = 10,      # Testing
+  threshold   = freq_thr,
+  ntree       = rf1$ntree, 
+  mtry        = rf1$mtry, 
+  importance_threshold = imp_thr
 )
+
+end <- Sys.time()
+message("Stability selection took ", round(end - start, 2), " ", units(end - start))
 
 feats <- stab$features
 if (length(feats) < 5) {
@@ -125,14 +136,37 @@ if (length(feats) < 5) {
 }
 
 # d) RF2 on selected features
-# define formula once using tree_grid
+message("Starting RF2 tuning…")
+start <- Sys.time()
+
 formula2 <- as.formula(paste(resp, "~ ."))
-# reuse tree_grid defined above rather than regenerating inside
-mse2  <- test_numtree_parallel(tree_grid, formula2, df2 <- df_train %>% drop_na(all_of(c(resp, feats))) %>% select(all_of(c(resp, feats))))
-nt2   <- tree_grid[which.min(mse2)]
-t2    <- randomForest::tuneRF(df2[feats], df2[[resp]], ntreeTry = nt2, stepFactor = 1.5, improve = 0.01, plot = FALSE)
-mtry2 <- t2[which.min(t2[,2]),1]
-rf2   <- randomForest(x=df2[feats], y=df2[[resp]], ntree=nt2, mtry=mtry2, importance=TRUE)
+df2 <- df_train %>%
+  drop_na(all_of(c(resp, feats))) %>%
+  select(all_of(c(resp, feats)))
+
+mse2 <- test_numtree_parallel(tree_grid, formula2, df2)
+nt2  <- tree_grid[which.min(mse2)]
+
+t2   <- randomForest::tuneRF(
+  x         = df2[feats],
+  y         = df2[[resp]],
+  ntreeTry  = nt2,
+  stepFactor= 1.5,
+  improve   = 0.01,
+  plot      = FALSE
+)
+mtry2 <- t2[which.min(t2[,2]), 1]
+
+rf2 <- randomForest(
+  x         = df2[feats],
+  y         = df2[[resp]],
+  ntree     = nt2,
+  mtry      = mtry2,
+  importance= TRUE
+)
+
+end <- Sys.time()
+message("RF2 tuning took ", round(end - start, 2), " ", units(end - start))
 
 # e) Save RF2 & drivers for SHAP
 save(rf2, file=file.path(output_dir, sprintf("%s_Yearly_rf_model2.RData", resp)))
@@ -158,6 +192,86 @@ metrics <- bind_rows(
   evaluate_sub(df_unseen10, "unseen10")
 )
 write.csv(metrics, file.path(output_dir, sprintf("Metrics_%s.csv", resp)), row.names=FALSE)
+
+# h) Save retained-feature list
+tibble(response = resp,
+       kept_vars = paste(feats, collapse = "; ")) %>%
+  write.csv(file.path(output_dir, paste0("Retained_Variables_", resp, ".csv")),
+            row.names = FALSE)
+
+# i) Gather predictions for train, test, and CV
+pred_list <- list()
+
+# – Train (older70)
+df_tr <- df_train %>% drop_na(all_of(c(resp, feats)))
+pred_list[["older70"]] <- tibble(
+  subset    = "older70",
+  observed  = df_tr[[resp]],
+  predicted = predict(rf2, df_tr)
+)
+
+# – recent30 & unseen10
+for(sub in c("recent30", "unseen10")) {
+  df_te <- get(paste0("df_", sub)) %>%
+    drop_na(all_of(c(resp, feats)))
+  pred_list[[sub]] <- tibble(
+    subset    = sub,
+    observed  = df_te[[resp]],
+    predicted = predict(rf2, df_te)
+  )
+}
+
+pred_df <- bind_rows(pred_list)
+write.csv(pred_df,
+          file.path(output_dir, paste0("Predictions_", resp, ".csv")),
+          row.names = FALSE)
+
+# j) Quick diagnostics: corr, varImp, pred vs obs
+save_correlation_plot(cor(df_train[predictors]), output_dir)
+save_rf_importance_plot(rf2, output_dir)
+save_lm_plot(rf2, pred_df$observed, output_dir)
+
+# k) Faceted Predicted vs Observed plot
+# (ggplot2 is already loaded)
+pred_df <- pred_df %>%
+  mutate(subset = recode(subset,
+                         "older70"  = "Train",
+                         "recent30" = "Test",
+                         "unseen10" = "Cross-Validation"))
+
+metrics_df <- pred_df %>%
+  group_by(subset) %>%
+  summarise(
+    R2    = round(cor(observed, predicted)^2, 2),
+    RMSE  = round(sqrt(mean((observed - predicted)^2)), 2),
+    pRMSE = round(100 * RMSE / mean(observed), 1),
+    .groups = "drop"
+  ) %>%
+  mutate(label = paste0("R² = ", R2, "\nRMSE = ", RMSE, "\n%RMSE = ", pRMSE, "%"))
+
+p <- ggplot(pred_df, aes(x = predicted, y = observed, color = subset)) +
+  geom_point(alpha = 0.6, size = 2) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  scale_color_manual(values = c("Train" = "#1b9e77",
+                                "Test"  = "#d95f02",
+                                "Cross-Validation" = "#7570b3")) +
+  geom_text(data = metrics_df,
+            aes(x = Inf, y = -Inf, label = label),
+            inherit.aes = FALSE,
+            hjust = 1.1, vjust = -0.3,
+            size = 4) +
+  facet_wrap(~subset) +
+  theme_bw() +
+  labs(
+    title = paste("Predicted vs Observed:", resp),
+    x = "Predicted", y = "Observed", color = "Dataset"
+  )
+
+ggsave(
+  file.path(output_dir,
+            paste0("Fig_Predicted_vs_Observed_", resp, "_annotated.png")),
+  p, width = 10, height = 6, dpi = 300
+)
 
 # 8) Stop parallel backend
 parallel::stopCluster(cl)
