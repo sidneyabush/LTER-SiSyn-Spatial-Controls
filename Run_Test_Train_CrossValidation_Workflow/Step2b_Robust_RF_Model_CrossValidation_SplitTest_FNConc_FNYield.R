@@ -1,5 +1,3 @@
-#!/usr/bin/env Rscript
-# 02_final_rf_pipeline_robust.R
 # ──────────────────────────────────────────────────────────────────────────────
 # Train RF1 on older70, run stability selection, train RF2, predict on recent30 & unseen10.
 # ──────────────────────────────────────────────────────────────────────────────
@@ -9,6 +7,7 @@ librarian::shelf(
   randomForest, dplyr, tidyr, purrr, tibble,
   parallel, doParallel, foreach, corrplot, ggplot2
 )
+
 rm(list=ls()); set.seed(666)
 
 # 1) Paths
@@ -71,6 +70,7 @@ vars      <- c(
   "snow_cover","permafrost","elevation","basin_slope","RBI","recession_slope",
   grep("^land_|^rocks_", names(drv_all), value=TRUE)
 )
+
 predictors <- intersect(vars, names(drv_all))
 rl_cols    <- grep("^(land_|rocks_)", names(drv_all), value=TRUE)
 load_split <- function(path) {
