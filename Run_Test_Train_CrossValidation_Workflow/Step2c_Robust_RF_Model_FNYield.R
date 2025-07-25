@@ -166,6 +166,14 @@ bind_rows(results_met) %>%
 bind_rows(results_pred) %>%
   write.csv(file.path(output_dir, paste0("Predictions_", resp, ".csv")), row.names=FALSE)
 
+# Save SHAP-ready RF2 model and input matrix for FNYield
+rf_model2       <- rf2
+kept_drivers    <- df2[feats]
+drivers_numeric <- df2  # Includes response + features for reference
+
+save(rf_model2, kept_drivers, drivers_numeric,
+     file = file.path(output_dir, "FNYield_Yearly_rf_model2.RData"))
+
 # Create quick plot to compare each subset: 
 # Load predictions
 pred_df <- read_csv("Final_Models/Predictions_FNYield.csv")

@@ -1,60 +1,70 @@
-#!/usr/bin/env Rscript
-# 03_shap_recent30.R
 # ──────────────────────────────────────────────────────────────────────────────
-# Load saved RF2 models & retained features, then compute SHAP on recent30.
-# Usage:
-#   Rscript 03_shap_recent30.R
+# Compute SHAP values for recent30 data using RF2 models for FNConc and FNYield
+# Saves SHAP values as .RData for plotting later
 # ──────────────────────────────────────────────────────────────────────────────
 
-# 0) Load packages & clear
-librarian::shelf(dplyr, tidyr, randomForest, fastshap, tibble)
-rm(list=ls()); set.seed(666)
-
-# 1) Paths
-models_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Models"
-data_dir   <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files"
-
-# 2) Load retained‐features table
-feat_df <- read.csv(
-  file.path(models_dir, "Retained_Variables_Per_Model.csv"),
-  stringsAsFactors = FALSE
+# 1. Load needed packages
+librarian::shelf(
+  iml, ggplot2, dplyr, tidyr, reshape2, parallel, foreach,
+  randomForest, tibble, viridis, RColorBrewer, patchwork, fastshap
 )
-# Expect columns: response, kept_vars (semicolon‑separated)
 
-# 3) Load recent30 data
-setwd(data_dir)
-rl_cols <- grep("^(land_|rocks_)", names(read.csv("AllDrivers_Harmonized_Yearly_filtered_5_years_uncleaned.csv")), value=TRUE)
-df_recent30 <- read.csv("AllDrivers_cc_recent30.csv") %>%
-  mutate(across(all_of(rl_cols), ~ replace_na(., 0))) %>%
-  select(-contains("Gen"), -contains("major"), -Max_Daylength, -Q, -drainage_area) %>%
-  mutate(greenup_day = as.numeric(greenup_day))
+# 2. Clear environment
+rm(list = ls()); set.seed(123)
 
-# 4) Compute SHAP for each response (no progress bar)
-for(resp in feat_df$response) {
-  # parse feature names
-  kept <- strsplit(feat_df$kept_vars[feat_df$response == resp], ";\\s*")[[1]]
+# 3. Set working directory
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
+
+# Define the path to your Final_Models folder
+final_models_dir <- "Final_Models"
+
+# ------------------------- FNConc Data (Concentration) -------------------------
+# 4. Load FNConc model/data from Final_Models
+load(file.path(final_models_dir, "FNConc_Yearly_rf_model2.RData"))   
+rf_model2_FNConc <- rf_model2
+
+load(file.path(final_models_dir, "FNConc_Yearly_kept_drivers.RData"))
+kept_drivers_FNConc <- kept_drivers
+
+# ------------------------- FNYield Data (Yield) -------------------------
+# 5. Load FNYield model/data from Final_Models
+load(file.path(final_models_dir, "FNYield_Yearly_rf_model2.RData"))   
+rf_model2_FNYield <- rf_model2
+
+load(file.path(final_models_dir, "FNYield_Yearly_kept_drivers.RData"))
+kept_drivers_FNYield <- kept_drivers
+
+###############################################################################
+# 6. Define Function to Create SHAP Values
+###############################################################################
+generate_shap_values <- function(model, kept_drivers, sample_size = 30) {
+  custom_predict <- function(object, newdata) {
+    newdata <- as.data.frame(newdata)
+    predict(object, newdata = newdata)
+  }
   
-  # load the RF2 model
-  load(file.path(models_dir, sprintf("%s_RF2.RData", resp)))  # loads 'rf2'
-  
-  # subset recent30 to rows with no NA in resp or kept
-  df_te <- df_recent30 %>% drop_na(all_of(c(resp, kept)))
-  X     <- df_te[, kept, drop=FALSE]
-  
-  # SHAP compute (nsim = 30; parallel within fastshap)
-  wrap <- function(object, newdata) predict(object, newdata = newdata)
-  shap_vals <- fastshap::explain(
-    object       = rf2,
-    X            = X,
-    pred_wrapper = wrap,
-    nsim         = 30,
-    .parallel    = TRUE
+  shap_values <- fastshap::explain(
+    object       = model,
+    X            = kept_drivers,
+    pred_wrapper = custom_predict,
+    nsim         = sample_size
   )
-  
-  # save to CSV
-  out_file <- file.path(models_dir, sprintf("%s_recent30_shap.csv", resp))
-  write.csv(shap_vals, out_file, row.names = FALSE)
-  message("Saved SHAP for ", resp, " -> ", out_file)
+  return(shap_values)
 }
 
-message("All SHAP files written to ", models_dir)
+###############################################################################
+# 7. Generate SHAP Values for Both FNConc and FNYield
+###############################################################################
+shap_values_FNConc  <- generate_shap_values(rf_model2_FNConc,  kept_drivers_FNConc,  sample_size = 30)
+shap_values_FNYield <- generate_shap_values(rf_model2_FNYield, kept_drivers_FNYield, sample_size = 30)
+
+###############################################################################
+# 8. Save SHAP Values to Final_Models
+###############################################################################
+save(shap_values_FNConc,
+     file = file.path(final_models_dir, "FNConc_Yearly_shap_values_recent30.RData"))
+
+save(shap_values_FNYield,
+     file = file.path(final_models_dir, "FNYield_Yearly_shap_values_recent30.RData"))
+
+message("SHAP values successfully written for both FNConc and FNYield.")
