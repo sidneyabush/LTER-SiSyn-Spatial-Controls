@@ -18,7 +18,6 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmoniz
 wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
   dplyr::rename(LTER = LTER.x) %>%
   filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
-  # filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc) %>%
   dplyr::select(-Conc, -Flux, -PeriodLong, -PeriodStart, -LTER.y, -contains("date"),
                  -contains("month"), -min_year, -max_year, -duration) %>%
   dplyr::mutate(
@@ -115,7 +114,6 @@ print(num_unique_stream_ids_with_na)
 print(unique_stream_ids_with_na)
 
 gc()
-
 
 # -----------------------------------------------------------
 # Import Recession Curve Slope Data and Merge with tot ----
@@ -746,145 +744,145 @@ num_unique_stream_ids <- tot %>%
 
 print(num_unique_stream_ids)
 
-## ------------------------------------------------------- ##
-#  Silicate Weathering ----
-## ------------------------------------------------------- ##
-# Read and prepare data
-mapped_lithologies <- fread("mapped_lithologies.csv")
-
-# Convert `tot` and `mapped_lithologies` to data.tables
-setDT(tot)
-setDT(mapped_lithologies)
-
-# Ensure compatibility in the major_rock column for merging
-tot[, major_rock := as.character(major_rock)]
-mapped_lithologies[, major_rock := as.character(major_rock)]
-
-###############################################################################
-# EARLY FILTERING: Remove sites without valid major rock type
-###############################################################################
-print("\n=== APPLYING EARLY FILTERING FOR MAJOR_ROCK ===")
-
-# Check what will be filtered out
-rows_before <- nrow(tot)
-missing_major_rock <- sum(is.na(tot$major_rock))
-blank_major_rock <- sum(trimws(tot$major_rock) == "", na.rm = TRUE)
-zero_major_rock <- sum(tot$major_rock == "0", na.rm = TRUE)
-total_to_filter <- missing_major_rock + blank_major_rock + zero_major_rock
-
-print(paste("Rows with missing major_rock:", missing_major_rock))
-print(paste("Rows with blank major_rock:", blank_major_rock))
-print(paste("Rows with '0' major_rock:", zero_major_rock))
-print(paste("Total rows to be filtered out:", total_to_filter))
-print(paste("Rows that will remain:", rows_before - total_to_filter))
-
-# Apply the early filtering - REMOVE SITES WITH major_rock = "0", NA, or blank
-tot <- tot[!is.na(major_rock) & 
-             trimws(major_rock) != "" & 
-             major_rock != "0"]
-
-print(paste("Actual rows after filtering:", nrow(tot)))
-
-# Verify filtering worked as expected
-if(nrow(tot) == (rows_before - total_to_filter)) {
-  print("✓ Early filtering successful!")
-} else {
-  print("✗ Filtering didn't work as expected")
-}
-
-# Report which Stream_IDs were removed (if any)
-if(total_to_filter > 0) {
-  print("Sites removed due to invalid major_rock:")
-  # This would require the original data to show what was removed
-  # Just report that filtering occurred
-  print(paste("Successfully removed", total_to_filter, "observations"))
-}
-
-###############################################################################
-# Continue with weathering analysis on filtered data
-###############################################################################
-
-# Perform the merge and filter out NA values in mapped_lithology
-weathering <- merge(tot[, .(Stream_ID, Year, major_rock, Q, temp, drainSqKm)],
-                    mapped_lithologies[, .(major_rock, mapped_lithology)],
-                    by = "major_rock", all.x = TRUE)
-weathering <- weathering[!is.na(mapped_lithology)]  # Remove rows with NA in mapped_lithology
-
-# Constants for weathering calculations
-seconds_per_year <- 31536000
-kg_per_m3 <- 1000
-km2_to_m2 <- 10^6
-R <- 8.314
-
-# Define lithology parameters as a data.table
-lithology_params <- data.table(
-  mapped_lithology = c("su", "vb", "pb", "py", "va", "vi", "ss", "pi", "sm", "mt", "pa"),
-  b = c(0.003364, 0.007015, 0.007015, 0.0061, 0.002455, 0.007015, 0.005341, 0.007015, 0.012481, 0.007626, 0.005095),
-  sp = c(1, 1, 1, 1, 1, 1, 0.64, 0.58, 0.24, 0.25, 0.58),
-  sa = c(60, 50, 50, 46, 60, 50, 60, 60, 60, 60, 60)
-)
-
-# Convert temperature to Kelvin for calculations
-weathering[, temp := as.numeric(temp)]
-weathering[, temp_K := temp + 273.15]
-
-# Calculate runoff based on the given formula
-weathering[, runoff := (Q * seconds_per_year * kg_per_m3) / (drainSqKm * km2_to_m2)]
-
-# Define a function for vectorized calculation of weathering
-calculate_weathering_vectorized <- function(lithologies, runoff, temp_k) {
-  lithologies_split <- strsplit(lithologies, ",\\s*")
-  weathering_results <- sapply(seq_along(lithologies_split), function(i) {
-    liths <- lithologies_split[[i]]
-    weathering_values <- sapply(liths, function(lith) {
-      params <- lithology_params[mapped_lithology == lith]
-      if (nrow(params) == 0) stop(paste("Lithology not found in the table for", lith))
-      params$b * (params$sp * exp(((1000 * params$sa) / R) * ((1 / 284.2) - (1 / temp_k[i])))) * runoff[i]
-    })
-    mean(weathering_values, na.rm = TRUE)
-  })
-  return(weathering_results)
-}
-
-# Calculate silicate weathering for each row in the weathering data
-weathering[, silicate_weathering := calculate_weathering_vectorized(mapped_lithology, runoff, temp_K), by = .(Stream_ID, Year)]
-
-setDT(weathering)
-
-# Ensure 'Stream_ID' and 'Year' are compatible types
-tot[, Stream_ID := as.character(Stream_ID)]
-tot[, Year := as.integer(Year)]
-weathering[, Stream_ID := as.character(Stream_ID)]
-weathering[, Year := as.integer(Year)]
-
-# Calculate silicate weathering for each row in the weathering data
-weathering[, silicate_weathering := calculate_weathering_vectorized(mapped_lithology, runoff, temp_K)]
-
-# Ensure uniqueness in the datasets
-weathering <- unique(weathering, by = c("Stream_ID", "Year"))
-tot <- unique(tot, by = c("Stream_ID", "Year"))
-
-# Perform the merge correctly
-tryCatch({
-  tot <- merge(
-    tot,
-    weathering[, .(Stream_ID, Year, silicate_weathering)],
-    by = c("Stream_ID", "Year"),
-    all.x = TRUE,
-    allow.cartesian = FALSE
-  )
-}, error = function(e) {
-  message("Error encountered during merge: ", e$message)
-})
-
-# Clean up memory
-gc()
-
-# Verify the number of unique Stream_IDs after filtering
-num_unique_stream_ids <- tot %>%
-  pull(Stream_ID) %>%
-  n_distinct()
-print(paste("Unique Stream_IDs after early filtering:", num_unique_stream_ids))
+# ## ------------------------------------------------------- ##
+# #  Silicate Weathering ----
+# ## ------------------------------------------------------- ##
+# # Read and prepare data
+# mapped_lithologies <- fread("mapped_lithologies.csv")
+# 
+# # Convert `tot` and `mapped_lithologies` to data.tables
+# setDT(tot)
+# setDT(mapped_lithologies)
+# 
+# # Ensure compatibility in the major_rock column for merging
+# tot[, major_rock := as.character(major_rock)]
+# mapped_lithologies[, major_rock := as.character(major_rock)]
+# 
+# ###############################################################################
+# # EARLY FILTERING: Remove sites without valid major rock type
+# ###############################################################################
+# print("\n=== APPLYING EARLY FILTERING FOR MAJOR_ROCK ===")
+# 
+# # Check what will be filtered out
+# rows_before <- nrow(tot)
+# missing_major_rock <- sum(is.na(tot$major_rock))
+# blank_major_rock <- sum(trimws(tot$major_rock) == "", na.rm = TRUE)
+# zero_major_rock <- sum(tot$major_rock == "0", na.rm = TRUE)
+# total_to_filter <- missing_major_rock + blank_major_rock + zero_major_rock
+# 
+# print(paste("Rows with missing major_rock:", missing_major_rock))
+# print(paste("Rows with blank major_rock:", blank_major_rock))
+# print(paste("Rows with '0' major_rock:", zero_major_rock))
+# print(paste("Total rows to be filtered out:", total_to_filter))
+# print(paste("Rows that will remain:", rows_before - total_to_filter))
+# 
+# # Apply the early filtering - REMOVE SITES WITH major_rock = "0", NA, or blank
+# tot <- tot[!is.na(major_rock) & 
+#              trimws(major_rock) != "" & 
+#              major_rock != "0"]
+# 
+# print(paste("Actual rows after filtering:", nrow(tot)))
+# 
+# # Verify filtering worked as expected
+# if(nrow(tot) == (rows_before - total_to_filter)) {
+#   print("✓ Early filtering successful!")
+# } else {
+#   print("✗ Filtering didn't work as expected")
+# }
+# 
+# # Report which Stream_IDs were removed (if any)
+# if(total_to_filter > 0) {
+#   print("Sites removed due to invalid major_rock:")
+#   # This would require the original data to show what was removed
+#   # Just report that filtering occurred
+#   print(paste("Successfully removed", total_to_filter, "observations"))
+# }
+# 
+# ###############################################################################
+# # Continue with weathering analysis on filtered data
+# ###############################################################################
+# 
+# # Perform the merge and filter out NA values in mapped_lithology
+# weathering <- merge(tot[, .(Stream_ID, Year, major_rock, Q, temp, drainSqKm)],
+#                     mapped_lithologies[, .(major_rock, mapped_lithology)],
+#                     by = "major_rock", all.x = TRUE)
+# weathering <- weathering[!is.na(mapped_lithology)]  # Remove rows with NA in mapped_lithology
+# 
+# # Constants for weathering calculations
+# seconds_per_year <- 31536000
+# kg_per_m3 <- 1000
+# km2_to_m2 <- 10^6
+# R <- 8.314
+# 
+# # Define lithology parameters as a data.table
+# lithology_params <- data.table(
+#   mapped_lithology = c("su", "vb", "pb", "py", "va", "vi", "ss", "pi", "sm", "mt", "pa"),
+#   b = c(0.003364, 0.007015, 0.007015, 0.0061, 0.002455, 0.007015, 0.005341, 0.007015, 0.012481, 0.007626, 0.005095),
+#   sp = c(1, 1, 1, 1, 1, 1, 0.64, 0.58, 0.24, 0.25, 0.58),
+#   sa = c(60, 50, 50, 46, 60, 50, 60, 60, 60, 60, 60)
+# )
+# 
+# # Convert temperature to Kelvin for calculations
+# weathering[, temp := as.numeric(temp)]
+# weathering[, temp_K := temp + 273.15]
+# 
+# # Calculate runoff based on the given formula
+# weathering[, runoff := (Q * seconds_per_year * kg_per_m3) / (drainSqKm * km2_to_m2)]
+# 
+# # Define a function for vectorized calculation of weathering
+# calculate_weathering_vectorized <- function(lithologies, runoff, temp_k) {
+#   lithologies_split <- strsplit(lithologies, ",\\s*")
+#   weathering_results <- sapply(seq_along(lithologies_split), function(i) {
+#     liths <- lithologies_split[[i]]
+#     weathering_values <- sapply(liths, function(lith) {
+#       params <- lithology_params[mapped_lithology == lith]
+#       if (nrow(params) == 0) stop(paste("Lithology not found in the table for", lith))
+#       params$b * (params$sp * exp(((1000 * params$sa) / R) * ((1 / 284.2) - (1 / temp_k[i])))) * runoff[i]
+#     })
+#     mean(weathering_values, na.rm = TRUE)
+#   })
+#   return(weathering_results)
+# }
+# 
+# # Calculate silicate weathering for each row in the weathering data
+# weathering[, silicate_weathering := calculate_weathering_vectorized(mapped_lithology, runoff, temp_K), by = .(Stream_ID, Year)]
+# 
+# setDT(weathering)
+# 
+# # Ensure 'Stream_ID' and 'Year' are compatible types
+# tot[, Stream_ID := as.character(Stream_ID)]
+# tot[, Year := as.integer(Year)]
+# weathering[, Stream_ID := as.character(Stream_ID)]
+# weathering[, Year := as.integer(Year)]
+# 
+# # Calculate silicate weathering for each row in the weathering data
+# weathering[, silicate_weathering := calculate_weathering_vectorized(mapped_lithology, runoff, temp_K)]
+# 
+# # Ensure uniqueness in the datasets
+# weathering <- unique(weathering, by = c("Stream_ID", "Year"))
+# tot <- unique(tot, by = c("Stream_ID", "Year"))
+# 
+# # Perform the merge correctly
+# tryCatch({
+#   tot <- merge(
+#     tot,
+#     weathering[, .(Stream_ID, Year, silicate_weathering)],
+#     by = c("Stream_ID", "Year"),
+#     all.x = TRUE,
+#     allow.cartesian = FALSE
+#   )
+# }, error = function(e) {
+#   message("Error encountered during merge: ", e$message)
+# })
+# 
+# # Clean up memory
+# gc()
+# 
+# # Verify the number of unique Stream_IDs after filtering
+# num_unique_stream_ids <- tot %>%
+#   pull(Stream_ID) %>%
+#   n_distinct()
+# print(paste("Unique Stream_IDs after early filtering:", num_unique_stream_ids))
 
 
 # -----------------------------------------------------------
@@ -995,7 +993,7 @@ drivers_df <- tot_annual %>%
   mutate(across(where(is.character), ~ na_if(., ""))) %>%
   dplyr::select(FNConc, everything()) %>%
   # Replace NAs in selected numeric columns with 0 (if desired)
-  mutate_at(vars(21:36), ~ replace(., is.na(.), 0)) %>%
+  mutate_at(vars(25:39), ~ replace(., is.na(.), 0)) %>%
   filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc) %>%
   filter(complete.cases(.))
 
@@ -1288,3 +1286,5 @@ ggsave(
   hist_all,
   width  = 24, height = 16, dpi = 300, bg = "white"
 )
+
+print(unique(drivers_df$Stream_ID))
