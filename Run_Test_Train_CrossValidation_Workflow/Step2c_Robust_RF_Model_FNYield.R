@@ -166,6 +166,7 @@ bind_rows(results_met) %>%
 bind_rows(results_pred) %>%
   write.csv(file.path(output_dir, paste0("Predictions_", resp, ".csv")), row.names=FALSE)
 
+# Create quick plot to compare each subset: 
 # Load predictions
 pred_df <- read_csv("Final_Models/Predictions_FNYield.csv")
 
@@ -176,13 +177,35 @@ pred_df <- pred_df %>%
                          "recent30" = "Test",
                          "unseen10" = "Cross-Validation"))
 
-# Plot
+# Compute R², RMSE, pRMSE per subset
+metrics_df <- pred_df %>%
+  group_by(subset) %>%
+  summarise(
+    R2    = round(cor(observed, predicted)^2, 2),
+    RMSE  = round(sqrt(mean((observed - predicted)^2, na.rm = TRUE)), 2),
+    pRMSE = round(100 * RMSE / mean(observed, na.rm = TRUE), 1),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    label = paste0("R² = ", R2, "\nRMSE = ", RMSE, "\n%RMSE = ", pRMSE, "%")
+  )
+
+# Create plot with annotations
 p <- ggplot(pred_df, aes(x = predicted, y = observed, color = subset)) +
   geom_point(alpha = 0.6, size = 2) +
   geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey40") +
   scale_color_manual(
     values = c("Train" = "#1b9e77", "Test" = "#d95f02", "Cross-Validation" = "#7570b3")
   ) +
+  geom_text(
+    data = metrics_df,
+    aes(x = Inf, y = -Inf, label = label),
+    inherit.aes = FALSE,
+    hjust = 1.1, vjust = -0.3,
+    size = 4,
+    color = "black"
+  ) +
+  facet_wrap(~subset) +
   theme_bw() +
   labs(
     title = "Predicted vs Observed: FNYield",
@@ -192,4 +215,4 @@ p <- ggplot(pred_df, aes(x = predicted, y = observed, color = subset)) +
   )
 
 # Save the plot
-ggsave("Final_Models/Fig_Predicted_vs_Observed_FNYield.png", p, width = 8, height = 6, dpi = 300)
+ggsave("Final_Models/Fig_Predicted_vs_Observed_FNYield_annotated.png", p, width = 10, height = 6, dpi = 300)
