@@ -602,21 +602,7 @@ write.csv(older70,     "AllDrivers_cc_older70.csv", row.names=FALSE)
 write.csv(recent30,    "AllDrivers_cc_recent30.csv",row.names=FALSE)
 
 # =============================================================================
-# 12) Histograms with fixed axes
-# =============================================================================
-
-# Save long-format histogram data for creating plots later:
-full_long <- drivers_df %>%
-  pivot_longer(cols=c(NOx,P,npp,evapotrans,greenup_day,precip,temp,
-                      snow_cover,permafrost,elevation,basin_slope,
-                      RBI,recession_slope,starts_with("land_"),starts_with("rocks_")),
-               names_to="driver",values_to="value") %>%
-  mutate(value = if_else(driver %in% c("NOx", "P"), log10(value), value))
-
-write.csv(full_long, "Final_Figures/histogram_input_full_long.csv", row.names = FALSE)
-
-# =============================================================================
-# 13) Recalculate median NOx & P per subset
+# 12) Recalculate median NOx & P per subset
 # =============================================================================
 recalc_medians <- function(df) {
   df %>%
@@ -632,7 +618,6 @@ med_full     <- recalc_medians(drivers_df)
 med_unseen10 <- recalc_medians(unseen10_df)
 med_older70  <- recalc_medians(older70)
 med_recent30 <- recalc_medians(recent30)
-
 
 # =============================================================================
 # Quick sanity check: Count unique Stream_IDs in each subset
