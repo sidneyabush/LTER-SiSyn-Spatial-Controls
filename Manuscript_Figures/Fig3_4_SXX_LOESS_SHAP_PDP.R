@@ -51,9 +51,8 @@ make_shap_loess_grid <- function(shap_matrix, drivers_data, response,
                                  units_expr, recode_map){
   lims <- range(response, na.rm = TRUE)
   label_for <- function(feat){
-    if (grepl("^rocks_", feat)) {
-      sub("^rocks_", "Rock: ", tools::toTitleCase(feat))
-    } else recode_map[[feat]] %||% feat
+    # ALWAYS use recode_map for every feature, including rocks_*
+    recode_map[[feat]] %||% feat
   }
   panels <- map(colnames(shap_matrix), function(feat){
     df <- tibble(
@@ -147,7 +146,7 @@ build_panel3 <- function(feat, idx) {
       )
     ) +
     labs(
-      x = recode_map[[feat]],
+      x = recode_map[[feat]],    # use recode_map directly
       y = if (idx %% 2 == 1) "SHAP value" else NULL
     ) +
     theme_classic(base_size = 18) +
@@ -179,8 +178,8 @@ shared_leg3 <- get_legend(leg3)
 panels3 <- map2(present3, seq_along(present3), build_panel3)
 grid3   <- plot_grid(
   plotlist = panels3, ncol = 2,
-  labels   = LETTERS[1:length(panels3)],
-  label_size = 16, label_fontface = "plain", align = "hv"
+  labels        = LETTERS[1:length(panels3)],
+  label_size    = 16, label_fontface = "plain", align = "hv"
 )
 fig3_recent30 <- plot_grid(grid3, shared_leg3, ncol = 1, rel_heights = c(1, 0.1))
 
@@ -190,7 +189,7 @@ ggsave(
 )
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 12) Fig 4: Yield SHAP–LOESS grid (4 panels, log scale)
+# 12) Fig 4: Yield SHAP–LOESS grid (4 panels, linear fill scale)
 # ──────────────────────────────────────────────────────────────────────────────
 yield_feats4 <- c("recession_slope","land_Wetland_Marsh","npp","NOx")
 present4   <- intersect(yield_feats4, colnames(shap_FNYield))
@@ -209,16 +208,16 @@ build_panel4 <- function(feat, idx) {
     geom_point(shape = 21, color = "darkgray", size = 2.7, alpha = 0.9) +
     geom_smooth(method = "loess", se = FALSE, size = 1, color = "#6699CC") +
     scale_fill_gradient(
-      low   = "white", high = "black",
-      trans = "log10",
-      name  = expression("log(Yield) (kg " * km^{-2} * " yr"^{-1} * ")"),
-      guide = guide_colourbar(
+      low = "white", high = "black",
+      limits = c(global_y_min, global_y_max),
+      name   = expression("Yield (kg " * km^-2 * " yr"^-1 * ")"),
+      guide  = guide_colourbar(
         title.position = "top", title.hjust = 0.5,
         barwidth = unit(20, "lines"), barheight = unit(0.6, "cm")
       )
     ) +
     labs(
-      x = recode_map[[feat]],
+      x = recode_map[[feat]],    # use recode_map directly
       y = if (idx %% 2 == 1) "SHAP value" else NULL
     ) +
     theme_classic(base_size = 18) +
@@ -256,7 +255,7 @@ grid4   <- plot_grid(
 fig4_recent30 <- plot_grid(grid4, shared_leg4, ncol = 1, rel_heights = c(1, 0.1))
 
 ggsave(
-  "Final_Figures/Fig4_recent30_Yield_SHAP_grid_log.png",
+  "Final_Figures/Fig4_recent30_Yield_SHAP_grid_linear.png",
   fig4_recent30, width = 12, height = 11.2, dpi = 300, bg = "white"
 )
 
