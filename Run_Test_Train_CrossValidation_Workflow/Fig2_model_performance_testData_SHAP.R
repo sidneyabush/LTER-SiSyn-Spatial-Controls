@@ -31,29 +31,29 @@ load(file.path(fm, "FNYield_Yearly_kept_drivers.RData")); KD_FY  <- kept_drivers
 load(file.path(fm, "FNConc_Yearly_numeric.RData"));  DN_FN  <- drivers_numeric
 load(file.path(fm, "FNYield_Yearly_numeric.RData")); DN_FY  <- drivers_numeric
 
-# 4. Recode & **per‐dataset** scale setup
+# 4. Recode & per‐dataset scale setup
 recode_map <- setNames(
   c("N","P","NPP","ET","Greenup Day","Precip","Temp","Snow Cover","Permafrost",
     "Elevation","Basin Slope","Flashiness (RBI)","Recession Curve Slope",
     "Land: Bare","Land: Cropland","Land: Forest","Land: Grass & Shrub",
     "Land: Ice & Snow","Land: Impervious","Land: Salt Water","Land: Tidal Wetland",
-    "Land: Water Body","Land: Wetland Marsh", "Rock: Volcanic", "Rock: Sedimentary", "Rock: Carbonate Evaporite",
-    "Rock: Metamorphic", "Rock: Plutonic"),
-  
+    "Land: Water Body","Land: Wetland Marsh", "Rock: Volcanic", "Rock: Sedimentary", 
+    "Rock: Carbonate Evaporite","Rock: Metamorphic", "Rock: Plutonic"),
   c("NOx","P","npp","evapotrans","greenup_day","precip","temp",
     "snow_cover","permafrost","elevation","basin_slope","RBI",
     "recession_slope","land_Bare","land_Cropland","land_Forest",
     "land_Grassland_Shrubland","land_Ice_Snow","land_Impervious",
-    "land_Salt_Water","land_Tidal_Wetland","land_Water","land_Wetland_Marsh", "rocks_volcanic",
-    "rocks_sedimentary", "rocks_carbonate_evaporite", "rocks_metamorphic", "rocks_plutonic")
+    "land_Salt_Water","land_Tidal_Wetland","land_Water","land_Wetland_Marsh",
+    "rocks_volcanic","rocks_sedimentary","rocks_carbonate_evaporite",
+    "rocks_metamorphic","rocks_plutonic")
 )
 
-# 4.1 Log‐transform & rescale **FNConc** drivers 0–1
+# 4.1 Log‐transform & rescale FNConc drivers 0–1
 kept_FNConc_scaled <- KD_FN %>%
   mutate(P = log10(P)) %>%
   mutate(across(everything(), ~ scales::rescale(., to = c(0,1))))
 
-# 4.2 Log‐transform & rescale **FNYield** drivers 0–1
+# 4.2 Log‐transform & rescale FNYield drivers 0–1
 kept_FNYield_scaled <- KD_FY %>%
   mutate(NOx = log10(NOx), P = log10(P)) %>%
   mutate(across(everything(), ~ scales::rescale(., to = c(0,1))))
@@ -69,9 +69,7 @@ dot_plot <- function(SV, KD_s) {
   val_df  <- KD_s %>% mutate(id = row_number()) %>%
     pivot_longer(-id, names_to="feature", values_to="val")
   df <- left_join(shap_df, val_df, by = c("id","feature")) %>%
-    mutate(
-      pretty = recode(feature, !!!recode_map, .default = NA_character_)
-    ) %>%
+    mutate(pretty = recode(feature, !!!recode_map, .default = NA_character_)) %>%
     filter(!is.na(pretty))
   ord <- df %>% group_by(pretty) %>% summarize(m = mean(abs(shap))) %>%
     arrange(desc(m)) %>% pull(pretty)
@@ -86,7 +84,7 @@ dot_plot <- function(SV, KD_s) {
       name   = "Scaled Value",
       guide  = guide_colourbar(
         barheight      = unit(1.3, "cm"),
-        barwidth       = unit(20,  "lines"),
+        barwidth       = unit(20, "lines"),
         title.position = "top",
         title.theme    = element_text(size = 22, hjust = 0.5),
         label.theme    = element_text(size = 20)
@@ -94,9 +92,9 @@ dot_plot <- function(SV, KD_s) {
     ) +
     labs(x = NULL, y = NULL) +
     theme_classic(base_size = 22) +
-    theme(axis.text = element_text(size = 20),
+    theme(axis.text       = element_text(size = 20),
           legend.position = "right",
-          legend.direction = "horizontal")
+          legend.direction= "horizontal")
 }
 
 # 6. Bar‐plot function (unchanged)
@@ -104,9 +102,7 @@ bar_plot <- function(SV) {
   bs <- as.data.frame(SV) %>% pivot_longer(
     everything(), names_to="feature", values_to="shap"
   ) %>% group_by(feature) %>% summarize(m = mean(abs(shap), na.rm = TRUE)) %>%
-    mutate(
-      pretty = recode(feature, !!!recode_map, .default = NA_character_)
-    ) %>%
+    mutate(pretty = recode(feature, !!!recode_map, .default = NA_character_)) %>%
     filter(!is.na(pretty)) %>%
     arrange(desc(m))
   bs$pretty <- factor(bs$pretty, levels = rev(bs$pretty))
@@ -116,7 +112,7 @@ bar_plot <- function(SV) {
     theme_classic(base_size = 22)
 }
 
-# 7. Build panels A & B (unchanged)
+# 7. Build panels A & B
 # 7.1 New colors & labels
 subset_cols_new <- c(
   older70  = "#E41A1C",  # Test
@@ -129,7 +125,7 @@ subset_labels_new <- c(
   unseen10 = "Cross‑Validation"
 )
 
-# 7.2 Compute performance metrics for FNConc
+# 7.2 Compute metrics for FNConc
 metrics_FNConc <- pred_FNConc %>%
   group_by(subset) %>%
   summarize(
@@ -137,11 +133,8 @@ metrics_FNConc <- pred_FNConc %>%
     pRMSE = sqrt(mean((predicted - observed)^2)) / mean(observed) * 100,
     .groups = "drop"
   )
-
-fn_xmin <- min(pred_FNConc$predicted)
-fn_xmax <- max(pred_FNConc$predicted)
-fn_ymin <- min(pred_FNConc$observed)
-fn_ymax <- max(pred_FNConc$observed)
+fn_xmin <- min(pred_FNConc$predicted); fn_xmax <- max(pred_FNConc$predicted)
+fn_ymin <- min(pred_FNConc$observed);  fn_ymax <- max(pred_FNConc$observed)
 fn_yrng <- fn_ymax - fn_ymin
 
 # 7.3 Panel A: Concentration
@@ -154,7 +147,7 @@ A_full <- ggplot(pred_FNConc, aes(predicted, observed, color = subset)) +
     x     = fn_xmin + 0.05 * (fn_xmax - fn_xmin),
     y     = fn_ymax - 0 * 0.12 * fn_yrng,
     label = with(filter(metrics_FNConc, subset=="older70"),
-                 sprintf(" R² = %.3f, pRMSE = %.1f%%", R2, pRMSE)),
+                 sprintf("R²=%.3f, pRMSE=%.1f%%", R2, pRMSE)),
     hjust = 0, size = 6, color = subset_cols_new["older70"]
   ) +
   annotate(
@@ -162,7 +155,7 @@ A_full <- ggplot(pred_FNConc, aes(predicted, observed, color = subset)) +
     x     = fn_xmin + 0.05 * (fn_xmax - fn_xmin),
     y     = fn_ymax - 1 * 0.12 * fn_yrng,
     label = with(filter(metrics_FNConc, subset=="recent30"),
-                 sprintf(" R² = %.3f, pRMSE = %.1f%%", R2, pRMSE)),
+                 sprintf("R²=%.3f, pRMSE=%.1f%%", R2, pRMSE)),
     hjust = 0, size = 6, color = subset_cols_new["recent30"]
   ) +
   annotate(
@@ -170,13 +163,13 @@ A_full <- ggplot(pred_FNConc, aes(predicted, observed, color = subset)) +
     x     = fn_xmin + 0.05 * (fn_xmax - fn_xmin),
     y     = fn_ymax - 2 * 0.12 * fn_yrng,
     label = with(filter(metrics_FNConc, subset=="unseen10"),
-                 sprintf(" R² = %.3f, pRMSE = %.1f%%", R2, pRMSE)),
+                 sprintf("R²=%.3f, pRMSE=%.1f%%", R2, pRMSE)),
     hjust = 0, size = 6, color = subset_cols_new["unseen10"]
   ) +
   labs(x = "Predicted", y = "Observed", title = "Concentration", tag = "A") +
   theme_classic(base_size = 22)
 
-# 7.4 Compute performance metrics for FNYield
+# 7.4 Compute metrics for FNYield
 metrics_FNYield <- pred_FNYield %>%
   group_by(subset) %>%
   summarize(
@@ -184,11 +177,8 @@ metrics_FNYield <- pred_FNYield %>%
     pRMSE = sqrt(mean((predicted - observed)^2)) / mean(observed) * 100,
     .groups = "drop"
   )
-
-fy_xmin <- min(pred_FNYield$predicted)
-fy_xmax <- max(pred_FNYield$predicted)
-fy_ymin <- min(pred_FNYield$observed)
-fy_ymax <- max(pred_FNYield$observed)
+fy_xmin <- min(pred_FNYield$predicted); fy_xmax <- max(pred_FNYield$predicted)
+fy_ymin <- min(pred_FNYield$observed);  fy_ymax <- max(pred_FNYield$observed)
 fy_yrng <- fy_ymax - fy_ymin
 
 # 7.5 Panel B: Yield
@@ -201,7 +191,7 @@ B_full <- ggplot(pred_FNYield, aes(predicted, observed, color = subset)) +
     x     = fy_xmin + 0.05 * (fy_xmax - fy_xmin),
     y     = fy_ymax - 0 * 0.12 * fy_yrng,
     label = with(filter(metrics_FNYield, subset=="older70"),
-                 sprintf(" R² = %.3f, pRMSE = %.1f%%", R2, pRMSE)),
+                 sprintf("R²=%.3f, pRMSE=%.1f%%", R2, pRMSE)),
     hjust = 0, size = 6, color = subset_cols_new["older70"]
   ) +
   annotate(
@@ -209,7 +199,7 @@ B_full <- ggplot(pred_FNYield, aes(predicted, observed, color = subset)) +
     x     = fy_xmin + 0.05 * (fy_xmax - fy_xmin),
     y     = fy_ymax - 1 * 0.12 * fy_yrng,
     label = with(filter(metrics_FNYield, subset=="recent30"),
-                 sprintf(" R² = %.3f, pRMSE = %.1f%%", R2, pRMSE)),
+                 sprintf("R²=%.3f, pRMSE=%.1f%%", R2, pRMSE)),
     hjust = 0, size = 6, color = subset_cols_new["recent30"]
   ) +
   annotate(
@@ -217,23 +207,67 @@ B_full <- ggplot(pred_FNYield, aes(predicted, observed, color = subset)) +
     x     = fy_xmin + 0.05 * (fy_xmax - fy_xmin),
     y     = fy_ymax - 2 * 0.12 * fy_yrng,
     label = with(filter(metrics_FNYield, subset=="unseen10"),
-                 sprintf(" R² = %.3f, pRMSE = %.1f%%", R2, pRMSE)),
+                 sprintf("R²=%.3f, pRMSE=%.1f%%", R2, pRMSE)),
     hjust = 0, size = 6, color = subset_cols_new["unseen10"]
   ) +
   labs(x = "Predicted", y = NULL, title = "Yield", tag = "B") +
   theme_classic(base_size = 22)
 
-# 7a. Combine A & B with shared legend
+# 7a. Combine A & B with shared legend, no more manual rel_widths
 AB_panels <- plot_grid(
-  A_full + theme(legend.position = "none"),
-  B_full + theme(legend.position = "none"),
+  A_full + theme(legend.position="none") +
+    scale_x_continuous(expand = expansion(mult = c(0.05, 0.05))),
+  B_full + theme(legend.position="none") +
+    scale_x_continuous(expand = expansion(mult = c(0.05, 0.05))),
+  ncol  = 2,
+  align = "h",
+  axis  = "tblr"
+)
+AB_leg <- get_legend(A_full + theme(legend.position="right",
+          legend.direction= "horizontal"))
+AB     <- plot_grid(AB_panels, AB_leg, ncol = 1, rel_heights = c(1, 0.15))
+
+# 8. Panels C & D (unchanged)
+CD <- plot_grid(
+  bar_plot(SV_FN) + labs(tag="C") + theme(plot.tag=element_text(size=24), plot.tag.position=c(0.02,0.98)),
+  bar_plot(SV_FY) + labs(tag="D") + theme(plot.tag=element_text(size=24), plot.tag.position=c(0.02,0.98)),
+  ncol=2, align="h", axis="tblr"
+)
+
+library(grid)  # for unit()
+
+# 9. Panels E & F using per‐dataset scaled values, proper x‐axis padding, no clipping:
+E_full <- dot_plot(SV_FN, kept_FNConc_scaled) +
+  labs(tag = "E") +
+  scale_x_continuous(expand = expansion(mult = c(0.05, 0.05))) +
+  coord_cartesian(clip = "off") +
+  theme(
+    plot.margin = unit(c(5, 20, 5, 5), "pt"),  # top, right, bottom, left
+    legend.position = "none"
+  )
+
+F_full <- dot_plot(SV_FY, kept_FNYield_scaled) +
+  labs(tag = "F") +
+  scale_x_continuous(expand = expansion(mult = c(0.05, 0.05))) +
+  coord_cartesian(clip = "off") +
+  theme(
+    plot.margin = unit(c(5, 20, 5, 5), "pt"),
+    legend.position = "none"
+  )
+
+EF_panels <- plot_grid(
+  E_full,
+  F_full,
   ncol       = 2,
   align      = "h",
   axis       = "tblr",
-  rel_widths = c(0.9,0.9)
+  rel_widths = c(1, 1)
 )
-AB_leg <- get_legend(
-  A_full +
+
+EF_leg <- get_legend(
+  dot_plot(SV_FN, kept_FNConc_scaled) +
+    scale_x_continuous(expand = expansion(mult = c(0.05, 0.05))) +
+    coord_cartesian(clip = "off") +
     theme(
       legend.position      = "right",
       legend.direction     = "horizontal",
@@ -243,50 +277,25 @@ AB_leg <- get_legend(
       legend.key.height    = unit(1,   "lines")
     )
 )
-AB <- plot_grid(
-  AB_panels,
-  AB_leg,
+
+EF <- plot_grid(
+  EF_panels,
+  EF_leg,
   ncol        = 1,
-  rel_heights = c(1, 0.15)
+  rel_heights = c(1, 0.15),
+  clip        = FALSE
 )
 
-
-# 8. Panels C & D (unchanged)
-CD <- plot_grid(
-  bar_plot(SV_FN) + labs(tag="C") + theme(plot.tag=element_text(size=24), plot.tag.position=c(0.02,0.98)),
-  bar_plot(SV_FY) + labs(tag="D") + theme(plot.tag=element_text(size=24), plot.tag.position=c(0.02,0.98)),
-  ncol=2, align="h", axis="tblr", rel_widths=c(1,1)
-)
-
-# 9. Panels E & F using per‐dataset scaled values
-E_full <- dot_plot(SV_FN,  kept_FNConc_scaled) + labs(tag="E")
-F_full <- dot_plot(SV_FY, kept_FNYield_scaled) + labs(tag="F")
-
-EF_panels <- plot_grid(
-  E_full + theme(legend.position="none"),
-  F_full + theme(legend.position="none"),
-  ncol = 2, align = "h", axis = "tblr", rel_widths = c(0.8,0.8)
-)
-EF_leg <- get_legend(
-  E_full +
-    theme(legend.position="right",
-          legend.direction="horizontal",
-          legend.justification="center",
-          legend.title=element_text(size=22),
-          legend.text=element_text(size=20),
-          legend.key.width=unit(1.5,"lines"),
-          legend.key.height=unit(1,"lines"))
-)
-EF <- plot_grid(EF_panels, EF_leg, ncol = 1, rel_heights = c(1, 0.5))
 
 # 10. Final assemble
 final_fig2 <- plot_grid(
   AB,
   CD,
   EF,
-  ncol = 1,
-  rel_heights = c(1.3, 1.3, 1.3)
+  ncol        = 1,
+  rel_heights = c(1, 1, 1)
 )
+
 
 # 11. Save
 ggsave(
