@@ -227,7 +227,7 @@ rf1   <- randomForest(x = x1, y = y1,
                       importance = TRUE)
 
 # cache RF1 and importances
-imps <- importance(rf1)[, "%IncMSE"]
+imps <- randomForest::importance(rf1)[, "%IncMSE"]
 save(rf1, imps,
      file = file.path(output_dir, sprintf("%s_RF1.RData", resp)))
 
