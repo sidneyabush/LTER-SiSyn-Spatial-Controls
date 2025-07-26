@@ -30,16 +30,16 @@ save_correlation_plot <- function(driver_cor, output_dir) {
   dev.off()
 }
 
-ave_rf_importance_plot <- function(rf_model, output_dir) {
+save_rf_importance_plot <- function(rf_model, output_dir) {
   png(
-    filename = sprintf("%s/RF_variable_importance_FNYield_Yearly_5_years.png", output_dir),
+    filename = sprintf("%s/RF_variable_importance_FNConc_Yearly_5_years.png", output_dir),
     width    = 10,        # inches
     height   = 10,           # inches
     units    = "in",        # specify inches
     res      = 300          # dpi
   )
   randomForest::varImpPlot(rf_model,
-                           main = "rf_model2 - Yearly FNYield",
+                           main = "rf_model2 - Yearly FNConc",
                            col  = "darkblue")
   dev.off()
 }
