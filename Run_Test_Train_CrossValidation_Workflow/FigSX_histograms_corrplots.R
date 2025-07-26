@@ -5,15 +5,28 @@ rm(list = ls())
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files")
 
 # Load libraries
-librarian::shelf(dplyr, readr, tidyr, stringr)
+librarian::shelf(dplyr, readr, tidyr, stringr, ggplot2)
+
+theme_set(
+  theme_bw(base_size = 20) +
+    theme(
+      panel.background  = element_rect(fill = "white", colour = NA),
+      plot.background   = element_rect(fill = "white", colour = NA),
+      legend.background = element_rect(fill = "white", colour = NA),
+      legend.key        = element_rect(fill = "white", colour = NA),
+      panel.grid.major  = element_blank(),
+      panel.grid.minor  = element_blank()
+    )
+)
 
 # Read split datasets
-older70     <- read_csv("AllDrivers_cc_older70.csv", show_col_types = FALSE)     %>% mutate(subset = "older70")
-recent30    <- read_csv("AllDrivers_cc_recent30.csv", show_col_types = FALSE)    %>% mutate(subset = "recent30")
-unseen10_df <- read_csv("AllDrivers_cc_unseen10.csv", show_col_types = FALSE)    %>% mutate(subset = "unseen10")
+older70     <- read_csv("AllDrivers_cc_older70.csv", show_col_types = FALSE)     %>% mutate(subset = "Training")
+recent30    <- read_csv("AllDrivers_cc_recent30.csv", show_col_types = FALSE)    %>% mutate(subset = "Testing")
+unseen10_df <- read_csv("AllDrivers_cc_unseen10.csv", show_col_types = FALSE)    %>% mutate(subset = "Cross-Validation")
 
-# Combine
-hist_input_df <- bind_rows(older70, recent30, unseen10_df)
+# Combine and set order
+hist_input_df <- bind_rows(older70, recent30, unseen10_df) %>%
+  mutate(subset = factor(subset, levels = c("Training", "Testing", "Cross-Validation")))
 
 # Pivot longer for plotting
 hist_long <- hist_input_df %>%
@@ -24,24 +37,66 @@ hist_long <- hist_input_df %>%
                names_to = "driver", values_to = "value") %>%
   mutate(value = if_else(driver %in% c("NOx", "P"), log10(value), value))
 
+# Recode variable names to pretty labels
+recode_map <- setNames(
+  c("log(N)","log(P)","NPP","ET","Greenup Day","Precip","Temp","Snow Cover","Permafrost",
+    "Elevation","Basin Slope","Flashiness (RBI)","Recession Curve Slope",
+    "Land: Bare","Land: Cropland","Land: Forest","Land: Grass & Shrub",
+    "Land: Ice & Snow","Land: Impervious","Land: Salt Water","Land: Tidal Wetland",
+    "Land: Water Body","Land: Wetland Marsh","Rock: Volcanic","Rock: Sedimentary",
+    "Rock: Carbonate Evaporite","Rock: Metamorphic","Rock: Plutonic"),
+  
+  c("NOx","P","npp","evapotrans","greenup_day","precip","temp",
+    "snow_cover","permafrost","elevation","basin_slope","RBI",
+    "recession_slope","land_Bare","land_Cropland","land_Forest",
+    "land_Grassland_Shrubland","land_Ice_Snow","land_Impervious",
+    "land_Salt_Water","land_Tidal_Wetland","land_Water","land_Wetland_Marsh",
+    "rocks_volcanic","rocks_sedimentary","rocks_carbonate_evaporite",
+    "rocks_metamorphic","rocks_plutonic")
+)
+
+driver_order <- c(
+  "log(N)", "log(P)", "NPP", "ET", "Greenup Day", "Precip",
+  "Temp", "Snow Cover", "Permafrost", "Elevation", "Basin Slope", "Flashiness (RBI)",
+  "Recession Curve Slope", "Land: Bare", "Land: Cropland", "Land: Forest",
+  "Land: Grass & Shrub", "Land: Ice & Snow", "Land: Impervious",
+  "Land: Salt Water", "Land: Tidal Wetland", "Land: Water Body",
+  "Land: Wetland Marsh", "Rock: Volcanic", "Rock: Sedimentary",
+  "Rock: Carbonate Evaporite", "Rock: Metamorphic", "Rock: Plutonic"
+)
+
+hist_long <- hist_long %>%
+  mutate(
+    driver = recode(driver, !!!recode_map),
+    driver = factor(driver, levels = driver_order)
+  )
 
 # Create the plot object
 p <- ggplot(hist_long, aes(x = value, fill = subset)) +
   geom_histogram(position = "identity", alpha = 0.5, bins = 30) +
   facet_wrap(~ driver, scales = "free", ncol = 4) +
-  scale_fill_manual(values = c(
-    older70   = "#E41A1C",
-    recent30  = "#377EB8",
-    unseen10  = "#4DAF4A"
-  )) +
-  labs(x = "Value", y = "Count", fill = "Subset") +
-  theme_bw(base_size = 14) +
+  scale_fill_manual(
+    values = c(
+      "Training"            = "#5A5A5A",  
+      "Testing"             = "#B45A3E", 
+      "Cross-Validation"    = "#2E7F6B"
+    ),
+    guide = guide_legend(override.aes = list(alpha = 1))
+  ) +
+  labs(x = "Value", y = "Count", fill = NULL) +
   theme(
-    legend.position = "right",
-    strip.background = element_blank(),
-    strip.text = element_text(face = "bold")
-  )
+      legend.position = "bottom",
+      legend.direction = "horizontal",
+      legend.key.size = unit(1.5, "lines"),   
+      legend.text = element_text(size = 18),  
+      legend.title = element_blank(),
+      strip.background = element_blank())
 
 # Save to file
-ggsave("Final_Figures/overlapping_histograms_by_subset.png", plot = p,
-       width = 16, height = 12, dpi = 300)
+ggsave(
+  filename = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures/FigSX_histograms.png",
+  plot     = p,
+  width    = 16,
+  height   = 18,
+  dpi      = 300
+)

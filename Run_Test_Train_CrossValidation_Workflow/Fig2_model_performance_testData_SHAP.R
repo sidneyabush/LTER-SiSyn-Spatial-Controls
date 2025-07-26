@@ -58,6 +58,7 @@ recode_map <- setNames(
     "rocks_volcanic","rocks_sedimentary","rocks_carbonate_evaporite",
     "rocks_metamorphic","rocks_plutonic")
 )
+
 kept_FNConc_scaled  <- KD_FN  %>% 
   mutate(P = log10(P)) %>% 
   mutate(across(everything(), ~ rescale(., to=c(0,1))))

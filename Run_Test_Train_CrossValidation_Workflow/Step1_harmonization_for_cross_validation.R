@@ -330,6 +330,9 @@ lulc_wide <- lulc %>%
     names_prefix = "land_"
   )
 
+lulc_wide <- lulc_wide %>% 
+  dplyr::select(-land_Filled_Value)
+
 land_cols <- grep("^land_", names(lulc_wide), value = TRUE)
 lulc_wide <- lulc_wide %>%
   mutate(
