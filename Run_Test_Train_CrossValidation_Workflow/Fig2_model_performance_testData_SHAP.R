@@ -117,38 +117,149 @@ bar_plot <- function(SV) {
 }
 
 # 7. Build panels A & B (unchanged)
-subset_cols <- c("older70"="#1b9e77","recent30"="#d95f02","unseen10"="#7570b3")
-lm_theme <- theme_classic(base_size = 22)
+# 7. Build panels A & B (updated) ----
 
+# 7.1 New colors & labels
+subset_cols_new <- c(
+  older70  = "#E41A1C",  # Test
+  recent30 = "#377EB8",  # Train
+  unseen10 = "#4DAF4A"   # Cross‑Validation
+)
+subset_labels_new <- c(
+  older70  = "Test",
+  recent30 = "Train",
+  unseen10 = "Cross‑Validation"
+)
+
+# 7.2 Compute performance metrics for FNConc
+metrics_FNConc <- pred_FNConc %>%
+  group_by(subset) %>%
+  summarize(
+    R2    = cor(predicted, observed)^2,
+    pRMSE = sqrt(mean((predicted - observed)^2)) / mean(observed) * 100,
+    .groups = "drop"
+  )
+
+fn_xmin <- min(pred_FNConc$predicted)
+fn_xmax <- max(pred_FNConc$predicted)
+fn_ymin <- min(pred_FNConc$observed)
+fn_ymax <- max(pred_FNConc$observed)
+fn_yrng <- fn_ymax - fn_ymin
+
+# 7.3 Panel A: Concentration
 A_full <- ggplot(pred_FNConc, aes(predicted, observed, color = subset)) +
-  geom_point(size = 3, alpha = 0.8) + geom_abline(linetype = "dashed") +
-  scale_color_manual(values = subset_cols, name = "Subset") +
+  geom_point(size = 4, alpha = 0.4) +
+  geom_abline(linetype = "dashed") +
+  scale_color_manual(
+    values = subset_cols_new,
+    name   = NULL,
+    labels = subset_labels_new
+  ) +
+  annotate(
+    "text",
+    x     = fn_xmin + 0.05 * (fn_xmax - fn_xmin),
+    y     = fn_ymax - 0 * 0.12 * fn_yrng,
+    label = with(filter(metrics_FNConc, subset=="older70"),
+                 sprintf("Test: R²=%.2f, pRMSE=%.1f%%", R2, pRMSE)),
+    hjust = 0, size = 5, color = subset_cols_new["older70"]
+  ) +
+  annotate(
+    "text",
+    x     = fn_xmin + 0.05 * (fn_xmax - fn_xmin),
+    y     = fn_ymax - 1 * 0.12 * fn_yrng,
+    label = with(filter(metrics_FNConc, subset=="recent30"),
+                 sprintf("Train: R²=%.2f, pRMSE=%.1f%%", R2, pRMSE)),
+    hjust = 0, size = 5, color = subset_cols_new["recent30"]
+  ) +
+  annotate(
+    "text",
+    x     = fn_xmin + 0.05 * (fn_xmax - fn_xmin),
+    y     = fn_ymax - 2 * 0.12 * fn_yrng,
+    label = with(filter(metrics_FNConc, subset=="unseen10"),
+                 sprintf("Cross‑Validation: R²=%.2f, pRMSE=%.1f%%", R2, pRMSE)),
+    hjust = 0, size = 5, color = subset_cols_new["unseen10"]
+  ) +
   labs(x = "Predicted", y = "Observed", title = "Concentration", tag = "A") +
-  lm_theme
+  theme_classic(base_size = 22)
 
+# 7.4 Compute performance metrics for FNYield
+metrics_FNYield <- pred_FNYield %>%
+  group_by(subset) %>%
+  summarize(
+    R2    = cor(predicted, observed)^2,
+    pRMSE = sqrt(mean((predicted - observed)^2)) / mean(observed) * 100,
+    .groups = "drop"
+  )
+
+fy_xmin <- min(pred_FNYield$predicted)
+fy_xmax <- max(pred_FNYield$predicted)
+fy_ymin <- min(pred_FNYield$observed)
+fy_ymax <- max(pred_FNYield$observed)
+fy_yrng <- fy_ymax - fy_ymin
+
+# 7.5 Panel B: Yield
 B_full <- ggplot(pred_FNYield, aes(predicted, observed, color = subset)) +
-  geom_point(size = 3, alpha = 0.8) + geom_abline(linetype = "dashed") +
-  scale_color_manual(values = subset_cols, name = "Subset") +
+  geom_point(size = 4, alpha = 0.4) +
+  geom_abline(linetype = "dashed") +
+  scale_color_manual(
+    values = subset_cols_new,
+    name   = NULL,
+    labels = subset_labels_new
+  ) +
+  annotate(
+    "text",
+    x     = fy_xmin + 0.05 * (fy_xmax - fy_xmin),
+    y     = fy_ymax - 0 * 0.12 * fy_yrng,
+    label = with(filter(metrics_FNYield, subset=="older70"),
+                 sprintf("Test: R²=%.2f, pRMSE=%.1f%%", R2, pRMSE)),
+    hjust = 0, size = 5, color = subset_cols_new["older70"]
+  ) +
+  annotate(
+    "text",
+    x     = fy_xmin + 0.05 * (fy_xmax - fy_xmin),
+    y     = fy_ymax - 1 * 0.12 * fy_yrng,
+    label = with(filter(metrics_FNYield, subset=="recent30"),
+                 sprintf("Train: R²=%.2f, pRMSE=%.1f%%", R2, pRMSE)),
+    hjust = 0, size = 5, color = subset_cols_new["recent30"]
+  ) +
+  annotate(
+    "text",
+    x     = fy_xmin + 0.05 * (fy_xmax - fy_xmin),
+    y     = fy_ymax - 2 * 0.12 * fy_yrng,
+    label = with(filter(metrics_FNYield, subset=="unseen10"),
+                 sprintf("Cross‑Validation: R²=%.2f, pRMSE=%.1f%%", R2, pRMSE)),
+    hjust = 0, size = 5, color = subset_cols_new["unseen10"]
+  ) +
   labs(x = "Predicted", y = NULL, title = "Yield", tag = "B") +
-  lm_theme
+  theme_classic(base_size = 22)
 
-# 7a. Combine A & B with cowplot
+# 7a. Combine A & B with shared legend
 AB_panels <- plot_grid(
-  A_full + theme(legend.position="none"),
-  B_full + theme(legend.position="none"),
-  ncol = 2, align = "h", axis = "tblr", rel_widths = c(1,1)
+  A_full + theme(legend.position = "none"),
+  B_full + theme(legend.position = "none"),
+  ncol       = 2,
+  align      = "h",
+  axis       = "tblr",
+  rel_widths = c(1,1)
 )
 AB_leg <- get_legend(
   A_full +
-    theme(legend.position="right",
-          legend.direction="horizontal",
-          legend.justification="center",
-          legend.title=element_text(size=22),
-          legend.text=element_text(size=20),
-          legend.key.width=unit(1.5,"lines"),
-          legend.key.height=unit(1,"lines"))
+    theme(
+      legend.position      = "right",
+      legend.direction     = "horizontal",
+      legend.justification = "center",
+      legend.text          = element_text(size = 20),
+      legend.key.width     = unit(1.5, "lines"),
+      legend.key.height    = unit(1,   "lines")
+    )
 )
-AB <- plot_grid(AB_panels, AB_leg, ncol = 1, rel_heights = c(1, 0.15))
+AB <- plot_grid(
+  AB_panels,
+  AB_leg,
+  ncol        = 1,
+  rel_heights = c(1, 0.15)
+)
+
 
 # 8. Panels C & D (unchanged)
 CD <- plot_grid(
