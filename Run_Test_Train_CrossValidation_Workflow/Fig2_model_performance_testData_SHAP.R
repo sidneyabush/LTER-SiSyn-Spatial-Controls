@@ -127,22 +127,13 @@ bar_plot <- function(SV) {
     geom_col() +
     coord_flip() +
     scale_y_continuous(
-      expand = expansion(mult = c(0.02, 0.25))
+      expand = expansion(mult = c(0.03, 0.25))
     ) +
-    labs(x = NULL, y = "Mean Absolute SHAP Value") +
-    theme_classic(base_size = 20)
+    labs(x = NULL, y = "Mean Absolute SHAP Value")
 }
 
 
 # 7. Panels A & B
-subset_cols <- c(
-  "older70"  = "#2E2E2E",  # Charcoal
-  "recent30" = "#6B4C3B",  # Warm taupe / clay
-  "unseen10" = "#3A5A40"   # Deep forest green
-)
-
-subset_labs <- c(older70 = "Test", recent30 = "Train", unseen10 = "Cross‑Validation")
-
 metrics_FNConc <- pred_FNConc %>%
   group_by(subset) %>%
   summarize(R2 = cor(predicted, observed)^2,
@@ -152,39 +143,99 @@ fn_x <- range(pred_FNConc$predicted)
 fn_y <- range(pred_FNConc$observed)
 fn_r <- diff(fn_y)
 
-A <- ggplot(pred_FNConc, aes(predicted, observed, color = subset))+
+# Base colors
+subset_cols <- c(
+  "older70"  = "gray55",  
+  "recent30" = "#C0805B",  
+  "unseen10" = "#376A5A"   
+)
+
+subset_ann_cols <- c(
+  "older70"  = "#5A5A5A",     # darker grey (was too close before)
+  "recent30" = "#B45A3E",     # deeper burnt sienna (less pink)
+  "unseen10" = "#2E7F6B"      # darker, richer forest green
+)
+
+# Transparent fills for interior
+subset_fills <- scales::alpha(subset_cols, 0.35)
+
+# Shapes: circle, triangle, square (21–25 = fillable shapes)
+subset_shapes <- c(
+  "older70"  = 21,  # Circle
+  "recent30" = 24,  # Triangle
+  "unseen10" = 22   # Square (instead of diamond)
+)
+
+# Sizes per group
+subset_sizes <- c(
+  "older70"  = 4.5,
+  "recent30" = 4,
+  "unseen10" = 4
+)
+
+subset_labs <- c(
+  "older70"  = "Training",
+  "recent30" = "Testing",
+  "unseen10" = "Cross-Validation"
+)
+
+# Desired order
+subset_levels <- c("older70", "recent30", "unseen10")
+
+# Ensure correct type
+pred_FNConc$subset <- factor(pred_FNConc$subset, levels = names(subset_cols))
+# Panel A y positioning using expanded range
+a_y_upper <- max(fn_y) + 0.02 * diff(fn_y)
+a_y_base  <- a_y_upper - 0.05 * diff(fn_y)  # 12% below the top
+
+A <- ggplot(pred_FNConc, aes(predicted, observed)) +
   geom_point(
-    shape = 21,
-    fill = scales::alpha(subset_cols[subset], 0.3),  # Light transparent fill
-    color = subset_cols[subset],
-    size = 3.5,
-    stroke = 1.2) +
+    aes(
+      color = subset,
+      fill  = subset,
+      shape = subset,
+      size  = subset
+    ),
+    stroke = 0.7
+  ) +
   geom_abline(linetype = "dashed", linewidth = 1) +
-  scale_color_manual(
-    values = subset_cols,
-    labels = subset_labs,
-    name   = NULL,
-    guide  = guide_legend(
+  scale_color_manual(values = subset_cols, labels = subset_labs, name = NULL) +
+  scale_fill_manual(values = subset_fills, labels = subset_labs, name = NULL) +
+  scale_shape_manual(values = subset_shapes, labels = subset_labs, name = NULL) +
+  scale_size_manual(values = subset_sizes, labels = subset_labs, name = NULL) +
+  guides(
+    color = guide_legend(
       override.aes = list(
-        shape = 21, fill = NA, size = 8, stroke = 1.5
-      )
-    )
+        shape = unname(subset_shapes),
+        size  = unname(subset_sizes),
+        stroke = 1.2,
+        fill   = unname(subset_fills),
+        color  = unname(subset_cols)
+      ),
+      order = 1
+    ),
+    shape = guide_legend(order = 1),
+    fill  = "none",
+    size  = "none"
   ) +
   annotate("text",
            x = fn_x[1] + 0.05 * diff(fn_x),
-           y = fn_y[2]- 0 * (0.08 * fn_r),
+           y = a_y_base,
            label = sprintf("R² = %.3f, pRMSE = %.1f%%", metrics_FNConc$R2[1], metrics_FNConc$pRMSE[1]),
-           hjust = 0, size = 6, color = subset_cols["older70"])+
+           hjust = 0, size = 6.5,
+           color = subset_ann_cols[["older70"]]) +
   annotate("text",
            x = fn_x[1] + 0.05 * diff(fn_x),
-           y = fn_y[2] - 1* (0.08 * fn_r),
+           y = a_y_base - 0.08 * diff(fn_y),
            label = sprintf("R² = %.3f, pRMSE = %.1f%%", metrics_FNConc$R2[2], metrics_FNConc$pRMSE[2]),
-           hjust = 0, size = 6, color = subset_cols["recent30"])+
+           hjust = 0, size = 6.5,
+           color = subset_ann_cols[["recent30"]]) +
   annotate("text",
            x = fn_x[1] + 0.05 * diff(fn_x),
-           y= fn_y[2]-2 * (0.08 * fn_r),
-           label=sprintf("R² = %.3f, pRMSE = %.1f%%", metrics_FNConc$R2[3],metrics_FNConc$pRMSE[3]),
-           hjust=0, size=6, color=subset_cols["unseen10"]) +
+           y = a_y_base - 2 * 0.08 * diff(fn_y),
+           label = sprintf("R² = %.3f, pRMSE = %.1f%%", metrics_FNConc$R2[3], metrics_FNConc$pRMSE[3]),
+           hjust = 0, size = 6.5,
+           color = subset_ann_cols[["unseen10"]]) +
   labs(x="Predicted", y="Observed", title="Concentration", tag="A") +
   scale_x_continuous(expand = expansion(mult = c(0.03, 0.2))) +
   scale_y_continuous(expand = expansion(mult = c(0.02, 0.02))) +
@@ -199,42 +250,62 @@ fy_x <- range(pred_FNYield$predicted)
 fy_y <- range(pred_FNYield$observed)
 fy_r <- diff(fy_y)
 
-B <- ggplot(pred_FNYield, aes(predicted, observed, color=subset))+
+
+pred_FNYield$subset <- factor(pred_FNYield$subset, levels = names(subset_cols))
+# Panel B y positioning using expanded range
+b_y_upper <- max(fy_y) + 0.02 * diff(fy_y)
+b_y_base  <- b_y_upper - 0.05 * diff(fy_y)
+
+B <- ggplot(pred_FNYield, aes(predicted, observed)) +
   geom_point(
-    shape = 21,      
-    fill  = NA,      
-    size  = 4,       
-    stroke= 1.5,
-    alpha = 0.7  
+    aes(
+      color = subset,
+      fill  = subset,
+      shape = subset,
+      size  = subset
+    ),
+    stroke = 0.7
   ) +
-  geom_abline(linetype = "dashed") +
-  scale_color_manual(
-    values = subset_cols,
-    labels = subset_labs,
-    name   = NULL,
-    guide  = guide_legend(
+  geom_abline(linetype = "dashed", linewidth = 1) +
+  scale_color_manual(values = subset_cols, labels = subset_labs, name = NULL) +
+  scale_fill_manual(values = subset_fills, labels = subset_labs, name = NULL) +
+  scale_shape_manual(values = subset_shapes, labels = subset_labs, name = NULL) +
+  scale_size_manual(values = subset_sizes, labels = subset_labs, name = NULL) +
+  guides(
+    color = guide_legend(
       override.aes = list(
-        shape = 21, fill = NA, size = 8.5, stroke = 2
-      )
-    )
+        shape  = unname(subset_shapes),
+        size   = unname(subset_sizes),
+        stroke = 1.2,
+        fill   = unname(subset_fills),
+        color  = unname(subset_cols)
+      ),
+      order = 1
+    ),
+    shape = guide_legend(order = 1),
+    fill  = "none",
+    size  = "none"
   ) +
   annotate("text",
            x = fy_x[1] + 0.05 * diff(fy_x),
-           y = fy_y[2] - 0 * (0.08 * fy_r),
-           label = sprintf("R² = %.3f, pRMSE = %.1f%%", metrics_FNYield$R2[1], metrics_FNYield$pRMSE[1]), 
-           hjust = 0, size = 6, color = subset_cols["older70"])+
+           y = b_y_base,
+           label = sprintf("R² = %.3f, pRMSE = %.1f%%", metrics_FNYield$R2[1], metrics_FNYield$pRMSE[1]),
+           hjust = 0, size = 6.5,
+           color = subset_ann_cols[["older70"]]) +
   annotate("text",
            x = fy_x[1] + 0.05 * diff(fy_x),
-           y = fy_y[2] - 1 * (0.08 * fy_r),
+           y = b_y_base - 0.08 * diff(fy_y),
            label = sprintf("R² = %.3f, pRMSE = %.1f%%", metrics_FNYield$R2[2], metrics_FNYield$pRMSE[2]),
-           hjust = 0, size = 6, color = subset_cols["recent30"])+
+           hjust = 0, size = 6.5,
+           color = subset_ann_cols[["recent30"]]) +
   annotate("text",
            x = fy_x[1] + 0.05 * diff(fy_x),
-           y = fy_y[2] - 2 * (0.08 * fy_r),
+           y = b_y_base - 2 * 0.08 * diff(fy_y),
            label = sprintf("R² = %.3f, pRMSE = %.1f%%", metrics_FNYield$R2[3], metrics_FNYield$pRMSE[3]),
-           hjust = 0, size = 6, color = subset_cols["unseen10"]) +
+           hjust = 0, size = 6.5,
+           color = subset_ann_cols[["unseen10"]]) +
   labs(x = "Predicted", y = NULL, title = "Yield", tag = "B") +
-  scale_x_continuous(expand=expansion(mult = c(0.03, 0.2))) +
+  scale_x_continuous(expand = expansion(mult = c(0.03, 0.2))) +
   scale_y_continuous(expand = expansion(mult = c(0.02, 0.02))) +
   theme(plot.margin = unit(c(5, 5, 5, 0),"pt"))
 
@@ -286,7 +357,7 @@ leg2 <- get_legend(
 final_fig2 <- plot_grid(
   row1, leg1, row2, row3, leg2,
   ncol        = 1,
-  rel_heights = c(1.2, 0.09, 1.1, 1.1, 0.15),
+  rel_heights = c(1.2, 0.1, 1.1, 1.1, 0.15),
   align       = "v"
 )
 
