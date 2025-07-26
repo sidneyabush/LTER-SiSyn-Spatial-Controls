@@ -154,24 +154,24 @@ A_full <- ggplot(pred_FNConc, aes(predicted, observed, color = subset)) +
     x     = fn_xmin + 0.05 * (fn_xmax - fn_xmin),
     y     = fn_ymax - 0 * 0.12 * fn_yrng,
     label = with(filter(metrics_FNConc, subset=="older70"),
-                 sprintf(" R²=%.3f, pRMSE=%.1f%%", R2, pRMSE)),
-    hjust = 0, size = 5, color = subset_cols_new["older70"]
+                 sprintf(" R² = %.3f, pRMSE = %.1f%%", R2, pRMSE)),
+    hjust = 0, size = 6, color = subset_cols_new["older70"]
   ) +
   annotate(
     "text",
     x     = fn_xmin + 0.05 * (fn_xmax - fn_xmin),
     y     = fn_ymax - 1 * 0.12 * fn_yrng,
     label = with(filter(metrics_FNConc, subset=="recent30"),
-                 sprintf(" R²=%.3f, pRMSE=%.1f%%", R2, pRMSE)),
-    hjust = 0, size = 5, color = subset_cols_new["recent30"]
+                 sprintf(" R² = %.3f, pRMSE = %.1f%%", R2, pRMSE)),
+    hjust = 0, size = 6, color = subset_cols_new["recent30"]
   ) +
   annotate(
     "text",
     x     = fn_xmin + 0.05 * (fn_xmax - fn_xmin),
     y     = fn_ymax - 2 * 0.12 * fn_yrng,
     label = with(filter(metrics_FNConc, subset=="unseen10"),
-                 sprintf(" R²=%.3f, pRMSE=%.1f%%", R2, pRMSE)),
-    hjust = 0, size = 5, color = subset_cols_new["unseen10"]
+                 sprintf(" R² = %.3f, pRMSE = %.1f%%", R2, pRMSE)),
+    hjust = 0, size = 6, color = subset_cols_new["unseen10"]
   ) +
   labs(x = "Predicted", y = "Observed", title = "Concentration", tag = "A") +
   theme_classic(base_size = 22)
@@ -201,24 +201,24 @@ B_full <- ggplot(pred_FNYield, aes(predicted, observed, color = subset)) +
     x     = fy_xmin + 0.05 * (fy_xmax - fy_xmin),
     y     = fy_ymax - 0 * 0.12 * fy_yrng,
     label = with(filter(metrics_FNYield, subset=="older70"),
-                 sprintf(" R²=%.3f, pRMSE=%.1f%%", R2, pRMSE)),
-    hjust = 0, size = 5, color = subset_cols_new["older70"]
+                 sprintf(" R² = %.3f, pRMSE = %.1f%%", R2, pRMSE)),
+    hjust = 0, size = 6, color = subset_cols_new["older70"]
   ) +
   annotate(
     "text",
     x     = fy_xmin + 0.05 * (fy_xmax - fy_xmin),
     y     = fy_ymax - 1 * 0.12 * fy_yrng,
     label = with(filter(metrics_FNYield, subset=="recent30"),
-                 sprintf(" R²=%.3f, pRMSE=%.1f%%", R2, pRMSE)),
-    hjust = 0, size = 5, color = subset_cols_new["recent30"]
+                 sprintf(" R² = %.3f, pRMSE = %.1f%%", R2, pRMSE)),
+    hjust = 0, size = 6, color = subset_cols_new["recent30"]
   ) +
   annotate(
     "text",
     x     = fy_xmin + 0.05 * (fy_xmax - fy_xmin),
     y     = fy_ymax - 2 * 0.12 * fy_yrng,
     label = with(filter(metrics_FNYield, subset=="unseen10"),
-                 sprintf(" R²=%.3f, pRMSE=%.1f%%", R2, pRMSE)),
-    hjust = 0, size = 5, color = subset_cols_new["unseen10"]
+                 sprintf(" R² = %.3f, pRMSE = %.1f%%", R2, pRMSE)),
+    hjust = 0, size = 6, color = subset_cols_new["unseen10"]
   ) +
   labs(x = "Predicted", y = NULL, title = "Yield", tag = "B") +
   theme_classic(base_size = 22)
@@ -230,7 +230,7 @@ AB_panels <- plot_grid(
   ncol       = 2,
   align      = "h",
   axis       = "tblr",
-  rel_widths = c(1,1)
+  rel_widths = c(0.9,0.9)
 )
 AB_leg <- get_legend(
   A_full +
@@ -265,7 +265,7 @@ F_full <- dot_plot(SV_FY, kept_FNYield_scaled) + labs(tag="F")
 EF_panels <- plot_grid(
   E_full + theme(legend.position="none"),
   F_full + theme(legend.position="none"),
-  ncol = 2, align = "h", axis = "tblr", rel_widths = c(1,1)
+  ncol = 2, align = "h", axis = "tblr", rel_widths = c(0.8,0.8)
 )
 EF_leg <- get_legend(
   E_full +
@@ -277,7 +277,7 @@ EF_leg <- get_legend(
           legend.key.width=unit(1.5,"lines"),
           legend.key.height=unit(1,"lines"))
 )
-EF <- plot_grid(EF_panels, EF_leg, ncol = 1, rel_heights = c(1, 0.15))
+EF <- plot_grid(EF_panels, EF_leg, ncol = 1, rel_heights = c(1, 0.5))
 
 # 10. Final assemble
 final_fig2 <- plot_grid(
@@ -285,12 +285,12 @@ final_fig2 <- plot_grid(
   CD,
   EF,
   ncol = 1,
-  rel_heights = c(1, 1.3, 1)
+  rel_heights = c(1.3, 1.3, 1.3)
 )
 
 # 11. Save
 ggsave(
   file.path(od, "Fig2_Global_FNConc_FNYield_multi.png"),
   final_fig2,
-  width  = 15, height = 20, dpi = 300, bg = "white"
+  width  = 20, height = 20, dpi = 300, bg = "white"
 )
