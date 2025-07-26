@@ -30,10 +30,17 @@ save_correlation_plot <- function(driver_cor, output_dir) {
   dev.off()
 }
 
-save_rf_importance_plot <- function(rf_model, output_dir) {
-  png(sprintf("%s/RF_variable_importance_FNConc_Yearly_5_years.png", output_dir),
-      width = 1600, height = 1200, res = 300)
-  randomForest::varImpPlot(rf_model, main = "rf_model2 - Yearly FNConc", col = "darkblue")
+ave_rf_importance_plot <- function(rf_model, output_dir) {
+  png(
+    filename = sprintf("%s/RF_variable_importance_FNYield_Yearly_5_years.png", output_dir),
+    width    = 10,        # inches
+    height   = 10,           # inches
+    units    = "in",        # specify inches
+    res      = 300          # dpi
+  )
+  randomForest::varImpPlot(rf_model,
+                           main = "rf_model2 - Yearly FNYield",
+                           col  = "darkblue")
   dev.off()
 }
 
@@ -133,7 +140,9 @@ test_numtree_parallel <- function(ntree_list, formula, data) {
 }
 
 # 5) Stability selection (OOB MSE tracking)
-rf_stability_selection_parallel <- function(x, y, n_bootstrap = 500,
+rf_stability_selection_parallel <- function(x, y, 
+                                            n_bootstrap = 500,        # robust workflow
+                                            # n_bootstrap = 10,         # test workflow
                                             threshold = 0.8,
                                             ntree, mtry,
                                             importance_threshold) {
@@ -188,38 +197,39 @@ df_unseen10 <- load_split("AllDrivers_cc_unseen10.csv")
 resp <- "FNConc"
 message("Processing ", resp)
 
-tree_grid <- seq(100, 800, by = 100)  # Testing grid
+# tree_grid <- seq(100, 800, by = 100)  # Testing grid
+tree_grid <- seq(100, 2000, by = 100) # Robust grid
 
-# # a) RF1 tuning (comment out once done)
-# df_tr_full <- df_train %>%
-#   drop_na(all_of(c(resp, predictors)))
-# x1 <- df_tr_full[predictors]
-# y1 <- df_tr_full[[resp]]
-# 
-# # scan ntree for RF1
-# mse1 <- test_numtree_parallel(tree_grid,
-#                               as.formula(paste(resp, "~ .")),
-#                               df_tr_full)
-# nt1 <- tree_grid[which.min(mse1)]
-# 
-# # tune mtry
-# t1   <- randomForest::tuneRF(x1, y1,
-#                              ntreeTry  = nt1,
-#                              stepFactor = 1.5,
-#                              improve    = 0.01,
-#                              plot       = FALSE)
-# mtry1 <- t1[which.min(t1[, 2]), 1]
-# 
-# # train RF1
-# rf1   <- randomForest(x = x1, y = y1,
-#                       ntree      = nt1,
-#                       mtry       = mtry1,
-#                       importance = TRUE)
-# 
-# # cache RF1 and importances
-# imps <- importance(rf1)[, "%IncMSE"]
-# save(rf1, imps,
-#      file = file.path(output_dir, sprintf("%s_RF1.RData", resp)))
+# a) RF1 tuning (comment out once done)
+df_tr_full <- df_train %>%
+  drop_na(all_of(c(resp, predictors)))
+x1 <- df_tr_full[predictors]
+y1 <- df_tr_full[[resp]]
+
+# scan ntree for RF1
+mse1 <- test_numtree_parallel(tree_grid,
+                              as.formula(paste(resp, "~ .")),
+                              df_tr_full)
+nt1 <- tree_grid[which.min(mse1)]
+
+# tune mtry
+t1   <- randomForest::tuneRF(x1, y1,
+                             ntreeTry  = nt1,
+                             stepFactor = 1.5,
+                             improve    = 0.01,
+                             plot       = FALSE)
+mtry1 <- t1[which.min(t1[, 2]), 1]
+
+# train RF1
+rf1   <- randomForest(x = x1, y = y1,
+                      ntree      = nt1,
+                      mtry       = mtry1,
+                      importance = TRUE)
+
+# cache RF1 and importances
+imps <- importance(rf1)[, "%IncMSE"]
+save(rf1, imps,
+     file = file.path(output_dir, sprintf("%s_RF1.RData", resp)))
 
 # b) Load cached RF1 (if restarting here)
 load(file.path(output_dir, sprintf("%s_RF1.RData", resp)))  # loads rf1, imps
@@ -233,7 +243,8 @@ start <- Sys.time()
 stab <- rf_stability_selection_parallel(
   x                     = df_train[predictors],
   y                     = df_train[[resp]],
-  n_bootstrap           = 10,      # Testing
+  n_bootstrap           = 500,      # Robust
+  #n_bootstrap           = 10,      # Testing
   threshold             = freq_thr,
   ntree                 = rf1$ntree,
   mtry                  = rf1$mtry,
