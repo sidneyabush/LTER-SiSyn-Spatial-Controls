@@ -604,46 +604,16 @@ write.csv(recent30,    "AllDrivers_cc_recent30.csv",row.names=FALSE)
 # =============================================================================
 # 12) Histograms with fixed axes
 # =============================================================================
+
+# Save long-format histogram data for creating plots later:
 full_long <- drivers_df %>%
   pivot_longer(cols=c(NOx,P,npp,evapotrans,greenup_day,precip,temp,
                       snow_cover,permafrost,elevation,basin_slope,
                       RBI,recession_slope,starts_with("land_"),starts_with("rocks_")),
                names_to="driver",values_to="value") %>%
-  mutate(value=if_else(driver%in%c("NOx","P"),log10(value),value),
-         driver=factor(driver,levels=unique(driver)))
-limits <- full_long %>%
-  group_by(driver) %>%
-  summarise(xmin=min(value,na.rm=TRUE),
-            xmax=max(value,na.rm=TRUE),
-            ymax=max(hist(value,plot=FALSE)$counts,na.rm=TRUE),
-            .groups="drop") %>%
-  rowwise() %>%
-  do(data.frame(driver=.$driver,value=c(.$xmin,.$xmax),y=c(0,.$ymax))) %>%
-  ungroup()
+  mutate(value = if_else(driver %in% c("NOx", "P"), log10(value), value))
 
-make_hist <- function(df,name){
-  lg <- df %>% pivot_longer(cols=c(NOx,P,npp,evapotrans,greenup_day,precip,temp,
-                                   snow_cover,permafrost,elevation,basin_slope,
-                                   RBI,recession_slope,starts_with("land_"),starts_with("rocks_")),
-                            names_to="driver",values_to="value") %>%
-    mutate(value=if_else(driver%in%c("NOx","P"),log10(value),value),
-           driver=factor(driver,levels=unique(driver)))
-  means <- lg %>% group_by(driver) %>% summarise(mean_val=mean(value,na.rm=TRUE),.groups="drop")
-  p <- ggplot(lg,aes(x=value)) +
-    geom_histogram(bins=30,fill="grey85",color="black") +
-    geom_vline(data=means,aes(xintercept=mean_val),linetype="dashed") +
-    geom_point(data=limits,aes(x=value,y=y),shape=NA) +
-    facet_wrap(~driver,scales="free",ncol=6) +
-    theme_classic() +
-    labs(title=paste0("Histogram: ",name),x=NULL,y="Count")
-  ggsave(paste0("Final_Figures/FigSX_Hist_",name,".png"),p,width=24,height=16,dpi=300)
-}
-
-dir.create("Final_Figures",showWarnings=FALSE)
-make_hist(drivers_df,  "full")
-make_hist(unseen10_df,"unseen10")
-make_hist(older70,     "older70")
-make_hist(recent30,    "recent30")
+write.csv(full_long, "Final_Figures/histogram_input_full_long.csv", row.names = FALSE)
 
 # =============================================================================
 # 13) Recalculate median NOx & P per subset
