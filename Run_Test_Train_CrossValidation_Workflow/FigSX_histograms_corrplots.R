@@ -73,11 +73,11 @@ hist_long <- hist_long %>%
 
 # Create the plot object
 p <- ggplot(hist_long, aes(x = value, fill = subset)) +
-  geom_histogram(position = "identity", alpha = 0.5, bins = 30) +
+  geom_histogram(position = "identity", alpha = 0.7, bins = 30) +
   facet_wrap(~ driver, scales = "free", ncol = 4) +
   scale_fill_manual(
     values = c(
-      "Training"            = "#5A5A5A",  
+      "Training"            = "gray70",  
       "Testing"             = "#B45A3E", 
       "Cross-Validation"    = "#2E7F6B"
     ),
@@ -100,3 +100,46 @@ ggsave(
   height   = 18,
   dpi      = 300
 )
+
+# =============================================================================
+# Save correlation plots for each subset (using driver order & recode map)
+# =============================================================================
+
+library(corrplot)
+
+# Define variable subset to match the histogram drivers
+drivers_to_use <- names(recode_map)
+
+save_subset_corrplot <- function(df, label) {
+  # Filter to the defined driver variables only
+  numeric_df <- df %>%
+    dplyr::select(all_of(drivers_to_use)) %>%
+    dplyr::mutate(across(c(NOx, P), log10)) %>%  # Apply log transform for NOx and P
+    dplyr::rename_with(~ recode_map[.x]) %>%
+    dplyr::select(all_of(driver_order))  # Reorder columns for consistent plot layout
+  
+  # Compute correlation matrix
+  cor_matrix <- cor(numeric_df, use = "pairwise.complete.obs")
+  
+  # Save plot
+  png(sprintf("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures/FigSX_corrplot_%s.png", label),
+      width = 2500, height = 2500, res = 300)
+  corrplot(
+    cor_matrix,
+    type         = "lower",
+    pch.col      = "black",
+    tl.col       = "black",
+    diag         = FALSE,
+    na.label     = "X",              # or " " for space
+    na.label.col = "grey70",         # this controls the symbol's color
+    addgrid.col  = "grey90"          # optional: lighten the grid
+  )
+  
+  title(paste("Correlation Plot –", label), line = 2.5)
+  dev.off()
+}
+
+# Call for each subset
+save_subset_corrplot(older70,     "Training")
+save_subset_corrplot(recent30,    "Testing")
+save_subset_corrplot(unseen10_df, "Cross_Validation")
