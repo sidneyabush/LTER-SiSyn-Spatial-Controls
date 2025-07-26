@@ -117,8 +117,6 @@ bar_plot <- function(SV) {
 }
 
 # 7. Build panels A & B (unchanged)
-# 7. Build panels A & B (updated) ----
-
 # 7.1 New colors & labels
 subset_cols_new <- c(
   older70  = "#E41A1C",  # Test
@@ -150,17 +148,13 @@ fn_yrng <- fn_ymax - fn_ymin
 A_full <- ggplot(pred_FNConc, aes(predicted, observed, color = subset)) +
   geom_point(size = 4, alpha = 0.4) +
   geom_abline(linetype = "dashed") +
-  scale_color_manual(
-    values = subset_cols_new,
-    name   = NULL,
-    labels = subset_labels_new
-  ) +
+  scale_color_manual(values = subset_cols_new, name = NULL, labels = subset_labels_new) +
   annotate(
     "text",
     x     = fn_xmin + 0.05 * (fn_xmax - fn_xmin),
     y     = fn_ymax - 0 * 0.12 * fn_yrng,
     label = with(filter(metrics_FNConc, subset=="older70"),
-                 sprintf("Test: R²=%.2f, pRMSE=%.1f%%", R2, pRMSE)),
+                 sprintf(" R²=%.3f, pRMSE=%.1f%%", R2, pRMSE)),
     hjust = 0, size = 5, color = subset_cols_new["older70"]
   ) +
   annotate(
@@ -168,7 +162,7 @@ A_full <- ggplot(pred_FNConc, aes(predicted, observed, color = subset)) +
     x     = fn_xmin + 0.05 * (fn_xmax - fn_xmin),
     y     = fn_ymax - 1 * 0.12 * fn_yrng,
     label = with(filter(metrics_FNConc, subset=="recent30"),
-                 sprintf("Train: R²=%.2f, pRMSE=%.1f%%", R2, pRMSE)),
+                 sprintf(" R²=%.3f, pRMSE=%.1f%%", R2, pRMSE)),
     hjust = 0, size = 5, color = subset_cols_new["recent30"]
   ) +
   annotate(
@@ -176,7 +170,7 @@ A_full <- ggplot(pred_FNConc, aes(predicted, observed, color = subset)) +
     x     = fn_xmin + 0.05 * (fn_xmax - fn_xmin),
     y     = fn_ymax - 2 * 0.12 * fn_yrng,
     label = with(filter(metrics_FNConc, subset=="unseen10"),
-                 sprintf("Cross‑Validation: R²=%.2f, pRMSE=%.1f%%", R2, pRMSE)),
+                 sprintf(" R²=%.3f, pRMSE=%.1f%%", R2, pRMSE)),
     hjust = 0, size = 5, color = subset_cols_new["unseen10"]
   ) +
   labs(x = "Predicted", y = "Observed", title = "Concentration", tag = "A") +
@@ -201,17 +195,13 @@ fy_yrng <- fy_ymax - fy_ymin
 B_full <- ggplot(pred_FNYield, aes(predicted, observed, color = subset)) +
   geom_point(size = 4, alpha = 0.4) +
   geom_abline(linetype = "dashed") +
-  scale_color_manual(
-    values = subset_cols_new,
-    name   = NULL,
-    labels = subset_labels_new
-  ) +
+  scale_color_manual(values = subset_cols_new, name = NULL, labels = subset_labels_new) +
   annotate(
     "text",
     x     = fy_xmin + 0.05 * (fy_xmax - fy_xmin),
     y     = fy_ymax - 0 * 0.12 * fy_yrng,
     label = with(filter(metrics_FNYield, subset=="older70"),
-                 sprintf("Test: R²=%.2f, pRMSE=%.1f%%", R2, pRMSE)),
+                 sprintf(" R²=%.3f, pRMSE=%.1f%%", R2, pRMSE)),
     hjust = 0, size = 5, color = subset_cols_new["older70"]
   ) +
   annotate(
@@ -219,7 +209,7 @@ B_full <- ggplot(pred_FNYield, aes(predicted, observed, color = subset)) +
     x     = fy_xmin + 0.05 * (fy_xmax - fy_xmin),
     y     = fy_ymax - 1 * 0.12 * fy_yrng,
     label = with(filter(metrics_FNYield, subset=="recent30"),
-                 sprintf("Train: R²=%.2f, pRMSE=%.1f%%", R2, pRMSE)),
+                 sprintf(" R²=%.3f, pRMSE=%.1f%%", R2, pRMSE)),
     hjust = 0, size = 5, color = subset_cols_new["recent30"]
   ) +
   annotate(
@@ -227,7 +217,7 @@ B_full <- ggplot(pred_FNYield, aes(predicted, observed, color = subset)) +
     x     = fy_xmin + 0.05 * (fy_xmax - fy_xmin),
     y     = fy_ymax - 2 * 0.12 * fy_yrng,
     label = with(filter(metrics_FNYield, subset=="unseen10"),
-                 sprintf("Cross‑Validation: R²=%.2f, pRMSE=%.1f%%", R2, pRMSE)),
+                 sprintf(" R²=%.3f, pRMSE=%.1f%%", R2, pRMSE)),
     hjust = 0, size = 5, color = subset_cols_new["unseen10"]
   ) +
   labs(x = "Predicted", y = NULL, title = "Yield", tag = "B") +
@@ -302,5 +292,5 @@ final_fig2 <- plot_grid(
 ggsave(
   file.path(od, "Fig2_Global_FNConc_FNYield_multi.png"),
   final_fig2,
-  width  = 12, height = 15, dpi = 300, bg = "white"
+  width  = 15, height = 20, dpi = 300, bg = "white"
 )
