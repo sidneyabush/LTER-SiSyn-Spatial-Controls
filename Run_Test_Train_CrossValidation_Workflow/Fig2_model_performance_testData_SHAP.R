@@ -32,7 +32,7 @@ load(file.path(fm, "FNYield_Yearly_kept_drivers.RData")); KD_FY  <- kept_drivers
 load(file.path(fm, "FNConc_Yearly_numeric.RData"));  DN_FN  <- drivers_numeric
 load(file.path(fm, "FNYield_Yearly_numeric.RData")); DN_FY  <- drivers_numeric
 
-# 4. Recode & per‑dataset scale setup
+# 4. Recode & per-dataset scale setup
 recode_map <- setNames(
   c("N","P","NPP","ET","Greenup Day","Precip","Temp","Snow Cover","Permafrost",
     "Elevation","Basin Slope","Flashiness (RBI)","Recession Curve Slope",
@@ -49,21 +49,21 @@ recode_map <- setNames(
     "rocks_metamorphic","rocks_plutonic")
 )
 
-# 4.1 Log‑transform & rescale FNConc drivers to [0,1]
+# 4.1 Log-transform & rescale FNConc drivers to [0,1]
 kept_FNConc_scaled <- KD_FN %>%
   mutate(P = log10(P)) %>%
   mutate(across(everything(), ~ scales::rescale(., to = c(0,1))))
 
-# 4.2 Log‑transform & rescale FNYield drivers to [0,1]
+# 4.2 Log-transform & rescale FNYield drivers to [0,1]
 kept_FNYield_scaled <- KD_FY %>%
   mutate(NOx = log10(NOx), P = log10(P)) %>%
   mutate(across(everything(), ~ scales::rescale(., to = c(0,1))))
 
-# 4.3 Color‑fill limits
+# 4.3 Color-fill limits
 gmin <- 0
 gmax <- 1
 
-# 5. Dot‑plot function
+# 5. Dot-plot function
 dot_plot <- function(SV, KD_s) {
   shap_df <- as.data.frame(SV) %>% mutate(id = row_number()) %>%
     pivot_longer(-id, names_to="feature", values_to="shap")
@@ -99,7 +99,7 @@ dot_plot <- function(SV, KD_s) {
           legend.direction= "horizontal")
 }
 
-# 6. Bar‑plot function
+# 6. Bar-plot function
 bar_plot <- function(SV) {
   bs <- as.data.frame(SV) %>% pivot_longer(
     everything(), names_to="feature", values_to="shap"
@@ -116,19 +116,17 @@ bar_plot <- function(SV) {
 }
 
 # 7. Build panels A & B
-# 7.1 Colors & labels
 subset_cols_new <- c(
   older70  = "#E41A1C",  # Test
   recent30 = "#377EB8",  # Train
-  unseen10 = "#4DAF4A"   # Cross‑Validation
+  unseen10 = "#4DAF4A"   # Cross-Validation
 )
 subset_labels_new <- c(
   older70  = "Test",
   recent30 = "Train",
-  unseen10 = "Cross‑Validation"
+  unseen10 = "Cross-Validation"
 )
 
-# 7.2 Metrics for FNConc
 metrics_FNConc <- pred_FNConc %>%
   group_by(subset) %>%
   summarize(
@@ -137,103 +135,105 @@ metrics_FNConc <- pred_FNConc %>%
     .groups = "drop"
   )
 fn_xmin <- min(pred_FNConc$predicted); fn_xmax <- max(pred_FNConc$predicted)
-fn_ymin <- min(pred_FNConc$observed);  fn_ymax <- max(pred_FNConc$observed)
-fn_yrng <- fn_ymax - fn_ymin
+fn_ymax <- max(pred_FNConc$observed); fn_yrng <- fn_ymax - min(pred_FNConc$observed)
 
-# 7.3 Panel A: Concentration
 A_full <- ggplot(pred_FNConc, aes(predicted, observed, color = subset)) +
   geom_point(size = 4, alpha = 0.4) +
   geom_abline(linetype = "dashed") +
   scale_color_manual(values = subset_cols_new, name = NULL, labels = subset_labels_new) +
+  scale_y_continuous(expand = expansion(mult = c(0.02, 0.02))) +
   annotate("text",
-           x     = fn_xmin + 0.05 * (fn_xmax - fn_xmin),
-           y     = fn_ymax - 0 * 0.12 * fn_yrng,
-           label = with(filter(metrics_FNConc, subset=="older70"),
-                        sprintf("R²=%.3f, pRMSE=%.1f%%", R2, pRMSE)),
+           x     = fn_xmin + 0.05*(fn_xmax-fn_xmin),
+           y     = fn_ymax - 0*0.12*fn_yrng,
+           label = with(filter(metrics_FNConc,subset=="older70"),
+                        sprintf("R²=%.3f, pRMSE=%.1f%%",R2,pRMSE)),
            hjust = 0, size = 6, color = subset_cols_new["older70"]
   ) +
   annotate("text",
-           x     = fn_xmin + 0.05 * (fn_xmax - fn_xmin),
-           y     = fn_ymax - 1 * 0.12 * fn_yrng,
-           label = with(filter(metrics_FNConc, subset=="recent30"),
-                        sprintf("R²=%.3f, pRMSE=%.1f%%", R2, pRMSE)),
+           x     = fn_xmin + 0.05*(fn_xmax-fn_xmin),
+           y     = fn_ymax - 1*0.12*fn_yrng,
+           label = with(filter(metrics_FNConc,subset=="recent30"),
+                        sprintf("R²=%.3f, pRMSE=%.1f%%",R2,pRMSE)),
            hjust = 0, size = 6, color = subset_cols_new["recent30"]
   ) +
   annotate("text",
-           x     = fn_xmin + 0.05 * (fn_xmax - fn_xmin),
-           y     = fn_ymax - 2 * 0.12 * fn_yrng,
-           label = with(filter(metrics_FNConc, subset=="unseen10"),
-                        sprintf("R²=%.3f, pRMSE=%.1f%%", R2, pRMSE)),
+           x     = fn_xmin + 0.05*(fn_xmax-fn_xmin),
+           y     = fn_ymax - 2*0.12*fn_yrng,
+           label = with(filter(metrics_FNConc,subset=="unseen10"),
+                        sprintf("R²=%.3f, pRMSE=%.1f%%",R2,pRMSE)),
            hjust = 0, size = 6, color = subset_cols_new["unseen10"]
   ) +
-  labs(x = "Predicted", y = "Observed", title = "Concentration", tag = "A") +
-  theme_classic(base_size = 22)
+  labs(x="Predicted", y="Observed", title="Concentration", tag="A") +
+  theme_classic(base_size=22)
 
-# 7.4 Metrics for FNYield
 metrics_FNYield <- pred_FNYield %>%
   group_by(subset) %>%
   summarize(
     R2    = cor(predicted, observed)^2,
-    pRMSE = sqrt(mean((predicted - observed)^2)) / mean(observed) * 100,    
+    pRMSE = sqrt(mean((predicted - observed)^2)) / mean(observed) * 100,
     .groups = "drop"
   )
 fy_xmin <- min(pred_FNYield$predicted); fy_xmax <- max(pred_FNYield$predicted)
-fy_ymin <- min(pred_FNYield$observed);  fy_ymax <- max(pred_FNYield$observed)
-fy_yrng <- fy_ymax - fy_ymin
+fy_ymax <- max(pred_FNYield$observed); fy_yrng <- fy_ymax - min(pred_FNYield$observed)
 
-# 7.5 Panel B: Yield
 B_full <- ggplot(pred_FNYield, aes(predicted, observed, color = subset)) +
   geom_point(size = 4, alpha = 0.4) +
   geom_abline(linetype = "dashed") +
   scale_color_manual(values = subset_cols_new, name = NULL, labels = subset_labels_new) +
+  scale_y_continuous(expand = expansion(mult = c(0.02, 0.02))) +
   annotate("text",
-           x     = fy_xmin + 0.05 * (fy_xmax - fy_xmin),
-           y     = fy_ymax - 0 * 0.12 * fy_yrng,
-           label = with(filter(metrics_FNYield, subset=="older70"),
-                        sprintf("R²=%.3f, pRMSE=%.1f%%", R2, pRMSE)),
+           x     = fy_xmin + 0.05*(fy_xmax-fy_xmin),
+           y     = fy_ymax - 0*0.12*fy_yrng,
+           label = with(filter(metrics_FNYield,subset=="older70"),
+                        sprintf("R²=%.3f, pRMSE=%.1f%%",R2,pRMSE)),
            hjust = 0, size = 6, color = subset_cols_new["older70"]
   ) +
   annotate("text",
-           x     = fy_xmin + 0.05 * (fy_xmax - fy_xmin),
-           y     = fy_ymax - 1 * 0.12 * fy_yrng,
-           label = with(filter(metrics_FNYield, subset=="recent30"),
-                        sprintf("R²=%.3f, pRMSE=%.1f%%", R2, pRMSE)),
+           x     = fy_xmin + 0.05*(fy_xmax-fy_xmin),
+           y     = fy_ymax - 1*0.12*fy_yrng,
+           label = with(filter(metrics_FNYield,subset=="recent30"),
+                        sprintf("R²=%.3f, pRMSE=%.1f%%",R2,pRMSE)),
            hjust = 0, size = 6, color = subset_cols_new["recent30"]
   ) +
   annotate("text",
-           x     = fy_xmin + 0.05 * (fy_xmax - fy_xmin),
-           y     = fy_ymax - 2 * 0.12 * fy_yrng,
-           label = with(filter(metrics_FNYield, subset=="unseen10"),
-                        sprintf("R²=%.3f, pRMSE=%.1f%%", R2, pRMSE)),
+           x     = fy_xmin + 0.05*(fy_xmax-fy_xmin),
+           y     = fy_ymax - 2*0.12*fy_yrng,
+           label = with(filter(metrics_FNYield,subset=="unseen10"),
+                        sprintf("R²=%.3f, pRMSE=%.1f%%",R2,pRMSE)),
            hjust = 0, size = 6, color = subset_cols_new["unseen10"]
   ) +
-  labs(x = "Predicted", y = NULL, title = "Yield", tag = "B") +
-  theme_classic(base_size = 22)
+  labs(x="Predicted", y=NULL, title="Yield", tag="B") +
+  theme_classic(base_size=22)
 
-# 7a. Combine A & B
-AB <- (A_full + B_full) + plot_layout(ncol = 2, guides = "collect")
+AB <- (A_full + B_full) +
+  plot_layout(
+    ncol   = 2,
+    widths = c(1, 1),        # same width for each panel
+    guides = "collect"
+  )
 
 # 8. Panels C & D
 CD <- (bar_plot(SV_FN) + bar_plot(SV_FY)) +
-  plot_layout(ncol = 2) &
-  theme(plot.tag = element_text(size=24), plot.tag.position = c(0.02, 0.98))
+  plot_layout(ncol=2) &
+  theme(plot.tag=element_text(size=22), plot.tag.position=c(0.02,0.98))
 
 # 9. Panels E & F
-E_full <- dot_plot(SV_FN,  kept_FNConc_scaled) + labs(tag = "E")
-F_full <- dot_plot(SV_FY, kept_FNYield_scaled) + labs(tag = "F")
-EF <- (E_full + F_full) + plot_layout(ncol = 2, guides = "collect")
+E_full <- dot_plot(SV_FN, kept_FNConc_scaled) + labs(tag="E")
+F_full <- dot_plot(SV_FY, kept_FNYield_scaled) + labs(tag="F")
+EF <- (E_full + F_full) + plot_layout(ncol=2, guides="collect")
 
-# 10. Final assemble
+# 10. Final assemble & force all to base_size=22
 final_fig2 <- AB / CD / EF +
-  plot_layout(heights = c(1, 1, 1.3), guides = "collect") &
+  plot_layout(heights=c(1,1,1.1), guides="collect") &
   theme(
-    legend.position = "bottom",
-    legend.direction = "horizontal"
+    legend.position="bottom",
+    legend.direction="horizontal",
+    text = element_text(size=22)   # <- this forces A/B/C/D/E/F to share the 22 pt base text
   )
 
 # 11. Save
 ggsave(
   file.path(od, "Fig2_Global_FNConc_FNYield_multi.png"),
   final_fig2,
-  width  = 18, height = 20, dpi = 300, bg = "white"
+  width=18, height=20, dpi=300, bg="white"
 )
