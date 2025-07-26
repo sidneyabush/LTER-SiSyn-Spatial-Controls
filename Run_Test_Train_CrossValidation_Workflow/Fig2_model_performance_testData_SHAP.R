@@ -44,7 +44,6 @@ recode_map <- setNames(
     "land_Grassland_Shrubland","land_Ice_Snow","land_Impervious",
     "land_Salt_Water","land_Tidal_Wetland","land_Water","land_Wetland_Marsh")
 )
-
 vars <- intersect(colnames(KD_FN), colnames(KD_FY))
 scale_and_log <- function(df, logvars) {
   df2 <- df
@@ -56,99 +55,83 @@ KD_FY_s <- scale_and_log(KD_FY, c("NOx","P"))
 gmin <- min(c(unlist(KD_FN_s), unlist(KD_FY_s)), na.rm = TRUE)
 gmax <- max(c(unlist(KD_FN_s), unlist(KD_FY_s)), na.rm = TRUE)
 
-# 5. Dot‐plot function
+# 5. Dot‐plot function (as before)
 dot_plot <- function(SV, KD_s) {
   shap_df <- as.data.frame(SV) %>% mutate(id = row_number()) %>%
     pivot_longer(-id, names_to="feature", values_to="shap")
   val_df  <- KD_s %>% mutate(id = row_number()) %>%
     pivot_longer(-id, names_to="feature", values_to="val")
-  df <- left_join(shap_df, val_df, by = c("id","feature")) %>%
+  df <- left_join(shap_df, val_df, by=c("id","feature")) %>%
     mutate(pretty = case_when(
-      grepl("^rocks_", feature) ~ gsub("_", " ", feature),
-      TRUE                      ~ recode(feature, !!!recode_map, .default=NA_character_)
+      grepl("^rocks_",feature) ~ gsub("_"," ",feature),
+      TRUE                     ~ recode(feature, !!!recode_map, .default=NA_character_)
     )) %>% filter(!is.na(pretty))
-  ord <- df %>% group_by(pretty) %>% summarize(m = mean(abs(shap))) %>%
+  ord <- df %>% group_by(pretty) %>% summarize(m=mean(abs(shap))) %>%
     arrange(desc(m)) %>% pull(pretty)
-  df$pretty <- factor(df$pretty, levels = rev(ord))
-  
-  ggplot(df, aes(x = shap, y = pretty)) +
-    geom_vline(xintercept = 0, linetype = "dashed") +
-    geom_jitter(aes(fill = val),
-                shape = 21, color = "darkgray",
-                height = 0.2, size = 2.7, alpha = 0.9) +
+  df$pretty <- factor(df$pretty, levels=rev(ord))
+  ggplot(df, aes(shap, pretty)) +
+    geom_vline(xintercept=0, linetype="dashed") +
+    geom_jitter(aes(fill=val), shape=21, color="darkgray",
+                height=0.2, size=2.7, alpha=0.9) +
     scale_fill_gradient(low="white", high="black",
-                        limits = c(gmin, gmax),
-                        name   = "Scaled Value",
-                        guide  = guide_colourbar(
-                          barheight      = unit(1.3, "cm"),
-                          barwidth       = unit(20,  "lines"),
+                        limits=c(gmin,gmax),
+                        name="Scaled Value",
+                        guide=guide_colourbar(
+                          barheight      = unit(1.3,"cm"),
+                          barwidth       = unit(20,"lines"),
                           title.position = "top",
                           title.theme    = element_text(size=22, hjust=0.5),
                           label.theme    = element_text(size=20)
                         )) +
-    labs(x=NULL, y=NULL) +
-    theme_classic(base_size = 22) +
+    labs(x=NULL,y=NULL) +
+    theme_classic(base_size=22) +
     theme(axis.text=element_text(size=20),
           legend.position="right",
           legend.direction="horizontal")
 }
 
-# 6. Bar‐plot function
+# 6. Bar‐plot function (as before)
 bar_plot <- function(SV) {
   bs <- as.data.frame(SV) %>% pivot_longer(
     everything(), names_to="feature", values_to="shap"
-  ) %>% group_by(feature) %>% summarize(m = mean(abs(shap), na.rm=TRUE)) %>%
-    mutate(pretty = case_when(
+  ) %>% group_by(feature) %>% summarize(m=mean(abs(shap),na.rm=TRUE)) %>%
+    mutate(pretty=case_when(
       grepl("^rocks_",feature) ~ gsub("_"," ",feature),
       TRUE                     ~ recode(feature, !!!recode_map)
     )) %>% filter(!is.na(pretty)) %>%
     arrange(desc(m))
-  bs$pretty <- factor(bs$pretty, levels = rev(bs$pretty))
-  ggplot(bs, aes(x = pretty, y = m)) +
+  bs$pretty <- factor(bs$pretty, levels=rev(bs$pretty))
+  ggplot(bs, aes(pretty,m)) +
     geom_col() + coord_flip() +
-    labs(x=NULL, y="Mean Absolute SHAP Value") +
-    theme_classic(base_size = 22)
+    labs(x=NULL,y="Mean Absolute SHAP Value") +
+    theme_classic(base_size=22)
 }
 
-# 7. Build A & B and extract their shared legend
+# 7. Build panels A & B
 subset_cols <- c("older70"="#1b9e77","recent30"="#d95f02","unseen10"="#7570b3")
-lm_theme <- theme_classic(base_size = 22)
+lm_theme <- theme_classic(base_size=22)
 
-A_full <- ggplot(pred_FNConc, aes(predicted, observed, color = subset)) +
-  geom_point(size=3, alpha=0.8) + geom_abline(linetype="dashed") +
-  scale_color_manual(values = subset_cols, name = "Subset") +
-  labs(x="Predicted", y="Observed", title="Concentration", tag="A") +
+A_full <- ggplot(pred_FNConc, aes(predicted, observed, color=subset)) +
+  geom_point(size=3,alpha=0.8) + geom_abline(linetype="dashed") +
+  scale_color_manual(values=subset_cols,name="Subset") +
+  labs(x="Predicted",y="Observed",title="Concentration",tag="A")+
   lm_theme
 
-B_full <- ggplot(pred_FNYield, aes(predicted, observed, color = subset)) +
-  geom_point(size=3, alpha=0.8) + geom_abline(linetype="dashed") +
-  scale_color_manual(values = subset_cols, name = "Subset") +
-  labs(x="Predicted", y=NULL, title="Yield", tag="B") +
+B_full <- ggplot(pred_FNYield, aes(predicted, observed, color=subset)) +
+  geom_point(size=3,alpha=0.8) + geom_abline(linetype="dashed") +
+  scale_color_manual(values=subset_cols,name="Subset") +
+  labs(x="Predicted",y=NULL,title="Yield",tag="B")+
   lm_theme
 
-AB <- A_full + B_full +
-  plot_layout(ncol=2, guides="collect") & 
-  theme(legend.position="bottom",
-        legend.direction="horizontal",
-        legend.justification="center",
-        legend.title=element_text(size=22),
-        legend.text=element_text(size=20),
-        legend.key.width=unit(1.5,"lines"),
-        legend.key.height=unit(1,"lines")
-  )
-
-# 8. Build C & D
-CD <- bar_plot(SV_FN) + labs(tag="C") + theme(plot.tag=element_text(size=24),plot.tag.position=c(0.02,0.98)) +
-  bar_plot(SV_FY) + labs(tag="D") + theme(plot.tag=element_text(size=24),plot.tag.position=c(0.02,0.98)) +
-  plot_layout(ncol=2)
-
-# 9. Build E & F and extract their dot‐legend
-E_full <- dot_plot(SV_FN, KD_FN_s) + labs(tag="E")
-F_full <- dot_plot(SV_FY, KD_FY_s) + labs(tag="F")
-
-dot_leg <- get_legend(
-  E_full +
-    theme(legend.position="bottom",
+# 7a. Combine A & B with cowplot
+AB_panels <- plot_grid(
+  A_full + theme(legend.position="none"),
+  B_full + theme(legend.position="none"),
+  ncol=2, align="h", axis="tblr", rel_widths=c(1,1)
+)
+AB_leg <- get_legend(
+  A_full +
+    theme(legend.position="right",
           legend.direction="horizontal",
           legend.justification="center",
           legend.title=element_text(size=22),
@@ -156,22 +139,48 @@ dot_leg <- get_legend(
           legend.key.width=unit(1.5,"lines"),
           legend.key.height=unit(1,"lines"))
 )
+AB <- plot_grid(AB_panels, AB_leg, ncol=1, rel_heights=c(1,0.15))
 
-EF <- E_full + theme(legend.position="none") +
-  F_full + theme(legend.position="none") +
-  plot_layout(ncol=2)
+# 8. Panels C & D
+CD <- plot_grid(
+  bar_plot(SV_FN) + labs(tag="C") + theme(plot.tag=element_text(size=24),plot.tag.position=c(0.02,0.98)),
+  bar_plot(SV_FY)+ labs(tag="D") + theme(plot.tag=element_text(size=24),plot.tag.position=c(0.02,0.98)),
+  ncol=2, align="h", axis="tblr", rel_widths=c(1,1)
+)
 
-# 10. Final assemble: align columns only
+# 9. Panels E & F
+E_full <- dot_plot(SV_FN,KD_FN_s) + labs(tag="E")
+F_full <- dot_plot(SV_FY,KD_FY_s) + labs(tag="F")
+
+EF_panels <- plot_grid(
+  E_full + theme(legend.position="none"),
+  F_full + theme(legend.position="none"),
+  ncol=2, align="h", axis="tblr", rel_widths=c(1,1)
+)
+EF_leg <- get_legend(
+  E_full +
+    theme(legend.position="right",
+          legend.direction="horizontal",
+          legend.justification="center",
+          legend.title=element_text(size=22),
+          legend.text=element_text(size=20),
+          legend.key.width=unit(1.5,"lines"),
+          legend.key.height=unit(1,"lines"))
+)
+EF <- plot_grid(EF_panels, EF_leg, ncol=1, rel_heights=c(1,0.15))
+
+# 10. Final assemble
 final_fig2 <- plot_grid(
   AB,
   CD,
   EF,
-  dot_leg,
-  ncol        = 1,
-  rel_heights = c(1,1,1,0.15),
-  align       = "h"
+  ncol=1,
+  rel_heights=c(1,1.3,1)
 )
 
 # 11. Save
-ggsave(file.path(od, "Fig2_Global_FNConc_FNYield_multi.png"),
-       final_fig2, width=12, height=15, dpi=300, bg="white")
+ggsave(
+  file.path(od,"Fig2_Global_FNConc_FNYield_multi.png"),
+  final_fig2,
+  width=12, height=15, dpi=300, bg="white"
+)
