@@ -635,15 +635,7 @@ med_recent30 <- recalc_medians(recent30)
 
 
 # =============================================================================
-# 14) Export medians
-# =============================================================================
-write.csv(med_full,      "Median_NOx_P_full.csv",     row.names=FALSE)
-write.csv(med_unseen10,  "Median_NOx_P_unseen10.csv", row.names=FALSE)
-write.csv(med_older70,   "Median_NOx_P_older70.csv",  row.names=FALSE)
-write.csv(med_recent30,  "Median_NOx_P_recent30.csv", row.names=FALSE)
-
-# =============================================================================
-# 15) Count unique Stream_IDs in each subset
+# Quick sanity check: Count unique Stream_IDs in each subset
 # =============================================================================
 counts_df <- tibble(
   Subset       = c("Full", "Unseen10", "Older70", "Recent30"),
