@@ -10,7 +10,7 @@ library(tidyr)
 library(randomForest)
 library(tibble)
 library(scales)
-library(cowplot)    # get_legend(), plot_grid()
+library(cowplot)    
 theme_set(
   theme_classic(base_size = 22) +
     theme(
@@ -97,16 +97,19 @@ dot_plot <- function(SV, KD_s) {
     ) +
     labs(x = NULL,y = NULL) +
     theme_classic(base_size = 22) +
-    theme(
-          legend.position = "right",
-          legend.direction = "horizontal")
+    theme(legend.position = "right",
+          legend.direction = "horizontal",
+          legend.margin   = ggplot2::margin(t = 0, r = 0, b = 5, l = 0, unit = "pt"))
 }
 
 # 6. Bar‐plot
 bar_plot <- function(SV) {
-  bs <- as.data.frame(SV) %>% pivot_longer(everything(), names_to="feature", values_to="shap") %>%
-    group_by(feature) %>% summarize(m=mean(abs(shap),na.rm=TRUE)) %>%
-    mutate(pretty=recode(feature, !!!recode_map)) %>% filter(!is.na(pretty)) %>%
+  bs <- as.data.frame(SV) %>% 
+    pivot_longer(everything(), names_to="feature", values_to="shap") %>%
+    group_by(feature) %>% 
+    summarize(m=mean(abs(shap),na.rm=TRUE)) %>%
+    mutate(pretty=recode(feature, !!!recode_map)) %>%
+    filter(!is.na(pretty)) %>%
     arrange(desc(m))
   bs$pretty <- factor(bs$pretty, levels=rev(bs$pretty))
   ggplot(bs, aes(pretty, m)) +
@@ -117,13 +120,12 @@ bar_plot <- function(SV) {
 
 # 7. Panels A & B
 subset_cols <- c(
-  older70   = "#004488",  # muted magenta
-  recent30  = "#238B45",  # deep navy blue
-  unseen10  = "#B14085"   # rich green
+  "older70"  = "#E69F00",  # Orange
+  "recent30" = "#56B4E9",  # Sky Blue
+  "unseen10" = "#CC79A7"   # Reddish Purple
 )
 
-
-subset_labs <- c(older70="Test", recent30="Train", unseen10="Cross‑Validation")
+subset_labs <- c(older70 ="Test", recent30 ="Train", unseen10 ="Cross‑Validation")
 
 metrics_FNConc <- pred_FNConc %>%
   group_by(subset) %>%
@@ -134,27 +136,41 @@ fn_x <- range(pred_FNConc$predicted)
 fn_y <- range(pred_FNConc$observed)
 fn_r <- diff(fn_y)
 
-A <- ggplot(pred_FNConc, aes(predicted,observed,color=subset))+
-  geom_point(size=4,alpha=0.4)+
-  geom_abline(linetype="dashed")+
-  scale_color_manual(values=subset_cols,labels=subset_labs,name=NULL)+
+A <- ggplot(pred_FNConc, aes(predicted, observed, color = subset))+
+  geom_point(
+    shape = 21,      # filled circle shape
+    fill  = NA,      # no interior fill
+    size  = 4,       # outer diameter
+    stroke= 1.5      # thicker outline
+  ) +
+  geom_abline(linetype = "dashed") +
+  scale_color_manual(
+    values = subset_cols,
+    labels = subset_labs,
+    name   = NULL,
+    guide  = guide_legend(
+      override.aes = list(
+        shape = 21, fill = NA, size = 8, stroke = 1.5
+      )
+    )
+  ) +
   annotate("text",
-           x=fn_x[1]+0.05*diff(fn_x),
-           y=fn_y[2]-0*(0.08*fn_r),
-           label=sprintf("R²=%.3f, pRMSE=%.1f%%",metrics_FNConc$R2[1],metrics_FNConc$pRMSE[1]),
-           hjust=0, size=6, color=subset_cols["older70"])+
+           x = fn_x[1] + 0.05 * diff(fn_x),
+           y = fn_y[2]- 0 * (0.08 * fn_r),
+           label = sprintf("R² = %.3f, pRMSE = %.1f%%", metrics_FNConc$R2[1], metrics_FNConc$pRMSE[1]),
+           hjust = 0, size = 6, color = subset_cols["older70"])+
   annotate("text",
-           x=fn_x[1]+0.05*diff(fn_x),
-           y=fn_y[2]-1*(0.08*fn_r),
-           label=sprintf("R²=%.3f, pRMSE=%.1f%%",metrics_FNConc$R2[2],metrics_FNConc$pRMSE[2]),
-           hjust=0, size=6, color=subset_cols["recent30"])+
+           x = fn_x[1] + 0.05 * diff(fn_x),
+           y = fn_y[2] - 1* (0.08 * fn_r),
+           label = sprintf("R² = %.3f, pRMSE = %.1f%%", metrics_FNConc$R2[2], metrics_FNConc$pRMSE[2]),
+           hjust = 0, size = 6, color = subset_cols["recent30"])+
   annotate("text",
-           x=fn_x[1]+0.05*diff(fn_x),
-           y=fn_y[2]-2*(0.08*fn_r),
+           x = fn_x[1] + 0.05 * diff(fn_x),
+           y= fn_y[2]-2 * (0.08 * fn_r),
            label=sprintf("R²=%.3f, pRMSE=%.1f%%",metrics_FNConc$R2[3],metrics_FNConc$pRMSE[3]),
            hjust=0, size=6, color=subset_cols["unseen10"])+
   labs(x="Predicted",y="Observed",title="Concentration",tag="A")+
-  scale_x_continuous(expand=expansion(mult=c(0.03,0.03)))+
+  scale_x_continuous(expand=expansion(mult=c(0.03,0.25)))+
   scale_y_continuous(expand=expansion(mult=c(0.02,0.02)))+
   theme(plot.margin=unit(c(5,5,5,0),"pt"))
 
@@ -168,9 +184,23 @@ fy_y <- range(pred_FNYield$observed)
 fy_r <- diff(fy_y)
 
 B <- ggplot(pred_FNYield, aes(predicted,observed,color=subset))+
-  geom_point(size=4,alpha=0.4)+
-  geom_abline(linetype="dashed")+
-  scale_color_manual(values=subset_cols,labels=subset_labs,name=NULL)+
+  geom_point(
+    shape = 21,      # filled circle shape
+    fill  = NA,      # no interior fill
+    size  = 4,       # outer diameter
+    stroke= 1.5      # thicker outline
+  ) +
+  geom_abline(linetype = "dashed") +
+  scale_color_manual(
+    values = subset_cols,
+    labels = subset_labs,
+    name   = NULL,
+    guide  = guide_legend(
+      override.aes = list(
+        shape = 21, fill = NA, size = 8, stroke = 1.5
+      )
+    )
+  ) +
   annotate("text",
            x=fy_x[1]+0.05*diff(fy_x),
            y=fy_y[2]-0*(0.08*fy_r),
@@ -185,11 +215,11 @@ B <- ggplot(pred_FNYield, aes(predicted,observed,color=subset))+
            x=fy_x[1]+0.05*diff(fy_x),
            y=fy_y[2]-2*(0.08*fy_r),
            label=sprintf("R²=%.3f, pRMSE=%.1f%%",metrics_FNYield$R2[3],metrics_FNYield$pRMSE[3]),
-           hjust=0, size=6, color=subset_cols["unseen10"])+
-  labs(x="Predicted",y=NULL,title="Yield",tag="B")+
-  scale_x_continuous(expand=expansion(mult=c(0.03,0.03)))+
-  scale_y_continuous(expand=expansion(mult=c(0.02,0.02)))+
-  theme(plot.margin=unit(c(5,5,5,0),"pt"))
+           hjust = 0, size = 6, color = subset_cols["unseen10"]) +
+  labs(x = "Predicted", y = NULL, title = "Yield", tag= "B") +
+  scale_x_continuous(expand=expansion(mult = c(0.03, 0.25))) +
+  scale_y_continuous(expand = expansion(mult = c(0.02, 0.02))) +
+  theme(plot.margin = unit(c(5, 5, 5, 0),"pt"))
 
 # 7a. row1 + subset legend
 row1 <- plot_grid(
@@ -197,7 +227,17 @@ row1 <- plot_grid(
   B + theme(legend.position="none"),
   ncol=2, align="h", axis="tblr", rel_widths=c(1,1)
 )
-leg1 <- get_legend(A + theme(legend.position="right", legend.direction="horizontal"))
+
+leg1 <- get_legend(
+  A + theme(
+    legend.position    = "right",
+    legend.direction   = "horizontal",
+    legend.key.width   = unit(2,   "lines"),    # wider swatches
+    legend.key.height  = unit(1.5, "lines"),    # taller swatches
+    legend.text        = element_text(size = 22),# bigger labels
+    legend.title       = element_text(size = 20) # if you ever have a title
+  )
+)
 
 # 8. row2
 row2 <- plot_grid(
