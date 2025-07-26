@@ -163,7 +163,7 @@ rf_stability_selection_parallel <- function(x, y, n_bootstrap = 500,
 # 6) Read & split data
 rec_len <- 5
 drv_all <- read.csv(
-  sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years_uncleaned.csv", rec_len)
+  sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.csv", rec_len)
 )
 vars       <- c("NOx","P","npp","evapotrans","greenup_day",
                 "precip","temp","snow_cover","permafrost",

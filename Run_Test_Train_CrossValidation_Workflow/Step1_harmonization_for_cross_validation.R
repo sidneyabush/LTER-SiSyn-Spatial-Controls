@@ -543,10 +543,10 @@ unique_stream_id_count <- drivers_df %>%
 
 print(unique_stream_id_count)
 
-# write out cleaned tot_si
+# write out tot_si
 write.csv(
   drivers_df,
-  sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years_uncleaned.csv", record_length),
+  sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.csv", record_length),
   row.names = FALSE
 )
 

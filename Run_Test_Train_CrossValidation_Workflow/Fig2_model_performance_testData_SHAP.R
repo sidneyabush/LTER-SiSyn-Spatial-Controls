@@ -17,7 +17,9 @@ theme_set(
       panel.background  = element_rect(fill = "white", colour = NA),
       plot.background   = element_rect(fill = "white", colour = NA),
       legend.background = element_rect(fill = "white", colour = NA),
-      legend.key        = element_rect(fill = "white", colour = NA)
+      legend.key        = element_rect(fill = "white", colour = NA),
+      plot.tag          = element_text(size = 22),
+      plot.title        = element_text(size = 24, vjust = 4)  
     )
 )
 
@@ -236,7 +238,7 @@ A <- ggplot(pred_FNConc, aes(predicted, observed)) +
            label = sprintf("R² = %.3f, pRMSE = %.1f%%", metrics_FNConc$R2[3], metrics_FNConc$pRMSE[3]),
            hjust = 0, size = 6.5,
            color = subset_ann_cols[["unseen10"]]) +
-  labs(x="Predicted", y="Observed", title="Concentration", tag="A") +
+  labs(x = "Predicted", y = "Observed", title = "Concentration", tag = "A") +
   scale_x_continuous(expand = expansion(mult = c(0.03, 0.2))) +
   scale_y_continuous(expand = expansion(mult = c(0.02, 0.02))) +
   theme(plot.margin = unit(c(5, 5, 5, 0), "pt"))

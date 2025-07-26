@@ -119,7 +119,6 @@ save_rf2_all_subsets_plot <- function(pred_df, resp, output_dir) {
   )
 }
 
-
 # 4) ntree scan (uses existing cluster)
 test_numtree_parallel <- function(ntree_list, formula, data) {
   foreach(nt = ntree_list, .combine = 'c', .packages = 'randomForest') %dopar% {
@@ -164,7 +163,7 @@ rf_stability_selection_parallel <- function(x, y, n_bootstrap = 500,
 # 6) Read & split data
 rec_len <- 5
 drv_all <- read.csv(
-  sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years_uncleaned.csv", rec_len)
+  sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.csv", rec_len)
 )
 vars       <- c("NOx","P","npp","evapotrans","greenup_day",
                 "precip","temp","snow_cover","permafrost",
@@ -191,36 +190,36 @@ message("Processing ", resp)
 
 tree_grid <- seq(100, 800, by = 100)  # Testing grid
 
-# # a) RF1 tuning (comment out once done)
-# df_tr_full <- df_train %>%
-#   drop_na(all_of(c(resp, predictors)))
-# x1 <- df_tr_full[predictors]
-# y1 <- df_tr_full[[resp]]
-# 
-# # scan ntree for RF1
-# mse1 <- test_numtree_parallel(tree_grid,
-#                               as.formula(paste(resp, "~ .")),
-#                               df_tr_full)
-# nt1 <- tree_grid[which.min(mse1)]
-# 
-# # tune mtry
-# t1   <- randomForest::tuneRF(x1, y1,
-#                              ntreeTry  = nt1,
-#                              stepFactor = 1.5,
-#                              improve    = 0.01,
-#                              plot       = FALSE)
-# mtry1 <- t1[which.min(t1[, 2]), 1]
-# 
-# # train RF1
-# rf1   <- randomForest(x = x1, y = y1,
-#                       ntree      = nt1,
-#                       mtry       = mtry1,
-#                       importance = TRUE)
-# 
-# # cache RF1 and importances
-# imps <- randomForest::importance(rf1)[, "%IncMSE"]
-# save(rf1, imps,
-#      file = file.path(output_dir, sprintf("%s_RF1.RData", resp)))
+# a) RF1 tuning (comment out once done)
+df_tr_full <- df_train %>%
+  drop_na(all_of(c(resp, predictors)))
+x1 <- df_tr_full[predictors]
+y1 <- df_tr_full[[resp]]
+
+# scan ntree for RF1
+mse1 <- test_numtree_parallel(tree_grid,
+                              as.formula(paste(resp, "~ .")),
+                              df_tr_full)
+nt1 <- tree_grid[which.min(mse1)]
+
+# tune mtry
+t1   <- randomForest::tuneRF(x1, y1,
+                             ntreeTry  = nt1,
+                             stepFactor = 1.5,
+                             improve    = 0.01,
+                             plot       = FALSE)
+mtry1 <- t1[which.min(t1[, 2]), 1]
+
+# train RF1
+rf1   <- randomForest(x = x1, y = y1,
+                      ntree      = nt1,
+                      mtry       = mtry1,
+                      importance = TRUE)
+
+# cache RF1 and importances
+imps <- randomForest::importance(rf1)[, "%IncMSE"]
+save(rf1, imps,
+     file = file.path(output_dir, sprintf("%s_RF1.RData", resp)))
 
 # b) Load cached RF1 (if restarting here)
 load(file.path(output_dir, sprintf("%s_RF1.RData", resp)))  # loads rf1, imps
