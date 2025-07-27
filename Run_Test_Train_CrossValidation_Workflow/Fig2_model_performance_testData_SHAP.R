@@ -159,16 +159,17 @@ fn_r <- diff(fn_y)
 
 # Base colors
 subset_cols <- c(
-  "older70"  = "lightgray",  
+  "older70"  = "gray75",  
   "recent30" = "#b9d7ef",  
   "unseen10" = "#525693"   
 )
 
 subset_ann_cols <- c(
-  "older70"  = "#5A5A5A",     
-  "recent30" = "#B45A3E",     
-  "unseen10" = "#2E7F6B"      
+  "older70"  = "gray40",  
+  "recent30" = "#6ea8d3",  # or "#356b9c"
+  "unseen10" = "#525693"   
 )
+
 
 
 # Transparent fills for interior
