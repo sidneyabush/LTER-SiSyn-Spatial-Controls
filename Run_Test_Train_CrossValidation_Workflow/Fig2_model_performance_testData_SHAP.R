@@ -159,13 +159,13 @@ fn_r <- diff(fn_y)
 
 # Base colors
 subset_cols <- c(
-  "older70"  = "gray55",  
+  "older70"  = "gray69",  
   "recent30" = "#b9d7ef",  
   "unseen10" = "#525693"   
 )
 
 subset_ann_cols <- c(
-  "older70"  = "gray40",  
+  "older70"  = "gray50",  
   "recent30" = "#6ea8d3",  # or "#356b9c"
   "unseen10" = "#525693"   
 )
@@ -184,9 +184,9 @@ subset_shapes <- c(
 
 # Sizes per group
 subset_sizes <- c(
-  "older70"  = 4.5,
-  "recent30" = 4,
-  "unseen10" = 4
+  "older70"  = 5,
+  "recent30" = 3.5,
+  "unseen10" = 4.1
 )
 
 subset_labs <- c(
