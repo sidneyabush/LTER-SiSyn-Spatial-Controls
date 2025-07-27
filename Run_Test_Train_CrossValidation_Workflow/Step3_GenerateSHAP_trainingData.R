@@ -18,21 +18,11 @@ final_models_dir <- "Final_Models"
 
 # 4. Load FNConc model & kept‑drivers into their own env to avoid name clashes
 load(file.path(final_models_dir, "FNConc_Yearly_rf_model2.RData"))
-rf_model2_FNConc <- rf2; rm(rf2)
-
-fn_env <- new.env()
-load(file.path(final_models_dir, "FNConc_Yearly_kept_drivers.RData"), envir = fn_env)
-kept_drivers_FNConc <- fn_env$kept_drivers
-rm(fn_env)
+load(file.path(final_models_dir, "FNConc_Yearly_kept_drivers.RData"))
 
 # 5. Load FNYield model & kept‑drivers into a separate env
 load(file.path(final_models_dir, "FNYield_Yearly_rf_model2.RData"))
-rf_model2_FNYield <- rf2; rm(rf2)
-
-fy_env <- new.env()
-load(file.path(final_models_dir, "FNYield_Yearly_kept_drivers.RData"), envir = fy_env)
-kept_drivers_FNYield <- fy_env$kept_drivers
-rm(fy_env)
+load(file.path(final_models_dir, "FNYield_Yearly_kept_drivers.RData"))
 
 ###############################################################################
 # 5. Helper to generate SHAP with a sanity‐check
@@ -73,7 +63,7 @@ generate_shap_values <- function(model, kept_drivers, sample_size = 30) {
 # 6. Generate & save SHAP for FNConc
 ###############################################################################
 shap_values_FNConc <- generate_shap_values(
-  model        = rf_model2_FNConc,
+  model        = rf2_FNConc,
   kept_drivers = kept_drivers_FNConc,
   sample_size  = 30
 )
@@ -87,7 +77,7 @@ save(
 # 7. Generate & save SHAP for FNYield
 ###############################################################################
 shap_values_FNYield <- generate_shap_values(
-  model        = rf_model2_FNYield,
+  model        = rf2_FNYield,
   kept_drivers = kept_drivers_FNYield,
   sample_size  = 30
 )
