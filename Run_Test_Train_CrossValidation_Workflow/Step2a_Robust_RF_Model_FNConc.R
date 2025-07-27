@@ -44,7 +44,6 @@ save_rf_importance_plot <- function(rf_model, output_dir) {
   dev.off()
 }
 
-
 save_lm_plot <- function(rf_model2, observed, output_dir) {
   preds <- rf_model2$predicted
   rmse  <- sqrt(mean((preds - observed)^2))
@@ -175,11 +174,14 @@ rec_len <- 5
 drv_all <- read.csv(
   sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.csv", rec_len)
 )
+
 vars       <- c("NOx","P","npp","evapotrans","greenup_day",
                 "precip","temp","snow_cover","permafrost",
                 "elevation","basin_slope","RBI","recession_slope",
                 grep("^land_|^rocks_", names(drv_all), value = TRUE))
+
 predictors <- intersect(vars, names(drv_all))
+
 rl_cols    <- grep("^(land_|rocks_)", names(drv_all), value = TRUE)
 
 load_split <- function(path) {
@@ -257,6 +259,7 @@ message("Stability selection took ", round(end - start, 2),
         " ", units(end - start))
 
 feats <- stab$features
+
 # Save stability selection output for reuse
 save(stab, feats, imp_thr, freq_thr,
      file = file.path(output_dir, sprintf("%s_stability_selection.RData", resp)))
@@ -267,6 +270,9 @@ write.csv(
   file = file.path(output_dir, sprintf("%s_stability_frequencies.csv", resp)),
   row.names = FALSE
 )
+
+# Load cached stability outputs
+load(file.path(output_dir, sprintf("%s_stability_selection.RData", resp))) 
 
 # d) RF2 on selected features
 message("Starting RF2 tuning…")
@@ -298,6 +304,7 @@ rf2 <- randomForest(x         = df2[feats],
                     importance = TRUE)
 
 end <- Sys.time()
+
 message("RF2 tuning took ", round(end - start, 2),
         " ", units(end - start))
 
@@ -305,10 +312,16 @@ message("RF2 tuning took ", round(end - start, 2),
 save(rf2, nt2, mtry2, feats,
      file = file.path(output_dir, sprintf("%s_RF2_model_and_settings.RData", resp)))
 
+# Load RF2 model and tuning parameters
+load(file.path(output_dir, sprintf("%s_RF2_model_and_settings.RData", resp)))  
+
 # e) Save RF2 & drivers for SHAP
 save(rf2,
      file = file.path(output_dir,
                       sprintf("%s_Yearly_rf_model2.RData", resp)))
+
+# Load RF2 model 
+load(file.path(output_dir, sprintf("%s_Yearly_rf_model2.RData", resp)))  #
 
 kept_drivers <- df_recent30 %>%
   drop_na(all_of(c(resp, feats))) %>%

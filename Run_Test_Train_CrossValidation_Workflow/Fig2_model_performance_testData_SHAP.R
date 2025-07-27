@@ -36,8 +36,6 @@ load(file.path(fm, "FNConc_Yearly_shap_values_recent30.RData"));  SV_FN  <- shap
 load(file.path(fm, "FNYield_Yearly_shap_values_recent30.RData")); SV_FY  <- shap_values_FNYield
 load(file.path(fm, "FNConc_Yearly_kept_drivers.RData"));  KD_FN  <- kept_drivers; rm(kept_drivers)
 load(file.path(fm, "FNYield_Yearly_kept_drivers.RData")); KD_FY  <- kept_drivers; rm(kept_drivers)
-load(file.path(fm, "FNConc_Yearly_numeric.RData"));  DN_FN  <- drivers_numeric
-load(file.path(fm, "FNYield_Yearly_numeric.RData")); DN_FY  <- drivers_numeric
 
 # 4. Recode & scale setup
 recode_map <- setNames(

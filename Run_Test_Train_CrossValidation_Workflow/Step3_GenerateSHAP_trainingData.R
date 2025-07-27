@@ -1,6 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # Compute SHAP values for recent30 data using RF2 models for FNConc and FNYield
-# Saves SHAP values as .RData for plotting later (on the recent30 subset)
 # ──────────────────────────────────────────────────────────────────────────────
 
 ## 1. Load needed packages
@@ -9,43 +8,58 @@ librarian::shelf(
   randomForest, tibble, viridis, RColorBrewer, patchwork, fastshap
 )
 
-## 2. Clear environment & set seed
+## 2. Clear env & seed
 rm(list = ls())
 set.seed(123)
 
-## 3. Set working directory
+## 3. Set WD
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
-
-## 4. Path to your Final_Models folder
 final_models_dir <- "Final_Models"
 
-## 5. Load FNConc model & recent30 drivers
-load(file.path(final_models_dir, "FNConc_Yearly_rf_model2.RData"))  
-rf_model2_FNConc    <- rf2; rm(rf2)
+# 4. Load FNConc model & kept‑drivers into their own env to avoid name clashes
+load(file.path(final_models_dir, "FNConc_Yearly_rf_model2.RData"))
+rf_model2_FNConc <- rf2; rm(rf2)
 
-load(file.path(final_models_dir, "FNConc_Yearly_kept_drivers.RData"))
-kept_drivers_FNConc <- kept_drivers; rm(kept_drivers)
+fn_env <- new.env()
+load(file.path(final_models_dir, "FNConc_Yearly_kept_drivers.RData"), envir = fn_env)
+kept_drivers_FNConc <- fn_env$kept_drivers
+rm(fn_env)
 
-## 6. Load FNYield model & recent30 drivers
+# 5. Load FNYield model & kept‑drivers into a separate env
 load(file.path(final_models_dir, "FNYield_Yearly_rf_model2.RData"))
-rf_model2_FNYield   <- rf2; rm(rf2)
+rf_model2_FNYield <- rf2; rm(rf2)
 
-load(file.path(final_models_dir, "FNYield_Yearly_kept_drivers.RData"))
-kept_drivers_FNYield <- kept_drivers; rm(kept_drivers)
-
+fy_env <- new.env()
+load(file.path(final_models_dir, "FNYield_Yearly_kept_drivers.RData"), envir = fy_env)
+kept_drivers_FNYield <- fy_env$kept_drivers
+rm(fy_env)
 
 ###############################################################################
-# 7. Define Function to Create SHAP Values (on recent30 data)
+# 5. Helper to generate SHAP with a sanity‐check
 ###############################################################################
 generate_shap_values <- function(model, kept_drivers, sample_size = 30) {
-  # ensure we pass exactly the predictors the RF saw, in the correct order
+  # 1) which predictors did RF actually use?
   model_vars <- names(model$forest$xlevels)
-  X_ordered  <- kept_drivers[, model_vars, drop = FALSE]
   
+  # 2) check for any missing columns
+  missing <- setdiff(model_vars, colnames(kept_drivers))
+  if (length(missing) > 0) {
+    stop(
+      "Cannot compute SHAP: the following variable(s) are in the RF model but",
+      " not in your kept_drivers:\n  ",
+      paste(missing, collapse = ", ")
+    )
+  }
+  
+  # 3) now safely subset & reorder
+  X_ordered <- kept_drivers[, model_vars, drop = FALSE]
+  
+  # 4) wrap predict
   custom_predict <- function(object, newdata) {
     predict(object, newdata = as.data.frame(newdata))
   }
   
+  # 5) compute SHAP
   fastshap::explain(
     object       = model,
     X            = X_ordered,
@@ -56,29 +70,27 @@ generate_shap_values <- function(model, kept_drivers, sample_size = 30) {
 
 
 ###############################################################################
-# 8. Generate SHAP Values for Both FNConc and FNYield (recent30 subset)
+# 6. Generate & save SHAP for FNConc
 ###############################################################################
-shap_values_FNConc  <- generate_shap_values(
-  model        = rf_model2_FNConc,  
-  kept_drivers = kept_drivers_FNConc,  
+shap_values_FNConc <- generate_shap_values(
+  model        = rf_model2_FNConc,
+  kept_drivers = kept_drivers_FNConc,
   sample_size  = 30
 )
-
-shap_values_FNYield <- generate_shap_values(
-  model        = rf_model2_FNYield, 
-  kept_drivers = kept_drivers_FNYield, 
-  sample_size  = 30
-)
-
-
-###############################################################################
-# 9. Save SHAP Values back to Final_Models
-###############################################################################
 save(
   shap_values_FNConc,
   file = file.path(final_models_dir, "FNConc_Yearly_shap_values_recent30.RData")
 )
 
+
+###############################################################################
+# 7. Generate & save SHAP for FNYield
+###############################################################################
+shap_values_FNYield <- generate_shap_values(
+  model        = rf_model2_FNYield,
+  kept_drivers = kept_drivers_FNYield,
+  sample_size  = 30
+)
 save(
   shap_values_FNYield,
   file = file.path(final_models_dir, "FNYield_Yearly_shap_values_recent30.RData")

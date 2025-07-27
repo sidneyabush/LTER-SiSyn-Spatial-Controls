@@ -9,7 +9,7 @@ rm(list = ls())
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 # Define the path to your “Final_Models” folder
-final_models_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Models"
+final_models_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Models/Full_Dataset"
 
 # ------------------------- FNConc Data (Concentration) -------------------------
 # 4. Load FNConc model/data from “Final_Models”

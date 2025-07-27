@@ -175,11 +175,14 @@ rec_len <- 5
 drv_all <- read.csv(
   sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.csv", rec_len)
 )
+
 vars       <- c("NOx","P","npp","evapotrans","greenup_day",
                 "precip","temp","snow_cover","permafrost",
                 "elevation","basin_slope","RBI","recession_slope",
                 grep("^land_|^rocks_", names(drv_all), value = TRUE))
+
 predictors <- intersect(vars, names(drv_all))
+
 rl_cols    <- grep("^(land_|rocks_)", names(drv_all), value = TRUE)
 
 load_split <- function(path) {
