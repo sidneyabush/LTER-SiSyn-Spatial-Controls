@@ -257,10 +257,16 @@ message("Stability selection took ", round(end - start, 2),
         " ", units(end - start))
 
 feats <- stab$features
-# if (length(feats) < 5) {
-#   message("Low feature count; falling back to top 5 by frequency.")
-#   feats <- names(sort(stab$frequencies, decreasing = TRUE))[1:5]
-# }
+# Save stability selection output for reuse
+save(stab, feats, imp_thr, freq_thr,
+     file = file.path(output_dir, sprintf("%s_stability_selection.RData", resp)))
+
+# Also export frequencies in standalone CSV (optional but convenient)
+write.csv(
+  tibble(variable = names(stab$frequencies), frequency = stab$frequencies),
+  file = file.path(output_dir, sprintf("%s_stability_frequencies.csv", resp)),
+  row.names = FALSE
+)
 
 # d) RF2 on selected features
 message("Starting RF2 tuning…")
@@ -295,13 +301,19 @@ end <- Sys.time()
 message("RF2 tuning took ", round(end - start, 2),
         " ", units(end - start))
 
+# Save RF2 model and tuning parameters
+save(rf2, nt2, mtry2, feats,
+     file = file.path(output_dir, sprintf("%s_RF2_model_and_settings.RData", resp)))
+
 # e) Save RF2 & drivers for SHAP
 save(rf2,
      file = file.path(output_dir,
                       sprintf("%s_Yearly_rf_model2.RData", resp)))
+
 kept_drivers <- df_recent30 %>%
   drop_na(all_of(c(resp, feats))) %>%
   select(all_of(feats))
+
 save(kept_drivers,
      file = file.path(output_dir,
                       sprintf("%s_Yearly_kept_drivers.RData", resp)))
@@ -352,6 +364,7 @@ pred_list <- list(
                                         df_unseen10 %>%
                                           drop_na(all_of(c(resp, feats)))))
 )
+
 pred_df <- bind_rows(pred_list)
 write.csv(pred_df,
           file.path(output_dir,
@@ -367,3 +380,28 @@ save_rf2_all_subsets_plot(pred_df, resp, output_dir)
 
 # 8) Stop parallel backend
 parallel::stopCluster(cl)
+
+# 9) Save stability + importance summary (with header comment)
+stab_df <- tibble(
+  variable  = names(stab$frequencies),
+  frequency = stab$frequencies,
+  incMSE    = imps[names(stab$frequencies)],
+  selected  = names(stab$frequencies) %in% feats
+)
+
+# Define output path
+stab_out <- file.path(output_dir, sprintf("%s_08_Feature_Stability_and_medianImportance.csv", resp))
+
+# Write header line with importance threshold, then data
+writeLines(
+  sprintf("# Importance threshold (median %%IncMSE from RF1) = %.5f", imp_thr),
+  con = stab_out
+)
+write.table(
+  stab_df,
+  file      = stab_out,
+  sep       = ",",
+  row.names = FALSE,
+  append    = TRUE
+)
+

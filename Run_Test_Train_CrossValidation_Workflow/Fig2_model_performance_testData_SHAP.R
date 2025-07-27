@@ -146,18 +146,32 @@ fn_x <- range(pred_FNConc$predicted)
 fn_y <- range(pred_FNConc$observed)
 fn_r <- diff(fn_y)
 
+# # Base colors
+# subset_cols <- c(
+#   "older70"  = "gray55",  
+#   "recent30" = "#C0805B",  
+#   "unseen10" = "#376A5A"   
+# )
+# 
+# subset_ann_cols <- c(
+#   "older70"  = "#5A5A5A",     
+#   "recent30" = "#B45A3E",     
+#   "unseen10" = "#2E7F6B"      
+# )
+
 # Base colors
 subset_cols <- c(
-  "older70"  = "gray55",  
-  "recent30" = "#C0805B",  
-  "unseen10" = "#376A5A"   
+  "older70"  = "lightgray",  
+  "recent30" = "#b9d7ef",  
+  "unseen10" = "#525693"   
 )
 
 subset_ann_cols <- c(
-  "older70"  = "#5A5A5A",     # darker grey (was too close before)
-  "recent30" = "#B45A3E",     # deeper burnt sienna (less pink)
-  "unseen10" = "#2E7F6B"      # darker, richer forest green
+  "older70"  = "#5A5A5A",     
+  "recent30" = "#B45A3E",     
+  "unseen10" = "#2E7F6B"      
 )
+
 
 # Transparent fills for interior
 subset_fills <- scales::alpha(subset_cols, 0.35)
