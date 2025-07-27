@@ -113,7 +113,7 @@ for (feat in colnames(shap_FNConc)) {
   ggsave(
     filename = file.path(conc_out, sprintf("PDP_Concentration_%s_LOESS.png", feat)),
     plot     = p,
-    width    = 6, height = 6, dpi = 300, bg="white"
+    width    = 10, height = 10, dpi = 300, bg="white"
   )
 }
 
@@ -130,6 +130,6 @@ for (feat in colnames(shap_FNYield)) {
   ggsave(
     filename = file.path(yield_out, sprintf("PDP_Yield_%s_LOESS.png", feat)),
     plot     = p,
-    width    = 6, height = 6, dpi = 300, bg="white"
+    width    = 10, height = 10, dpi = 300, bg="white"
   )
 }

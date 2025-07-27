@@ -73,13 +73,13 @@ hist_long <- hist_long %>%
 
 # Create the plot object
 p <- ggplot(hist_long, aes(x = value, fill = subset)) +
-  geom_histogram(position = "identity", alpha = 0.7, bins = 30) +
+  geom_histogram(position = "identity", alpha = 0.8, bins = 30) +
   facet_wrap(~ driver, scales = "free", ncol = 4) +
   scale_fill_manual(
     values = c(
       "Training"            = "gray70",  
-      "Testing"             = "#B45A3E", 
-      "Cross-Validation"    = "#2E7F6B"
+      "Testing"             = "#b9d7ef", 
+      "Cross-Validation"    = "#525693"
     ),
     guide = guide_legend(override.aes = list(alpha = 1))
   ) +

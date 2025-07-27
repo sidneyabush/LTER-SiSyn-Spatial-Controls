@@ -34,8 +34,8 @@ pred_FNConc  <- read.csv(file.path(fm, "Predictions_FNConc.csv"))
 pred_FNYield <- read.csv(file.path(fm, "Predictions_FNYield.csv"))
 load(file.path(fm, "FNConc_Yearly_shap_values_recent30.RData"));  SV_FN  <- shap_values_FNConc
 load(file.path(fm, "FNYield_Yearly_shap_values_recent30.RData")); SV_FY  <- shap_values_FNYield
-load(file.path(fm, "FNConc_Yearly_kept_drivers.RData"));  KD_FN  <- kept_drivers; rm(kept_drivers)
-load(file.path(fm, "FNYield_Yearly_kept_drivers.RData")); KD_FY  <- kept_drivers; rm(kept_drivers)
+load(file.path(fm, "FNConc_Yearly_kept_drivers.RData"));  KD_FN  <- kept_drivers_FNConc
+load(file.path(fm, "FNYield_Yearly_kept_drivers.RData")); KD_FY  <- kept_drivers_FNYield
 
 # 4. Recode & scale setup
 recode_map <- setNames(
@@ -159,7 +159,7 @@ fn_r <- diff(fn_y)
 
 # Base colors
 subset_cols <- c(
-  "older70"  = "gray75",  
+  "older70"  = "gray55",  
   "recent30" = "#b9d7ef",  
   "unseen10" = "#525693"   
 )
