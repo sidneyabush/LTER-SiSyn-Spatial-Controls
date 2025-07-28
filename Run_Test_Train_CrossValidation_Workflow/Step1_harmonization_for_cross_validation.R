@@ -103,7 +103,8 @@ daily_kalman <- read_csv("Full_Results_WRTDS_kalman_daily_filtered.csv",
     Year = lubridate::year(Date),
     Stream_ID = paste0(LTER, "__", Stream_Name)
   ) %>%
-  filter(LTER != "MCM", Year >= 2002, Year <= 2022)
+  filter(LTER != "MCM") %>%
+  filter(Year >= 2002, Year <= 2022)
 
 daily_Q_CJ <- read.csv("WRTDS-input_discharge.csv",
                        stringsAsFactors = FALSE) %>%
@@ -113,10 +114,8 @@ daily_Q_CJ <- read.csv("WRTDS-input_discharge.csv",
     LTER        = "Catalina Jemez",
     Stream_Name = str_extract(Stream_ID, "OR_low|MG_WEIR")
   ) %>%
-  filter(
-    Stream_ID %in% c("Catalina Jemez__OR_low", "Catalina Jemez__MG_WEIR"),
-    Year >= 2002, Year <= 2022
-  ) %>%
+  filter(Stream_ID %in% c("Catalina Jemez__OR_low", "Catalina Jemez__MG_WEIR")) %>%
+  filter(Year >= 2002, Year <= 2022) %>%
   select(-indicate)
 
 
@@ -294,10 +293,10 @@ melted <- melted %>%
 
 # f) pivot back to wide
 drivers_cast <- melted %>%
-  filter(year >= 2002 & year <= 2022) %>%
   distinct(Stream_Name, year, driver, value) %>%
-  rename(Year = year) %>%
-  pivot_wider(names_from = driver, values_from = value)
+  pivot_wider(names_from = driver, values_from = value) %>%
+  filter(year >= 2002 & year <= 2022) %>%
+  rename(Year = year)
 
 # g) re‐attach the character columns
 all_spatial <- drivers_cast %>%
