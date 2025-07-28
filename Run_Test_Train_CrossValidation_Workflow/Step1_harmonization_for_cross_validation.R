@@ -135,10 +135,9 @@ daily_all <- daily_all %>%
 daily_all <- daily_all %>%
   mutate(
     Stream_ID = case_when(
-      # if it’s the one with the extra space, drop it
-      Stream_ID == "UK__THAMES AT ROYAL WINDSOR PARK " ~ 
-        "UK__THAMES AT ROYAL WINDSOR PARK",
-      TRUE ~ Stream_ID
+      # drop the extra space on the Thames site
+      Stream_ID == "UK__THAMES AT ROYAL WINDSOR PARK "   ~ "UK__THAMES AT ROYAL WINDSOR PARK",
+      TRUE                                             ~ Stream_ID
     )
   )
 
@@ -157,6 +156,7 @@ flashiness <- daily_all %>%
     RBI             = total_change / total_discharge,
     .groups = "drop"
   )
+
 rbi_full <- flashiness %>% select(Stream_ID, RBI)
 
 # 3) Calculate Recession‐curve slope
@@ -168,7 +168,11 @@ recession_data <- daily_all %>%
     ratio = Q / lag(Q),
     recession_slope = -dQdt
   ) %>%
-  filter(!is.na(dQdt), ratio >= 0.7, dQ < 0)
+  dplyr::filter(
+    !is.na(dQdt),    # drop first row per stream
+    ratio  >= 0.7,    # only keep days where Q/lag(Q) ≥ 0.7
+    dQ     <  0      # only recession days
+  )
 
 recession_slopes <- recession_data %>%
   group_by(Stream_ID) %>%
