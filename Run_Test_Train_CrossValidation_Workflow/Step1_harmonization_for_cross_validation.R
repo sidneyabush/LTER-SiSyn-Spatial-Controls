@@ -131,7 +131,16 @@ daily_all <- daily_all %>%
   mutate(Stream_ID = coalesce(Stream_ID2, Stream_ID)) %>%
   select(-Stream_ID2)
 
-daily_all   <- standardize_stream_id(daily_all)
+# Not the most efficient, but we're having issues dropping this one site due to a space at the end of the STREAM_ID:
+daily_all <- daily_all %>%
+  mutate(
+    Stream_ID = case_when(
+      # if it’s the one with the extra space, drop it
+      Stream_ID == "UK__THAMES AT ROYAL WINDSOR PARK " ~ 
+        "UK__THAMES AT ROYAL WINDSOR PARK",
+      TRUE ~ Stream_ID
+    )
+  )
 
 # 2) Calculate Flashiness (RBI) for each Stream_ID
 flashiness <- daily_all %>%

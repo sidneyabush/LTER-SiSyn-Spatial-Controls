@@ -433,11 +433,6 @@ tot_with_slope_filled <- tot_with_slope_filled %>%
       TRUE ~ basin_slope_mean_degree               # Retain existing values
     )
   ) 
-  # %>%
-  # # Remove specific Stream_IDs (no shapefiles or spatial data)
-  # dplyr::filter(!Stream_ID %in% c("MD__Barham", "MD__Jingellic", "USGS__Arkansas River at Murray Dam",
-  #                        "USGS__COLUMBIA RIVER AT PORT WESTWARD", "USGS__DMF Brazos River", 
-  #                        "USGS__YAMPA RIVER BELOW CRAIG"))
 
 # Convert to data.table for efficient key-based operations
 tot_with_slope_filled <- as.data.table(tot_with_slope_filled)
