@@ -10,6 +10,15 @@ record_length <- 5
 # Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files")
 
+# helper to clean up Stream_ID formatting
+standardize_stream_id <- function(df) {
+  df %>%
+    mutate(
+      Stream_ID = str_trim(Stream_ID),               # remove leading/trailing spaces
+      Stream_ID = str_replace_all(Stream_ID, "\\s+", " ")  # collapse multiple spaces
+    )
+}
+
 # -----------------------------------------------------------------------------
 # 1) Read in & tidy WRTDS DSi results
 # -----------------------------------------------------------------------------
@@ -56,6 +65,7 @@ site_year_counts <- wrtds_df %>%
 wrtds_df <- wrtds_df %>%
   filter(Stream_ID %in% site_year_counts$Stream_ID)
 
+wrtds_df   <- standardize_stream_id(wrtds_df)
 
 # =============================================================================
 # 2) Calculate Yields
@@ -74,21 +84,95 @@ tot <- wrtds_df %>%
   rename_with(~str_remove(., "\\.x$"))
 
 # =============================================================================
-# 3) Merge Flashiness (RBI)
+# 3) Discharge Metrics: Calculate Flashiness (RBI) and Recession Curve Slope
 # =============================================================================
-flashiness <- read_csv("flashiness_by_stream_id.csv", show_col_types=FALSE)
-tot <- left_join(tot, flashiness, by="Stream_ID")
+
+# 1) Read & tag daily Q series
+daily_all <- bind_rows(
+  read_csv("Full_Results_WRTDS_kalman_daily_filtered.csv",
+           col_select = c("LTER.x","Stream_Name","Date","Q")) %>%
+    rename(LTER = LTER.x) %>%
+    mutate(
+      Date      = as.Date(Date),
+      Year      = year(Date),
+      Stream_ID = paste0(
+        LTER, "__",
+        case_when(
+          Stream_Name=="East Fork"              ~ "east fork",
+          Stream_Name=="West Fork"              ~ "west fork",
+          Stream_Name=="Amazon River at Obidos" ~ "Obidos",
+          TRUE                                  ~ Stream_Name
+        )
+      )
+    ),
+  read_csv("WRTDS-input_discharge.csv") %>%
+    mutate(
+      Date      = as.Date(Date),
+      Year      = year(Date),
+      Stream_ID = paste0(
+        "Catalina Jemez__",
+        str_extract(Stream_ID, "OR_low|MG_WEIR")
+      )
+    ) %>%
+    select(Date, Year, Q, Stream_ID)
+) %>%
+  filter(!is.na(Q)) %>%
+  arrange(Stream_ID, Date) %>%
+  standardize_stream_id()
+
+# 2) Calculate Flashiness (RBI) for Each Stream_ID (old method)
+flashiness <- daily_all %>%
+  group_by(Stream_ID) %>%
+  arrange(Date) %>%
+  mutate(
+    dQ    = Q - lag(Q),
+    abs_dQ = abs(dQ)
+  ) %>%
+  filter(!is.na(abs_dQ)) %>%
+  summarise(
+    total_discharge = sum(Q,    na.rm = TRUE),
+    total_change    = sum(abs_dQ, na.rm = TRUE),
+    RBI             = total_change / total_discharge,
+    .groups = "drop"
+  )
+
+rbi_full <- flashiness %>% select(Stream_ID, RBI)
+
+# 3) Calculate Recession Curve Slope
+recession_data <- daily_all %>%
+  arrange(Stream_ID, Date) %>%
+  mutate(
+    dQ    = Q - lag(Q),
+    dQdt  = dQ / as.numeric(Date - lag(Date)),
+    ratio = Q / lag(Q),
+    recession_slope = -dQdt
+  ) %>%
+  filter(!is.na(dQdt), ratio >= 0.7, dQ < 0)
+
+recession_slopes <- recession_data %>%
+  group_by(Stream_ID) %>%
+  filter(!if_any(where(is.numeric), ~ . %in% c(Inf, -Inf))) %>%
+  summarise(
+    n_days = n(),
+    slope  = if (n_days >= 30) {
+      unname(coef(lm(log(recession_slope) ~ log(Q), data = cur_data()))[2])
+    } else {
+      NA_real_
+    },
+    .groups = "drop"
+  ) %>%
+  filter(!is.na(slope), slope >= 0)
+
+# 4) Merge both metrics into your annual ‘tot’ table
+tot <- tot %>%
+  left_join(rbi_full,          by = "Stream_ID") %>%  # add RBI
+  left_join(
+    recession_slopes %>% rename(recession_slope = slope),
+    by = "Stream_ID"
+  )
 
 # =============================================================================
-# 4) Merge Recession Curve Slope
-# =============================================================================
-recession_slope <- read_csv("Recession_Slopes_by_StreamID_Aggregate.csv", show_col_types=FALSE) %>%
-  rename(recession_slope = slope) %>%
-  dplyr::select(-`...1`, -n_days)
-tot <- left_join(tot, recession_slope, by="Stream_ID")
-
-# =============================================================================
-# 5) Merge Köppen–Geiger Classification
+# 4) Merge Köppen–Geiger Classification
 # =============================================================================
 KG <- read.csv("Koeppen_Geiger_2.csv") %>%
   mutate(
@@ -107,37 +191,8 @@ tot <- left_join(tot, KG, by="Stream_ID") %>%
   rename_with(~str_remove(., "\\.y$"))
 
 # =============================================================================
-# 6) Merge Daylength
-# =============================================================================
-daylen <- read.csv("Monthly_Daylength_2.csv") %>% dplyr::select(-1)
-daylen_range <- daylen %>%
-  group_by(Stream_Name) %>%
-  summarise(Max_Daylength = max(mean_daylength), .groups="drop") %>%
-  mutate(
-    Stream_Name = case_when(
-      Stream_Name == "East Fork"              ~ "east fork",
-      Stream_Name == "West Fork"              ~ "west fork",
-      Stream_Name == "Amazon River at Obidos" ~ "Obidos",
-      TRUE                                    ~ Stream_Name
-    )
-  )
-tot <- left_join(tot, daylen_range, by="Stream_Name", relationship="many-to-many") %>%
-  distinct(Stream_ID,Year,.keep_all=TRUE) %>%
-  dplyr::select(-contains(".x")) %>%
-  rename_with(~str_remove(., "\\.y$"))
-
-# =============================================================================
 # 7) Spatial Drivers + Basin Slope Gap‑Fill
 # =============================================================================
-
-# helper to clean up Stream_ID formatting
-standardize_stream_id <- function(df) {
-  df %>%
-    mutate(
-      Stream_ID = str_trim(Stream_ID),               # remove leading/trailing spaces
-      Stream_ID = str_replace_all(Stream_ID, "\\s+", " ")  # collapse multiple spaces
-    )
-}
 
 # 7a) read & tidy raw spatial‐drivers sheet
 si_drivers <- read.csv("all-data_si-extract_2_20250325.csv",
@@ -171,8 +226,12 @@ si_drivers[pcols] <- lapply(si_drivers[pcols], function(x) {
 
 # 7d) split out the annual vars vs the purely character vars
 months_regex <- "_jan_|_feb_|_mar_|_apr_|_may_|_jun_|_jul_|_aug_|_sep_|_oct_|_nov_|_dec_"
-annual_block <- si_drivers %>% dplyr::select(-matches(months_regex))
-char_block   <- annual_block %>% dplyr::select(Stream_Name, matches("elevation|rock|land|soil|permafrost|slope"))
+annual_block <- si_drivers %>% 
+  dplyr::select(-matches(months_regex))
+
+char_block   <- annual_block %>% 
+  dplyr::select(Stream_Name, matches("elevation|rock|land|soil|permafrost|slope"))
+
 annual_vars  <- annual_block %>%
   dplyr::select(-matches("elevation|rock|land|soil|permafrost")) %>%
   dplyr::select(-LTER, -Stream_ID, -Shapefile_Name, -Discharge_File_Name)
@@ -198,6 +257,7 @@ units_df <- data.frame(
 
 # tag driver
 melted$driver <- NA_character_
+
 for (v in vars_ann) {
   melted$driver[grepl(v, melted$variable)] <- v
 }
@@ -211,7 +271,8 @@ melted$year <- ifelse(
 
 # merge in units, drop the old variable name
 melted <- merge(melted, units_df, by = "driver")
-melted <- melted %>% dplyr::select(-variable, -units)
+melted <- melted %>% 
+  dplyr::select(-variable, -units)
 
 # 7f) pivot back to wide
 drivers_cast <- melted %>%
@@ -300,7 +361,7 @@ tot <- tot[!is.na(major_rock) &
              major_rock != "0"]
 
 # =============================================================================
-# 9) Land Cover + N/P gap‑fill (LONG‑SCRIPT workflow)
+# 9) Land Cover + N/P gap‑fill
 # =============================================================================
 
 # — First, land cover as before:
@@ -388,7 +449,6 @@ wrtds_NP_wide <- wrtds_NP %>%
     values_from = GenConc
   )
 
-
 # 2) Summarise raw NP
 raw_NP_wide <- read.csv("converted_raw_NP.csv", stringsAsFactors=FALSE) %>%
   mutate(
@@ -432,12 +492,12 @@ tot <- tot %>% left_join(combined_NP, by = c("Stream_ID","Year"))
 stopifnot(all(c("P","NOx") %in% names(tot)))
 
 # =============================================================================
-# 10) Final Export tot_si (with zero‐fill and outlier removal)
+# 10) Final Export tot_si 
 # =============================================================================
 # Tidy data for export: 
 tot_si <- tot %>%
   dplyr::select(Stream_ID, Year, drainSqKm, NOx, P, precip, Q,
-                temp, Max_Daylength, prop_area, npp, evapotrans,
+                temp, prop_area, npp, evapotrans,
                 cycle0, permafrost_mean_m, elevation_mean_m, RBI, recession_slope,
                 basin_slope_mean_degree, FNConc, FNYield, GenConc, GenYield, major_rock, major_land,
                 contains("rocks"), contains("land_")) %>%
@@ -460,7 +520,7 @@ print(num_unique_stream_ids)
 # Convert numeric columns to numeric
 tot_annual <- tot_si %>%
   distinct(Stream_ID, Year, .keep_all = TRUE)  %>% 
-  mutate(across(c(drainage_area, NOx, P, precip, Q, temp, Max_Daylength, 
+  mutate(across(c(drainage_area, NOx, P, precip, Q, temp, 
                   snow_cover, npp, evapotrans, 
                   greenup_day, permafrost, elevation, basin_slope, 
                   FNConc, FNYield, GenConc, GenYield), 
@@ -478,7 +538,7 @@ drivers_df <- tot_annual %>%
   mutate(across(where(is.character), ~ na_if(., ""))) %>%
   dplyr::select(FNConc, everything()) %>%
   # Replace NAs in selected numeric columns with 0 (if desired)
-  mutate_at(vars(25:39), ~ replace(., is.na(.), 0)) %>%
+  mutate_at(vars(24:38), ~ replace(., is.na(.), 0)) %>%
   filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc) %>%
   filter(complete.cases(.))
 
@@ -597,15 +657,131 @@ trainval_split <- trainval_df %>%
   ) %>%
   ungroup()
 
-older70 <- trainval_split %>% filter(split=="older")  %>% dplyr::select(-tot_count,-n_recent,-idx,-split)
-recent30 <- trainval_split %>% filter(split=="recent") %>% dplyr::select(-tot_count,-n_recent,-idx,-split)
+older70 <- trainval_split %>% filter(split=="older")  %>% 
+  dplyr::select(-tot_count,-n_recent,-idx,-split)
+
+recent30 <- trainval_split %>% filter(split=="recent") %>% 
+  dplyr::select(-tot_count,-n_recent,-idx,-split)
 
 write.csv(unseen10_df,"AllDrivers_cc_unseen10.csv",row.names=FALSE)
 write.csv(older70,     "AllDrivers_cc_older70.csv", row.names=FALSE)
 write.csv(recent30,    "AllDrivers_cc_recent30.csv",row.names=FALSE)
 
 # =============================================================================
-# 12) Recalculate median NOx & P per subset
+# 11) Compute 70/30 split–specific RBI & recession slope (inline)
+# =============================================================================
+
+# --- a) older70 split ------------------
+
+# Subset daily_all to the older70 Stream_ID/Year combos
+daily_older70 <- daily_all %>%
+  inner_join(
+    older70 %>% select(Stream_ID, Year),
+    by = c("Stream_ID","Year")
+  )
+
+# RBI for older70
+rbi_older70 <- daily_older70 %>%
+  group_by(Stream_ID) %>%
+  arrange(Date) %>%
+  mutate(
+    dQ     = Q - lag(Q),
+    abs_dQ = abs(dQ)
+  ) %>%
+  filter(!is.na(abs_dQ)) %>%
+  summarise(
+    RBI_older70 = sum(abs_dQ, na.rm=TRUE) /
+      sum(Q,      na.rm=TRUE),
+    .groups = "drop"
+  )
+
+older70 <- older70 %>%
+  left_join(rbi_older70, by = "Stream_ID")
+
+# --- Recession‐curve slope for older70, safe version ---
+rec_older70 <- daily_older70 %>%
+  group_by(Stream_ID) %>%
+  arrange(Date) %>%
+  mutate(
+    dQ              = Q - lag(Q),
+    dQdt            = dQ / as.numeric(Date - lag(Date)),
+    ratio           = Q / lag(Q),
+    recession_slope = -dQdt
+  ) %>%
+  # only keep valid recession points
+  filter(!is.na(dQdt), ratio >= 0.7, dQ < 0, recession_slope > 0, Q > 0) %>%
+  summarise(
+    n_days = n(),
+    slope_older70 = ifelse(
+      n_days >= 30,
+      tryCatch(
+        coef(lm(log(recession_slope) ~ log(Q), data = cur_data()))[2],
+        error = function(e) NA_real_
+      ),
+      NA_real_
+    ),
+    .groups = "drop"
+  )
+
+older70 <- older70 %>%
+  left_join(rec_older70, by = "Stream_ID")
+
+# --- b) recent30 split ------------------
+
+# Subset daily_all to the recent30 Stream_ID/Year combos
+daily_recent30 <- daily_all %>%
+  inner_join(
+    recent30 %>% select(Stream_ID, Year),
+    by = c("Stream_ID","Year")
+  )
+
+# RBI for recent30
+rbi_recent30 <- daily_recent30 %>%
+  group_by(Stream_ID) %>%
+  arrange(Date) %>%
+  mutate(
+    dQ     = Q - lag(Q),
+    abs_dQ = abs(dQ)
+  ) %>%
+  filter(!is.na(abs_dQ)) %>%
+  summarise(
+    RBI_recent30 = sum(abs_dQ, na.rm=TRUE) /
+      sum(Q,      na.rm=TRUE),
+    .groups = "drop"
+  )
+
+recent30 <- recent30 %>%
+  left_join(rbi_recent30, by = "Stream_ID")
+
+# Recession‐curve slope for recent30
+rec_recent30 <- daily_recent30 %>%
+  group_by(Stream_ID) %>%
+  arrange(Date) %>%
+  mutate(
+    dQ              = Q - lag(Q),
+    dQdt            = dQ / as.numeric(Date - lag(Date)),
+    ratio           = Q / lag(Q),
+    recession_slope = -dQdt
+  ) %>%
+  filter(!is.na(dQdt), ratio >= 0.7, dQ < 0, recession_slope > 0, Q > 0) %>%
+  summarise(
+    n_days = n(),
+    slope_recent30 = ifelse(
+      n_days >= 30,
+      tryCatch(
+        coef(lm(log(recession_slope) ~ log(Q), data = cur_data()))[2],
+        error = function(e) NA_real_
+      ),
+      NA_real_
+    ),
+    .groups = "drop"
+  )
+
+recent30 <- recent30 %>%
+  left_join(rec_recent30, by = "Stream_ID")
+
+# =============================================================================
+# 12) Recalculate median NOx & P per 70/30 training/testing split
 # =============================================================================
 recalc_medians <- function(df) {
   df %>%
@@ -637,3 +813,4 @@ counts_df <- tibble(
 
 print(counts_df)
 print(unique(drivers_df$Stream_ID))
+
