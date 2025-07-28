@@ -136,7 +136,7 @@ rl_cols    <- grep("^(land_|rocks_)", names(drv_all), value = TRUE)
 load_split <- function(path) {
   read.csv(path, stringsAsFactors = FALSE) %>%
     mutate(across(all_of(rl_cols), ~ replace_na(., 0))) %>%
-    select(-contains("Gen"), -contains("major"), -Max_Daylength, -Q, -drainage_area) %>%
+    select(-contains("Gen"), -contains("major"), -Q, -drainage_area) %>%
     mutate(greenup_day = as.numeric(greenup_day))
 }
 df_train    <- load_split("AllDrivers_cc_older70.csv")
