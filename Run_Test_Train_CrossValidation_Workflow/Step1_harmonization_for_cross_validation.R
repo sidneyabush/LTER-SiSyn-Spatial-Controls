@@ -65,8 +65,6 @@ site_year_counts <- wrtds_df %>%
 wrtds_df <- wrtds_df %>%
   filter(Stream_ID %in% site_year_counts$Stream_ID)
 
-wrtds_df   <- standardize_stream_id(wrtds_df)
-
 # =============================================================================
 # 2) Calculate Yields
 # =============================================================================
@@ -87,59 +85,6 @@ tot <- wrtds_df %>%
 # 3) Discharge Metrics: Calculate Flashiness (RBI) and Recession Curve Slope
 # =============================================================================
 
-# =============================================================================
-# 3) Discharge Metrics: Calculate Flashiness (RBI) and Recession Curve Slope
-# =============================================================================
-
-# — helper to compute RBI + recession slope robustly —
-compute_stream_metrics <- function(daily_df, min_recess_days = 50) {
-  # Flashiness (RBI)
-  flash_df <- daily_df %>%
-    arrange(Stream_ID, Date) %>%
-    mutate(
-      dQ     = Q - lag(Q),
-      abs_dQ = abs(dQ)
-    ) %>%
-    filter(!is.na(abs_dQ)) %>%
-    group_by(Stream_ID) %>%
-    summarise(
-      RBI = sum(abs_dQ, na.rm = TRUE) / sum(Q, na.rm = TRUE),
-      .groups = "drop"
-    )
-  
-  # Recession‐curve slope
-  rec_df <- daily_df %>%
-    arrange(Stream_ID, Date) %>%
-    mutate(
-      dQ    = Q - lag(Q),
-      dQdt  = dQ / as.numeric(Date - lag(Date)),
-      ratio = Q / lag(Q),
-      rec_s = -dQdt
-    ) %>%
-    filter(
-      !is.na(dQdt),
-      ratio >= 0.7,
-      dQ < 0,
-      rec_s > 0,
-      Q > 0
-    ) %>%
-    group_by(Stream_ID) %>%
-    summarise(
-      n_rec           = n(),
-      recession_slope = if (n_rec >= min_recess_days) {
-        tryCatch({
-          s <- coef(lm(log(rec_s) ~ log(Q), data = cur_data()))[2]
-          if (!is.finite(s)) NA_real_ else s
-        }, error = function(e) NA_real_)
-      } else {
-        NA_real_
-      },
-      .groups = "drop"
-    )
-  
-  left_join(flash_df, rec_df, by = "Stream_ID")
-}
-
 # 1) Read & tag daily Q series
 daily_all <- bind_rows(
   read_csv("Full_Results_WRTDS_kalman_daily_filtered.csv",
@@ -148,33 +93,95 @@ daily_all <- bind_rows(
     mutate(
       Date      = as.Date(Date),
       Year      = year(Date),
-      Stream_ID = paste0(LTER, "__", case_when(
-        Stream_Name=="East Fork"              ~ "east fork",
-        Stream_Name=="West Fork"              ~ "west fork",
-        Stream_Name=="Amazon River at Obidos" ~ "Obidos",
-        TRUE                                  ~ Stream_Name
-      ))
+      Stream_ID = paste0(
+        LTER, "__",
+        case_when(
+          Stream_Name == "East Fork"              ~ "east fork",
+          Stream_Name == "West Fork"              ~ "west fork",
+          Stream_Name == "Amazon River at Obidos" ~ "Obidos",
+          TRUE                                    ~ Stream_Name
+        )
+      )
     ),
+  
   read_csv("WRTDS-input_discharge.csv") %>%
     mutate(
       Date      = as.Date(Date),
       Year      = year(Date),
-      Stream_ID = paste0("Catalina Jemez__", str_extract(Stream_ID, "OR_low|MG_WEIR"))
+      Stream_ID = paste0(
+        "Catalina Jemez__",
+        str_extract(Stream_ID, "OR_low|MG_WEIR")
+      )
     ) %>%
     select(Date, Year, Q, Stream_ID)
 ) %>%
   filter(!is.na(Q)) %>%
-  arrange(Stream_ID, Date) %>%
-  standardize_stream_id()
+  arrange(Stream_ID, Date) 
 
-# 2) Compute full‐record metrics and merge into tot
-full_metrics <- compute_stream_metrics(daily_all)
+# 1b) Tidy up the Finnish site names so they actually match daily_all
+finn <- read.csv("FinnishSites.csv", stringsAsFactors = FALSE) %>%
+  mutate(
+    Stream_ID = paste0("Finnish Environmental Institute__", Site.ID),
+    Stream_ID2 = paste0("Finnish Environmental Institute__", Site)
+  )
 
-tot <- tot %>%
-  left_join(full_metrics %>% select(Stream_ID, RBI),
+daily_all <- daily_all %>%
+  left_join(finn %>% select(Stream_ID, Stream_ID2),
             by = "Stream_ID") %>%
-  left_join(full_metrics %>% select(Stream_ID, recession_slope),
-            by = "Stream_ID")
+  mutate(Stream_ID = coalesce(Stream_ID2, Stream_ID)) %>%
+  select(-Stream_ID2)
+
+daily_all   <- standardize_stream_id(daily_all)
+
+# 2) Calculate Flashiness (RBI) for each Stream_ID
+flashiness <- daily_all %>%
+  group_by(Stream_ID) %>%
+  arrange(Date) %>%
+  mutate(
+    dQ    = Q - lag(Q),
+    abs_dQ = abs(dQ)
+  ) %>%
+  filter(!is.na(abs_dQ)) %>%
+  summarise(
+    total_discharge = sum(Q,    na.rm = TRUE),
+    total_change    = sum(abs_dQ, na.rm = TRUE),
+    RBI             = total_change / total_discharge,
+    .groups = "drop"
+  )
+rbi_full <- flashiness %>% select(Stream_ID, RBI)
+
+# 3) Calculate Recession‐curve slope
+recession_data <- daily_all %>%
+  arrange(Stream_ID, Date) %>%
+  mutate(
+    dQ    = Q - lag(Q),
+    dQdt  = dQ / as.numeric(Date - lag(Date)),
+    ratio = Q / lag(Q),
+    recession_slope = -dQdt
+  ) %>%
+  filter(!is.na(dQdt), ratio >= 0.7, dQ < 0)
+
+recession_slopes <- recession_data %>%
+  group_by(Stream_ID) %>%
+  filter(!if_any(where(is.numeric), ~ . %in% c(Inf, -Inf))) %>%
+  summarise(
+    n_days = n(),
+    slope  = if (n_days >= 50) {
+      unname(coef(lm(log(recession_slope) ~ log(Q), data = cur_data()))[2])
+    } else {
+      NA_real_
+    },
+    .groups = "drop"
+  ) %>%
+  filter(!is.na(slope), slope >= 0)
+
+# 4) Merge both metrics into your annual ‘tot’ table
+tot <- tot %>%
+  left_join(rbi_full, by = "Stream_ID") %>%
+  left_join(
+    recession_slopes %>% rename(recession_slope = slope),
+    by = "Stream_ID"
+  )
 
 # =============================================================================
 # 4) Merge Köppen–Geiger Classification
@@ -675,36 +682,92 @@ write.csv(recent30,    "AllDrivers_cc_recent30.csv",row.names=FALSE)
 # =============================================================================
 # 11) Compute 70/30 split–specific RBI & recession slope (inline)
 # =============================================================================
-
-# — a) older70 split metrics —
+# --- a) older70 split ------------------
 daily_older70 <- daily_all %>%
   inner_join(older70 %>% select(Stream_ID, Year),
              by = c("Stream_ID","Year"))
 
-older70_metrics <- compute_stream_metrics(daily_older70)
-
-older70 <- older70 %>%
-  left_join(older70_metrics %>% select(Stream_ID, RBI, recession_slope),
-            by = "Stream_ID") %>%
-  rename(
-    RBI_older70       = RBI,
-    slope_older70     = recession_slope
+rbi_older70 <- daily_older70 %>%
+  group_by(Stream_ID) %>%
+  arrange(Date) %>%
+  mutate(
+    dQ     = Q - lag(Q),
+    abs_dQ = abs(dQ)
+  ) %>%
+  filter(!is.na(abs_dQ)) %>%
+  summarise(
+    RBI_older70 = sum(abs_dQ, na.rm=TRUE) / sum(Q, na.rm=TRUE),
+    .groups = "drop"
   )
 
-# — b) recent30 split metrics —
+rec_older70 <- daily_older70 %>%
+  group_by(Stream_ID) %>%
+  arrange(Date) %>%
+  mutate(
+    dQ              = Q - lag(Q),
+    dQdt            = dQ / as.numeric(Date - lag(Date)),
+    ratio           = Q / lag(Q),
+    recession_slope = -dQdt
+  ) %>%
+  filter(!is.na(dQdt), ratio >= 0.7, dQ < 0, recession_slope > 0, Q > 0) %>%
+  summarise(
+    n_days        = n(),
+    slope_older70 = ifelse(
+      n_days >= 50,
+      tryCatch(coef(lm(log(recession_slope) ~ log(Q), data = cur_data()))[2],
+               error = function(e) NA_real_),
+      NA_real_
+    ),
+    .groups = "drop"
+  )
+
+older70 <- older70 %>%
+  left_join(rbi_older70, by = "Stream_ID") %>%
+  left_join(rec_older70, by = "Stream_ID")
+
+
+# --- b) recent30 split ------------------
 daily_recent30 <- daily_all %>%
   inner_join(recent30 %>% select(Stream_ID, Year),
              by = c("Stream_ID","Year"))
 
-recent30_metrics <- compute_stream_metrics(daily_recent30)
+rbi_recent30 <- daily_recent30 %>%
+  group_by(Stream_ID) %>%
+  arrange(Date) %>%
+  mutate(
+    dQ     = Q - lag(Q),
+    abs_dQ = abs(dQ)
+  ) %>%
+  filter(!is.na(abs_dQ)) %>%
+  summarise(
+    RBI_recent30 = sum(abs_dQ, na.rm=TRUE) / sum(Q, na.rm=TRUE),
+    .groups = "drop"
+  )
+
+rec_recent30 <- daily_recent30 %>%
+  group_by(Stream_ID) %>%
+  arrange(Date) %>%
+  mutate(
+    dQ              = Q - lag(Q),
+    dQdt            = dQ / as.numeric(Date - lag(Date)),
+    ratio           = Q / lag(Q),
+    recession_slope = -dQdt
+  ) %>%
+  filter(!is.na(dQdt), ratio >= 0.7, dQ < 0, recession_slope > 0, Q > 0) %>%
+  summarise(
+    n_days         = n(),
+    slope_recent30 = ifelse(
+      n_days >= 50,
+      tryCatch(coef(lm(log(recession_slope) ~ log(Q), data = cur_data()))[2],
+               error = function(e) NA_real_),
+      NA_real_
+    ),
+    .groups = "drop"
+  )
 
 recent30 <- recent30 %>%
-  left_join(recent30_metrics %>% select(Stream_ID, RBI, recession_slope),
-            by = "Stream_ID") %>%
-  rename(
-    RBI_recent30      = RBI,
-    slope_recent30    = recession_slope
-  )
+  left_join(rbi_recent30, by = "Stream_ID") %>%
+  left_join(rec_recent30, by = "Stream_ID")
 
 # =============================================================================
 # 12) Recalculate median NOx & P per 70/30 training/testing split
