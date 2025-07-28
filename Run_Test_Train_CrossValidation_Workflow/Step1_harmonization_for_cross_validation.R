@@ -129,7 +129,7 @@ daily_kalman <- bind_rows(
 # ----------------------------------------------------------------------------
 # 2. Calculate Daily Differences and Identify Recession Days
 # ----------------------------------------------------------------------------
-daily_kalman <- daily_kalman %>%
+Q_diff <- daily_kalman %>%
   dplyr::arrange(Stream_ID, Date) %>%
   dplyr::group_by(Stream_ID) %>%
   dplyr::mutate(
@@ -140,7 +140,7 @@ daily_kalman <- daily_kalman %>%
   dplyr::filter(!change_dQ < 0.7) 
 
 # Calculate the recession slope (-dQ/dt)
-recession_data <- daily_kalman %>%
+recession_data <- Q_diff %>%
   dplyr::filter(dQ < 0) %>%  # Keep only recession periods
   dplyr::mutate(recession_slope = -dQ_dt)  # Make it positive for the slope
 
@@ -163,9 +163,6 @@ recession_slopes <- recession_data %>%
     .groups = "drop"
   ) %>%
   filter(!is.na(recession_slope), recession_slope >= 0)
-
-# View the result (one row per Stream_ID)
-print(recession_slopes)
 
 # Flashiness Index (RBI)
 # For each stream, calculate daily discharge changes and compute RBI.
@@ -800,11 +797,42 @@ med_older70  <- recalc_medians(older70)
 med_recent30 <- recalc_medians(recent30)
 
 # =============================================================================
-# Quick sanity check: Count unique Stream_IDs in each subset
+# Quick sanity checks
 # =============================================================================
+
+# 1. Collapse discharge metrics to one row per site for each split
+rbi_older_summary <- older70 %>%
+  distinct(Stream_ID, RBI_older70)
+
+rbi_recent_summary <- recent30 %>%
+  distinct(Stream_ID, RBI_recent30)
+
+rec_older_summary <- older70 %>%
+  distinct(Stream_ID, slope_older70)
+
+rec_recent_summary <- recent30 %>%
+  distinct(Stream_ID, slope_recent30)
+
+# 2. Combine everything into a single dataframe
+time_split_checks <- med_older70 %>%
+  rename(NOx_med_older70 = NOx_med, P_med_older70 = P_med) %>%
+  full_join(
+    med_recent30 %>% rename(NOx_med_recent30 = NOx_med, P_med_recent30 = P_med),
+    by = "Stream_ID"
+  ) %>%
+  left_join(rbi_older_summary, by = "Stream_ID") %>%
+  left_join(rbi_recent_summary, by = "Stream_ID") %>%
+  left_join(rec_older_summary, by = "Stream_ID") %>%
+  left_join(rec_recent_summary, by = "Stream_ID") %>%
+  distinct(Stream_ID, .keep_all = TRUE)
+
+# 3. Preview the clean one-row-per-site summary
+print(time_split_checks)
+
+# 4. Count number of sites per subset
 counts_df <- tibble(
-  Subset       = c("Full", "Unseen10", "Older70", "Recent30"),
-  n_streams    = c(
+  Subset    = c("Full", "Unseen10", "Older70", "Recent30"),
+  n_streams = c(
     n_distinct(drivers_df$Stream_ID),
     n_distinct(unseen10_df$Stream_ID),
     n_distinct(older70$Stream_ID),
@@ -814,4 +842,3 @@ counts_df <- tibble(
 
 print(counts_df)
 print(unique(drivers_df$Stream_ID))
-

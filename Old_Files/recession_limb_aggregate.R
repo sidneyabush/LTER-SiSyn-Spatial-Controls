@@ -59,7 +59,7 @@ daily_kalman <- bind_rows(
 # ----------------------------------------------------------------------------
 # 2. Calculate Daily Differences and Identify Recession Days
 # ----------------------------------------------------------------------------
-daily_kalman <- daily_kalman %>%
+Q_diff <- daily_kalman %>%
   dplyr::arrange(Stream_ID, Date) %>%
   dplyr::group_by(Stream_ID) %>%
   dplyr::mutate(
@@ -70,7 +70,7 @@ daily_kalman <- daily_kalman %>%
   dplyr::filter(!change_dQ < 0.7) 
 
 # Calculate the recession slope (-dQ/dt)
-recession_data <- daily_kalman %>%
+recession_data <- Q_diff %>%
   dplyr::filter(dQ < 0) %>%  # Keep only recession periods
   dplyr::mutate(recession_slope = -dQ_dt)  # Make it positive for the slope
 
@@ -92,7 +92,8 @@ recession_slopes <- recession_data %>%
     },
     .groups = "drop"
   ) %>%
-  filter(!is.na(slope), slope >= 0)
+  dplyr::filter(!is.na(slope), slope >= 0) 
+
 
 # View the result (one row per Stream_ID)
 print(recession_slopes)

@@ -119,7 +119,7 @@ gc()
 # Import Recession Curve Slope Data and Merge with tot ----
 # -----------------------------------------------------------
 # Import the recession_slope CSV that contains Stream_ID and RBI
-recession_slope <- read_csv("Recession_Slopes_by_StreamID_Aggregate.csv") %>%
+recession_slope <- read_csv("Recession_Slopes_by_StreamID_Aggregate_no_date_limits.csv") %>%
   dplyr::rename(recession_slope = slope) %>%
   dplyr::select(-'...1', -n_days)
 
@@ -1047,7 +1047,8 @@ print(unique_stream_id_count)
 drivers_df <- drivers_df %>%
   group_by(Stream_ID) %>%
   filter(n_distinct(Year) >= 5) %>%
-  ungroup() 
+  ungroup() %>%
+  dplyr::filter(complete.cases(.))
 
 # Count the number of unique Stream_IDs after filtering
 unique_stream_id_count <- drivers_df %>%
