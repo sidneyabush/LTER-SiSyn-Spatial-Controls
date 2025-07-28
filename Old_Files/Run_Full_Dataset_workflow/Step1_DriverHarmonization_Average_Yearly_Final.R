@@ -30,10 +30,12 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
     Stream_ID = paste0(LTER, "__", Stream_Name),
     Year = floor(as.numeric(DecYear))
   ) %>%
-  filter(chemical == "DSi")
+  filter(chemical == "DSi") %>%
+  dplyr::filter(Year >= 2002, Year <= 2022) # snow spatial data only starts in 2002
 
 wrtds_CJ <- read.csv("wrtds_kalman_annual_CatalinaJemez.csv") %>%
-  dplyr::filter(chemical == "DSi")
+  dplyr::filter(chemical == "DSi") %>%
+  dplyr::filter(Year >= 2002, Year <= 2022)
 
 ## NEED TO COMBINE THESE
 wrtds_df <- bind_rows(wrtds_df, wrtds_CJ) 
@@ -306,7 +308,7 @@ character_cols$Stream_Name <- si_drivers$Stream_Name
 # Melt data for processing
 drivers <- year_cols_melt
 # drivers <- subset(drivers, !drivers$driver %in% c("cycle1", "num_days"))
-drivers_cropped <- subset(drivers, drivers$year > 2000 & drivers$year < 2024)
+drivers_cropped <- subset(drivers, drivers$year >= 2002 & drivers$year <= 2022)
 
 drivers_cast <- drivers_cropped %>%
   # Remove duplicates based on relevant columns
@@ -332,7 +334,7 @@ all_spatial <- drivers_cast %>%
 # Merge with final dataset and clean up
 tot <- tot %>%
   left_join(all_spatial, by = c("Stream_Name", "Year")) %>%
-  filter(Year > 2000 & Year <= 2024) %>%  # Filter for years within range
+  filter(Year >= 2002 & Year <= 2022) %>%  # Filter for years within range
   distinct(Stream_ID, Year, .keep_all = TRUE) %>%
   mutate(
     permafrost_mean_m = as.numeric(permafrost_mean_m),
@@ -354,7 +356,7 @@ tot <- tot %>%
 
 # Identify missing values in numeric columns only
 missing_spatial_data_summary <- tot %>%
-  filter(Year > 2000 & Year <= 2024) %>%  # Filter for years within range
+  filter(Year >= 2002 & Year <= 2022) %>%  # Filter for years within range
   dplyr::select(Stream_ID, Year, permafrost_mean_m, cycle0, evapotrans, npp, precip, prop_area, temp) %>%  # Keep only numeric columns + Stream_ID & Year
   pivot_longer(cols = -c(Stream_ID, Year), names_to = "Variable", values_to = "Value") %>%  # Reshape
   filter(is.na(Value)) %>%  # Keep only missing values
@@ -373,7 +375,7 @@ print(head(missing_spatial_data_summary))  # Preview first few rows
 
 # Export missing data summary with dynamic filename
 write.csv(missing_spatial_data_summary, 
-          sprintf("missing_spatial_data_summary_2001_2024_filtered_%d_years.csv", record_length), 
+          sprintf("missing_spatial_data_summary_2002_2022_filtered_%d_years.csv", record_length), 
           row.names = FALSE)
 
 ## ------------------------------------------------------- ##
@@ -513,7 +515,7 @@ print(num_unique_stream_ids)
 
 # Identify missing values in numeric columns only
 missing_elev_slope_data_summary <- tot %>%
-  filter(Year > 2000 & Year <= 2024) %>%  # Filter for years within range
+  filter(Year >= 2002 & Year <= 2022) %>%  # Filter for years within range
   dplyr::select(Stream_ID, Year, basin_slope_mean_degree, elevation_mean_m) %>%  # Keep only numeric columns + Stream_ID & Year
   pivot_longer(cols = -c(Stream_ID, Year), names_to = "Variable", values_to = "Value") %>%  # Reshape
   filter(is.na(Value)) %>%  # Keep only missing values
@@ -533,7 +535,7 @@ print(head(missing_elev_slope_data_summary))  # Preview first few rows
 
 # Export missing data summary with dynamic filename
 write.csv(missing_elev_slope_data_summary, 
-          sprintf("missing_elev_slope_data_summary_2001_2024_filtered_%d_years.csv", record_length), 
+          sprintf("missing_elev_slope_data_summary_2002_2022_filtered_%d_years.csv", record_length), 
           row.names = FALSE)
 
 
@@ -561,11 +563,13 @@ wrtds_NP <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv") %>%
   filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
   # filter(GenConc <= 60) %>%  # Remove rows where GenConc > 60
   # filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc)  %>%  # Remove rows where FNConc is ±50% of GenConc
-  dplyr::select(-DecYear, -.groups, -LTER, -contains("FN"), -GenFlux)
+  dplyr::select(-DecYear, -.groups, -LTER, -contains("FN"), -GenFlux) %>%
+  dplyr::filter(Year >= 2002, Year <= 2022)
 
 ## Import for Catalina Jemez: 
 wrtds_NP_CJ <- read.csv("wrtds_kalman_annual_CatalinaJemez.csv") %>%
-  dplyr::select(-DecYear, -LTER, -contains("FN"), -GenFlux)
+  dplyr::select(-DecYear, -LTER, -contains("FN"), -GenFlux) %>%
+  dplyr::filter(Year >= 2002, Year <= 2022)
 
 ## NOW COMBINE!!! 
 wrtds_NP <- bind_rows(wrtds_NP, wrtds_NP_CJ) 
@@ -614,7 +618,8 @@ raw_NP_median <- raw_NP %>%
   dplyr::summarise(
     median_value = median(value, na.rm = TRUE),
     .groups = "drop"
-  )
+  ) %>%
+  dplyr::filter(Year >= 2002, Year <= 2022)
 
 # Step 2: Reshape the data to wide format
 raw_NP_wide <- raw_NP_median %>%
@@ -700,7 +705,7 @@ tot <- tot %>%
 
 # Now generate a list of missing NOx and P sites-year combinations:
 missing_N_P_data_summary <- tot %>%
-  dplyr::filter(Year > 2000 & Year <= 2024) %>%  # Filter for years within range
+  dplyr::filter(Year >= 2002 & Year <= 2022) %>%  # Filter for years within range
   dplyr::select(Stream_ID, Year, NOx, P) %>%
   dplyr::distinct(Stream_ID, Year, across(starts_with("NOx")), across(starts_with("P"))) %>%  # Ensure no duplicates
   pivot_longer(cols = starts_with("NOx") | starts_with("P"), names_to = "Variable", values_to = "Value") %>%  # Reshape
@@ -709,7 +714,7 @@ missing_N_P_data_summary <- tot %>%
 
 # Export missing data summary with dynamic filename
 write.csv(missing_N_P_data_summary, 
-          sprintf("missing_N_P_data_summary_2001_2024_filtered_%d_years.csv", record_length), 
+          sprintf("missing_N_P_data_summary_2002_2022_filtered_%d_years.csv", record_length), 
           row.names = FALSE)
 
 # Get the number of unique Stream_IDs with missing NOx or P
