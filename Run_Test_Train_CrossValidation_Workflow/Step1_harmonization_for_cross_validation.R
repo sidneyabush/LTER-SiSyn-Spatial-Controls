@@ -35,8 +35,9 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv", stringsAsF
       TRUE                                    ~ Stream_Name
     ),
     Stream_ID = paste0(LTER, "__", Stream_Name),
-    Year      = floor(as.numeric(DecYear))
-  )
+    Year      = floor(as.numeric(DecYear))) %>%
+  dplyr::filter(Year >= 2002, Year <= 2022)
+
 
 wrtds_CJ <- read.csv("wrtds_kalman_annual_CatalinaJemez.csv", stringsAsFactors = FALSE) %>%
   filter(chemical == "DSi", !if_any(where(is.numeric), ~ . %in% c(Inf, -Inf))) %>%
@@ -51,7 +52,9 @@ wrtds_CJ <- read.csv("wrtds_kalman_annual_CatalinaJemez.csv", stringsAsFactors =
     Stream_ID = paste0(LTER, "__", Stream_Name),
     Year      = floor(as.numeric(DecYear))
   ) %>%
-  dplyr::select(-DecYear)  # drop the original DecYear now that you have Year
+  dplyr::select(-DecYear) %>%
+  dplyr::filter(Year >= 2002, Year <= 2022)
+
 
 # combine
 wrtds_df <- bind_rows(wrtds_df, wrtds_CJ)
@@ -84,7 +87,6 @@ tot <- wrtds_df %>%
 # =============================================================================
 # 3) Discharge Metrics: Calculate Flashiness (RBI) and Recession Curve Slope
 # =============================================================================
-# Recession Curve Slope
 cols_needed <- c("LTER.x", "Stream_Name", "Date", "Q")
 daily_kalman <- read_csv("Full_Results_WRTDS_kalman_daily_filtered.csv", 
                          col_select = all_of(cols_needed)) %>%
@@ -92,39 +94,38 @@ daily_kalman <- read_csv("Full_Results_WRTDS_kalman_daily_filtered.csv",
   filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
   mutate(
     Stream_Name = case_when(
-      Stream_Name == "East Fork" ~ "east fork",
-      Stream_Name == "West Fork" ~ "west fork",
+      Stream_Name == "East Fork"              ~ "east fork",
+      Stream_Name == "West Fork"              ~ "west fork",
       Stream_Name == "Amazon River at Obidos" ~ "Obidos",
-      TRUE ~ Stream_Name
+      TRUE                                    ~ Stream_Name
     ),
-    # Convert Date to a Date object and filter for 2001-2023
     Date = as.Date(Date),
+    Year = lubridate::year(Date),
     Stream_ID = paste0(LTER, "__", Stream_Name)
   ) %>%
-  filter(LTER != "MCM")
+  filter(LTER != "MCM", Year >= 2002, Year <= 2022)
 
 daily_Q_CJ <- read.csv("WRTDS-input_discharge.csv",
                        stringsAsFactors = FALSE) %>%
-  # parse your Date column
   mutate(
     Date        = as.Date(Date, format = "%Y-%m-%d"),
-    # add fixed LTER
+    Year        = lubridate::year(Date),
     LTER        = "Catalina Jemez",
-    # extract OR_low or MG_WEIR from the Stream_ID
     Stream_Name = str_extract(Stream_ID, "OR_low|MG_WEIR")
   ) %>%
-  # keep only the Catalina Jemez OR_low / MG_WEIR rows
-  filter(Stream_ID %in% c("Catalina Jemez__OR_low",
-                          "Catalina Jemez__MG_WEIR")) %>%
-  # drop the "indicate" column
+  filter(
+    Stream_ID %in% c("Catalina Jemez__OR_low", "Catalina Jemez__MG_WEIR"),
+    Year >= 2002, Year <= 2022
+  ) %>%
   select(-indicate)
+
 
 # — 3. Join them by Date & Stream_ID —
 daily_kalman <- bind_rows(
   daily_kalman,
   daily_Q_CJ
 ) %>%
-  arrange(Stream_ID, Date)  # optional: sort by site & date
+  arrange(Stream_ID, Date)  
 
 # ----------------------------------------------------------------------------
 # 2. Calculate Daily Differences and Identify Recession Days
@@ -208,10 +209,10 @@ tot <- left_join(tot, KG, by="Stream_ID") %>%
   rename_with(~str_remove(., "\\.y$"))
 
 # =============================================================================
-# 7) Spatial Drivers + Basin Slope Gap‑Fill
+# 5) Spatial Drivers + Basin Slope Gap‑Fill
 # =============================================================================
 
-# 7a) read & tidy raw spatial‐drivers sheet
+# a) read & tidy raw spatial‐drivers sheet
 si_drivers <- read.csv("all-data_si-extract_2_20250325.csv",
                        stringsAsFactors = FALSE) %>%
   dplyr::select(-contains("soil"), -contains("cycle1")) %>%
@@ -229,19 +230,19 @@ si_drivers <- read.csv("all-data_si-extract_2_20250325.csv",
 # clean up Stream_ID text
 si_drivers <- standardize_stream_id(si_drivers)
 
-# 7b) convert any greenup_ dates → day‑of‑year
+# b) convert any greenup_ dates → day‑of‑year
 gcols <- grep("greenup_", names(si_drivers), value = TRUE)
 si_drivers[gcols] <- lapply(si_drivers[gcols], function(x) {
   as.numeric(format(as.Date(x, "%Y-%m-%d"), "%j"))
 })
 
-# 7c) zero‑fill all permafrost & prop_area
+# c) zero‑fill all permafrost & prop_area
 pcols <- grep("permafrost|prop_area", names(si_drivers), value = TRUE)
 si_drivers[pcols] <- lapply(si_drivers[pcols], function(x) {
   x <- as.numeric(x); x[is.na(x)] <- 0; x
 })
 
-# 7d) split out the annual vars vs the purely character vars
+# d) split out the annual vars vs the purely character vars
 months_regex <- "_jan_|_feb_|_mar_|_apr_|_may_|_jun_|_jul_|_aug_|_sep_|_oct_|_nov_|_dec_"
 annual_block <- si_drivers %>% 
   dplyr::select(-matches(months_regex))
@@ -253,7 +254,7 @@ annual_vars  <- annual_block %>%
   dplyr::select(-matches("elevation|rock|land|soil|permafrost")) %>%
   dplyr::select(-LTER, -Stream_ID, -Shapefile_Name, -Discharge_File_Name)
 
-# 7e) melt the annual numbers and tag them
+# e) melt the annual numbers and tag them
 melted <- reshape2::melt(annual_vars,
                          id.vars         = "Stream_Name",
                          variable.factor = FALSE)
@@ -291,28 +292,28 @@ melted <- merge(melted, units_df, by = "driver")
 melted <- melted %>% 
   dplyr::select(-variable, -units)
 
-# 7f) pivot back to wide
+# f) pivot back to wide
 drivers_cast <- melted %>%
-  filter(year > 2000 & year <= 2024) %>%
+  filter(year >= 2002 & year <= 2022) %>%
   distinct(Stream_Name, year, driver, value) %>%
   rename(Year = year) %>%
   pivot_wider(names_from = driver, values_from = value)
 
-# 7g) re‐attach the character columns
+# g) re‐attach the character columns
 all_spatial <- drivers_cast %>%
   left_join(char_block, by = "Stream_Name", relationship = "many-to-many") %>%
   distinct(Stream_Name, Year, .keep_all = TRUE)
 
-# 7h) merge into `tot` and coerce types + zero‐fill
+# h) merge into `tot` and coerce types + zero‐fill
 tot <- tot %>%
   left_join(all_spatial, by = c("Stream_Name","Year")) %>%
-  filter(Year > 2000, Year <= 2024) %>%
+  filter(Year >= 2002, Year <= 2022) %>%
   distinct(Stream_ID, Year, .keep_all = TRUE) %>%
   mutate_at(vars(npp, evapotrans, precip, temp, cycle0, prop_area, permafrost_mean_m),
             as.numeric) %>%
   replace_na(list(permafrost_mean_m = 0, prop_area = 0))
 
-# 7i) Gap‑fill basin_slope_mean_degree from US & Krycklan sources
+# i) Gap‑fill basin_slope_mean_degree from US & Krycklan sources
 # (a) Ensure tot has the slope column
 if (!"basin_slope_mean_degree" %in% names(tot)) {
   tot$basin_slope_mean_degree <- NA_real_
@@ -380,13 +381,13 @@ tot <- tot[!is.na(major_rock) &
 # =============================================================================
 # 9) Land Cover + N/P gap‑fill
 # =============================================================================
-
 # — First, land cover as before:
 # (remove any existing land_*, major_land columns)
 tot <- tot %>% select(-starts_with("land_"), -any_of("major_land"))
 
 lulc <- read.csv("DSi_LULC_filled_interpolated_Simple.csv", stringsAsFactors = FALSE) %>%
   select(Stream_Name, Year, Simple_Class, LandClass_sum) %>%
+  
   mutate(
     Stream_Name = case_when(
       Stream_Name == "East Fork"              ~ "east fork",
@@ -399,7 +400,8 @@ lulc <- read.csv("DSi_LULC_filled_interpolated_Simple.csv", stringsAsFactors = F
       LandClass_sum,
       LandClass_sum * 100
     )
-  )
+  ) %>%
+  dplyr::filter(Year >= 2002, Year <= 2022)
 
 lulc_wide <- lulc %>%
   pivot_wider(
@@ -442,6 +444,7 @@ wrtds_NP <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv",
     Stream_ID = paste0(LTER,"__",Stream_Name),
     Year      = floor(as.numeric(DecYear))
   ) %>%
+  dplyr::filter(Year >= 2002, Year <= 2022) %>%
   filter(chemical %in% c("P","NO3","NOx"), GenConc > 0) %>%
   mutate(chemical = if_else(chemical %in% c("NO3","NOx"), "NOx", chemical)) %>%
   group_by(Stream_ID,Year,chemical) %>%
@@ -455,7 +458,8 @@ wrtds_CJ_NP <- read.csv("wrtds_kalman_annual_CatalinaJemez.csv",
     Year      = floor(as.numeric(DecYear)),
     chemical  = if_else(chemical %in% c("NO3","NOx"), "NOx", chemical)
   ) %>%
-  select(Stream_ID,Year,chemical,GenConc)
+  dplyr::filter(Year >= 2002, Year <= 2022) %>%
+  dplyr::select(Stream_ID,Year,chemical,GenConc)
 
 wrtds_NP <- bind_rows(wrtds_NP, wrtds_CJ_NP)
 
@@ -477,6 +481,7 @@ raw_NP_wide <- read.csv("converted_raw_NP.csv", stringsAsFactors=FALSE) %>%
       TRUE                         ~ NA_character_
     )
   ) %>%
+  dplyr::filter(Year >= 2002, Year <= 2022) %>%
   filter(!is.na(solute)) %>%
   group_by(Stream_ID,Year,solute) %>%
   summarise(med = median(value,na.rm=TRUE), .groups="drop") %>%

@@ -119,7 +119,7 @@ gc()
 # Import Recession Curve Slope Data and Merge with tot ----
 # -----------------------------------------------------------
 # Import the recession_slope CSV that contains Stream_ID and RBI
-recession_slope <- read_csv("Recession_Slopes_by_StreamID_Aggregate_no_date_limits.csv") %>%
+recession_slope <- read_csv("Recession_Slopes_by_StreamID_Aggregate.csv") %>%
   dplyr::rename(recession_slope = slope) %>%
   dplyr::select(-'...1', -n_days)
 
