@@ -84,116 +84,111 @@ tot <- wrtds_df %>%
 # =============================================================================
 # 3) Discharge Metrics: Calculate Flashiness (RBI) and Recession Curve Slope
 # =============================================================================
-
-# 1) Read & tag daily Q series
-daily_all <- bind_rows(
-  read_csv("Full_Results_WRTDS_kalman_daily_filtered.csv",
-           col_select = c("LTER.x","Stream_Name","Date","Q")) %>%
-    rename(LTER = LTER.x) %>%
-    mutate(
-      Date      = as.Date(Date),
-      Year      = year(Date),
-      Stream_ID = paste0(
-        LTER, "__",
-        case_when(
-          Stream_Name == "East Fork"              ~ "east fork",
-          Stream_Name == "West Fork"              ~ "west fork",
-          Stream_Name == "Amazon River at Obidos" ~ "Obidos",
-          TRUE                                    ~ Stream_Name
-        )
-      )
+# Recession Curve Slope
+cols_needed <- c("LTER.x", "Stream_Name", "Date", "Q")
+daily_kalman <- read_csv("Full_Results_WRTDS_kalman_daily_filtered.csv", 
+                         col_select = all_of(cols_needed)) %>%
+  rename(LTER = LTER.x) %>%
+  filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
+  mutate(
+    Stream_Name = case_when(
+      Stream_Name == "East Fork" ~ "east fork",
+      Stream_Name == "West Fork" ~ "west fork",
+      Stream_Name == "Amazon River at Obidos" ~ "Obidos",
+      TRUE ~ Stream_Name
     ),
-  
-  read_csv("WRTDS-input_discharge.csv") %>%
-    mutate(
-      Date      = as.Date(Date),
-      Year      = year(Date),
-      Stream_ID = paste0(
-        "Catalina Jemez__",
-        str_extract(Stream_ID, "OR_low|MG_WEIR")
-      )
-    ) %>%
-    select(Date, Year, Q, Stream_ID)
+    # Convert Date to a Date object and filter for 2001-2023
+    Date = as.Date(Date),
+    Stream_ID = paste0(LTER, "__", Stream_Name)
+  ) %>%
+  filter(LTER != "MCM")
+
+daily_Q_CJ <- read.csv("WRTDS-input_discharge.csv",
+                       stringsAsFactors = FALSE) %>%
+  # parse your Date column
+  mutate(
+    Date        = as.Date(Date, format = "%Y-%m-%d"),
+    # add fixed LTER
+    LTER        = "Catalina Jemez",
+    # extract OR_low or MG_WEIR from the Stream_ID
+    Stream_Name = str_extract(Stream_ID, "OR_low|MG_WEIR")
+  ) %>%
+  # keep only the Catalina Jemez OR_low / MG_WEIR rows
+  filter(Stream_ID %in% c("Catalina Jemez__OR_low",
+                          "Catalina Jemez__MG_WEIR")) %>%
+  # drop the "indicate" column
+  select(-indicate)
+
+# — 3. Join them by Date & Stream_ID —
+daily_kalman <- bind_rows(
+  daily_kalman,
+  daily_Q_CJ
 ) %>%
-  filter(!is.na(Q)) %>%
-  arrange(Stream_ID, Date) 
+  arrange(Stream_ID, Date)  # optional: sort by site & date
 
-# 1b) Tidy up the Finnish site names so they actually match daily_all
-finn <- read.csv("FinnishSites.csv", stringsAsFactors = FALSE) %>%
-  mutate(
-    Stream_ID = paste0("Finnish Environmental Institute__", Site.ID),
-    Stream_ID2 = paste0("Finnish Environmental Institute__", Site)
-  )
+# ----------------------------------------------------------------------------
+# 2. Calculate Daily Differences and Identify Recession Days
+# ----------------------------------------------------------------------------
+daily_kalman <- daily_kalman %>%
+  dplyr::arrange(Stream_ID, Date) %>%
+  dplyr::group_by(Stream_ID) %>%
+  dplyr::mutate(
+    dQ = Q - lag(Q),
+    change_dQ = Q / lag(Q),
+    dQ_dt = dQ / as.numeric(Date - lag(Date))) %>%
+  dplyr::filter(!is.na(dQ_dt)) %>% # Remove NA values (first row)
+  dplyr::filter(!change_dQ < 0.7) 
 
-daily_all <- daily_all %>%
-  left_join(finn %>% select(Stream_ID, Stream_ID2),
-            by = "Stream_ID") %>%
-  mutate(Stream_ID = coalesce(Stream_ID2, Stream_ID)) %>%
-  select(-Stream_ID2)
+# Calculate the recession slope (-dQ/dt)
+recession_data <- daily_kalman %>%
+  dplyr::filter(dQ < 0) %>%  # Keep only recession periods
+  dplyr::mutate(recession_slope = -dQ_dt)  # Make it positive for the slope
 
-# Not the most efficient, but we're having issues dropping this one site due to a space at the end of the STREAM_ID:
-daily_all <- daily_all %>%
-  mutate(
-    Stream_ID = case_when(
-      # drop the extra space on the Thames site
-      Stream_ID == "UK__THAMES AT ROYAL WINDSOR PARK "   ~ "UK__THAMES AT ROYAL WINDSOR PARK",
-      TRUE                                             ~ Stream_ID
-    )
-  )
-
-# 2) Calculate Flashiness (RBI) for each Stream_ID
-flashiness <- daily_all %>%
-  group_by(Stream_ID) %>%
-  arrange(Date) %>%
-  mutate(
-    dQ    = Q - lag(Q),
-    abs_dQ = abs(dQ)
-  ) %>%
-  filter(!is.na(abs_dQ)) %>%
-  summarise(
-    total_discharge = sum(Q,    na.rm = TRUE),
-    total_change    = sum(abs_dQ, na.rm = TRUE),
-    RBI             = total_change / total_discharge,
-    .groups = "drop"
-  )
-
-rbi_full <- flashiness %>% select(Stream_ID, RBI)
-
-# 3) Calculate Recession‐curve slope
-recession_data <- daily_all %>%
-  arrange(Stream_ID, Date) %>%
-  mutate(
-    dQ    = Q - lag(Q),
-    dQdt  = dQ / as.numeric(Date - lag(Date)),
-    ratio = Q / lag(Q),
-    recession_slope = -dQdt
-  ) %>%
-  dplyr::filter(
-    !is.na(dQdt),    # drop first row per stream
-    ratio  >= 0.7,    # only keep days where Q/lag(Q) ≥ 0.7
-    dQ     <  0      # only recession days
-  )
-
+# ----------------------------------------------------------------------------
+# 3. Compute Aggregate Recession Slope per Stream
+# ----------------------------------------------------------------------------
+# For each stream, if there are at least 50 recession days, fit a linear model (recession_slope ~ Q)
+# and extract the slope coefficient.
 recession_slopes <- recession_data %>%
-  group_by(Stream_ID) %>%
-  filter(!if_any(where(is.numeric), ~ . %in% c(Inf, -Inf))) %>%
-  summarise(
+  dplyr::group_by(Stream_ID) %>%
+  filter(!if_any(where(is.numeric), ~ . == Inf | . == -Inf)) %>%
+  dplyr::summarise(
     n_days = n(),
-    slope  = if (n_days >= 50) {
-      unname(coef(lm(log(recession_slope) ~ log(Q), data = cur_data()))[2])
+    recession_slope = if(n_days >= 50) {
+      lm_model <- lm(log(recession_slope) ~ log(Q), data = cur_data())
+      unname(coef(lm_model)[2])
     } else {
       NA_real_
     },
     .groups = "drop"
   ) %>%
-  filter(!is.na(slope), slope >= 0)
+  filter(!is.na(recession_slope), recession_slope >= 0)
 
-# 4) Merge both metrics into your annual ‘tot’ table
+# View the result (one row per Stream_ID)
+print(recession_slopes)
+
+# Flashiness Index (RBI)
+# For each stream, calculate daily discharge changes and compute RBI.
+flashiness <- daily_kalman %>%
+  group_by(Stream_ID) %>%
+  arrange(Date) %>%                     # Ensure dates are in order for each stream
+  mutate(dQ = Q - lag(Q),                # Daily change in discharge
+         abs_dQ = abs(dQ)) %>%           # Absolute change in discharge
+  filter(!is.na(abs_dQ)) %>%             # Remove NA from the first row (due to lag)
+  summarise(
+    total_discharge = sum(Q, na.rm = TRUE),         # Total discharge over the period
+    total_change = sum(abs_dQ, na.rm = TRUE),         # Total absolute change
+    RBI = total_change / total_discharge           # Richards-Baker Flashiness Index
+  ) %>%
+  ungroup()
+
+# View the flashiness data frame with RBI values for each Stream_ID
+print(flashiness)
+
+# Merge both metrics into your annual ‘tot’ table
 tot <- tot %>%
-  left_join(rbi_full, by = "Stream_ID") %>%
-  left_join(
-    recession_slopes %>% rename(recession_slope = slope),
-    by = "Stream_ID"
+  left_join(recession_slopes, by = "Stream_ID") %>%
+  left_join(flashiness, by = "Stream_ID"
   )
 
 # =============================================================================
@@ -695,8 +690,12 @@ write.csv(recent30,    "AllDrivers_cc_recent30.csv",row.names=FALSE)
 # =============================================================================
 # 11) Compute 70/30 split–specific RBI & recession slope (inline)
 # =============================================================================
+# Create a Year column: 
+daily_kalman <- daily_kalman %>%
+  mutate(Year = year(Date))
+
 # --- a) older70 split ------------------
-daily_older70 <- daily_all %>%
+daily_older70 <- daily_kalman %>%
   inner_join(older70 %>% select(Stream_ID, Year),
              by = c("Stream_ID","Year"))
 
@@ -740,7 +739,7 @@ older70 <- older70 %>%
 
 
 # --- b) recent30 split ------------------
-daily_recent30 <- daily_all %>%
+daily_recent30 <- daily_kalman %>%
   inner_join(recent30 %>% select(Stream_ID, Year),
              by = c("Stream_ID","Year"))
 
