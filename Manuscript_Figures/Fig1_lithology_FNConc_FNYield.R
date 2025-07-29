@@ -30,14 +30,6 @@ drivers_df_final_sites <- read.csv(
 
 drivers_df_filtered <- drivers_df_final_sites %>%
   left_join(drivers_df_uncleaned, by = "Stream_ID") %>%
-  select(-ends_with(".y"), -contains("Gen"), -contains("Flux")) %>%
-  # select(
-  #   -X, -DecYear, -num_days, -drainSqKm, -chemical,
-  #   -Stream_Name, -LTER, -contains("Coord"), -cycle0, -prop_area,
-  #   -silicate_weathering, -contains("elevation_"), -contains("basin_slope_"),
-  #   -contains("rocks"), -contains("land_"), -contains("permafrost_"),
-  #   -Use_WRTDS
-  # ) %>%
   rename_with(~ str_remove(., "\\.x$"), ends_with(".x"))
 
 # Convert to sf for mapping, Need to add back in coordinates (pull from reference table)
