@@ -20,7 +20,7 @@ rm(list = ls())
 record_length <- 5
 
 drivers_df_uncleaned <- read.csv(
-  sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years_uncleaned.csv", record_length)
+  sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.csv", record_length)
 ) %>% distinct(Stream_ID, .keep_all = TRUE)
 
 # Read all yearly FNConc/FNYield rows (one per year per site)
@@ -31,16 +31,16 @@ drivers_df_final_sites <- read.csv(
 drivers_df_filtered <- drivers_df_final_sites %>%
   left_join(drivers_df_uncleaned, by = "Stream_ID") %>%
   select(-ends_with(".y"), -contains("Gen"), -contains("Flux")) %>%
-  select(
-    -X, -DecYear, -num_days, -drainSqKm, -chemical,
-    -Stream_Name, -LTER, -contains("Coord"), -cycle0, -prop_area,
-    -silicate_weathering, -contains("elevation_"), -contains("basin_slope_"),
-    -contains("rocks"), -contains("land_"), -contains("permafrost_"),
-    -Use_WRTDS
-  ) %>%
+  # select(
+  #   -X, -DecYear, -num_days, -drainSqKm, -chemical,
+  #   -Stream_Name, -LTER, -contains("Coord"), -cycle0, -prop_area,
+  #   -silicate_weathering, -contains("elevation_"), -contains("basin_slope_"),
+  #   -contains("rocks"), -contains("land_"), -contains("permafrost_"),
+  #   -Use_WRTDS
+  # ) %>%
   rename_with(~ str_remove(., "\\.x$"), ends_with(".x"))
 
-# Convert to sf for mapping
+# Convert to sf for mapping, Need to add back in coordinates (pull from reference table)
 drivers_sf <- st_as_sf(
   drivers_df_filtered,
   coords = c("Longitude", "Latitude"),
