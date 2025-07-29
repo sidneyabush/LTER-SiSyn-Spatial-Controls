@@ -62,7 +62,8 @@ kept_FNConc_scaled  <- KD_FN  %>%
   mutate(across(everything(), ~ rescale(., to=c(0,1))))
 
 kept_FNYield_scaled <- KD_FY %>% 
-  mutate(NOx=log10(NOx), P = log10(P)) %>% 
+  mutate(NOx = log10(NOx)) %>% 
+   # NOx=log10(NOx), P = log10(P)) %>% 
   mutate(across(everything(), ~ rescale(., to=c(0,1))))
 
 gmin <- 0; gmax <- 1
@@ -235,19 +236,19 @@ A <- ggplot(pred_FNConc, aes(predicted, observed)) +
     size  = "none"
   ) +
   annotate("text",
-           x = fn_x[1] + 0.05 * diff(fn_x),
+           x = fn_x[1] + 0.02 * diff(fn_x),
            y = a_y_base,
            label = sprintf("R² = %.3f, pRMSE = %.1f%%", metrics_FNConc$R2[1], metrics_FNConc$pRMSE[1]),
            hjust = 0, size = 6.5,
            color = subset_ann_cols[["older70"]]) +
   annotate("text",
-           x = fn_x[1] + 0.05 * diff(fn_x),
+           x = fn_x[1] + 0.02 * diff(fn_x),
            y = a_y_base - 0.08 * diff(fn_y),
            label = sprintf("R² = %.3f, pRMSE = %.1f%%", metrics_FNConc$R2[2], metrics_FNConc$pRMSE[2]),
            hjust = 0, size = 6.5,
            color = subset_ann_cols[["recent30"]]) +
   annotate("text",
-           x = fn_x[1] + 0.05 * diff(fn_x),
+           x = fn_x[1] + 0.02 * diff(fn_x),
            y = a_y_base - 2 * 0.08 * diff(fn_y),
            label = sprintf("R² = %.3f, pRMSE = %.1f%%", metrics_FNConc$R2[3], metrics_FNConc$pRMSE[3]),
            hjust = 0, size = 6.5,
@@ -303,19 +304,19 @@ B <- ggplot(pred_FNYield, aes(predicted, observed)) +
     size  = "none"
   ) +
   annotate("text",
-           x = fy_x[1] + 0.05 * diff(fy_x),
+           x = fy_x[1] + 0.02 * diff(fy_x),
            y = b_y_base,
            label = sprintf("R² = %.3f, pRMSE = %.1f%%", metrics_FNYield$R2[1], metrics_FNYield$pRMSE[1]),
            hjust = 0, size = 6.5,
            color = subset_ann_cols[["older70"]]) +
   annotate("text",
-           x = fy_x[1] + 0.05 * diff(fy_x),
+           x = fy_x[1] + 0.02 * diff(fy_x),
            y = b_y_base - 0.08 * diff(fy_y),
            label = sprintf("R² = %.3f, pRMSE = %.1f%%", metrics_FNYield$R2[2], metrics_FNYield$pRMSE[2]),
            hjust = 0, size = 6.5,
            color = subset_ann_cols[["recent30"]]) +
   annotate("text",
-           x = fy_x[1] + 0.05 * diff(fy_x),
+           x = fy_x[1] + 0.02 * diff(fy_x),
            y = b_y_base - 2 * 0.08 * diff(fy_y),
            label = sprintf("R² = %.3f, pRMSE = %.1f%%", metrics_FNYield$R2[3], metrics_FNYield$pRMSE[3]),
            hjust = 0, size = 6.5,
@@ -373,12 +374,12 @@ leg2 <- get_legend(
 final_fig2 <- plot_grid(
   row1, leg1, row2, row3, leg2,
   ncol        = 1,
-  rel_heights = c(1.2, 0.1, 1.1, 1.1, 0.15),
+  rel_heights = c(1.2, 0.1, 1.15, 1.1, 0.15),
   align       = "v"
 )
 
 # 11. Save
 ggsave(
   file.path(od, "Fig2_Global_FNConc_FNYield_multi.png"),
-  final_fig2, width=16, height=18, dpi=300, bg="white"
+  final_fig2, width=17, height=19, dpi=300, bg="white"
 )

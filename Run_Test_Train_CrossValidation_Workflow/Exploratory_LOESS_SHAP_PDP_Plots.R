@@ -8,7 +8,7 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
 # 1) Libraries
 librarian::shelf(
-  ggplot2, dplyr, tibble, readr, scales, tools, fastshap
+  ggplot2, dplyr, tibble, readr, scales, tools, fastshap, rlang
 )
 
 # 2) Read recent30 split

@@ -111,33 +111,45 @@ library(corrplot)
 drivers_to_use <- names(recode_map)
 
 save_subset_corrplot <- function(df, label) {
-  # Filter to the defined driver variables only
+  # Filter & transform to numeric matrix
   numeric_df <- df %>%
-    dplyr::select(all_of(drivers_to_use)) %>%
-    dplyr::mutate(across(c(NOx, P), log10)) %>%  # Apply log transform for NOx and P
-    dplyr::rename_with(~ recode_map[.x]) %>%
-    dplyr::select(all_of(driver_order))  # Reorder columns for consistent plot layout
+    select(all_of(drivers_to_use)) %>%
+    mutate(across(c(NOx, P), log10)) %>%
+    rename_with(~ recode_map[.x]) %>%
+    select(all_of(driver_order))
   
-  # Compute correlation matrix
   cor_matrix <- cor(numeric_df, use = "pairwise.complete.obs")
   
-  # Save plot
-  png(sprintf("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures/FigSX_corrplot_%s.png", label),
-      width = 2500, height = 2500, res = 300)
+  # sanitize label for filename
+  label_file <- tolower(gsub("[- ]", "_", label))
+  
+  png(
+    filename = file.path(
+      "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures",
+      sprintf("corrplot_%s.png", label_file)
+    ),
+    width  = 10, 
+    height = 10, 
+    units = "in", 
+    res = 300
+  )
+  par(mar = c(1, 1, 1, 1))  # tightened margins
+  
   corrplot(
     cor_matrix,
     type         = "lower",
     pch.col      = "black",
     tl.col       = "black",
+    tl.cex       = 1.0,
     diag         = FALSE,
-    na.label     = "X",              # or " " for space
-    na.label.col = "grey70",         # this controls the symbol's color
-    addgrid.col  = "grey90"          # optional: lighten the grid
+    na.label     = "X",
+    na.label.col = "grey70",
+    addgrid.col  = "grey90"
   )
   
-  title(paste("Correlation Plot –", label), line = 2.5)
   dev.off()
 }
+
 
 # Call for each subset
 save_subset_corrplot(older70,     "Training")
