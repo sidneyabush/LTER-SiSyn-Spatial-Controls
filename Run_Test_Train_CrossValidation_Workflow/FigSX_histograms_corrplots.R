@@ -22,11 +22,11 @@ theme_set(
 # Read split datasets
 older70     <- read_csv("AllDrivers_cc_older70.csv", show_col_types = FALSE)     %>% mutate(subset = "Training")
 recent30    <- read_csv("AllDrivers_cc_recent30.csv", show_col_types = FALSE)    %>% mutate(subset = "Testing")
-unseen10_df <- read_csv("AllDrivers_cc_unseen10.csv", show_col_types = FALSE)    %>% mutate(subset = "Cross-Validation")
+unseen10_df <- read_csv("AllDrivers_cc_unseen10.csv", show_col_types = FALSE)    %>% mutate(subset = "Validation")
 
 # Combine and set order
 hist_input_df <- bind_rows(older70, recent30, unseen10_df) %>%
-  mutate(subset = factor(subset, levels = c("Training", "Testing", "Cross-Validation")))
+  mutate(subset = factor(subset, levels = c("Training", "Testing", "Validation")))
 
 # Pivot longer for plotting
 hist_long <- hist_input_df %>%
@@ -79,7 +79,7 @@ p <- ggplot(hist_long, aes(x = value, fill = subset)) +
     values = c(
       "Training"            = "gray70",  
       "Testing"             = "#b9d7ef", 
-      "Cross-Validation"    = "#525693"
+      "Validation"    = "#525693"
     ),
     guide = guide_legend(override.aes = list(alpha = 1))
   ) +
