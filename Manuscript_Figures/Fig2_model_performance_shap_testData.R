@@ -224,7 +224,7 @@ A <- ggplot(pred_FNConc, aes(predicted, observed)) +
     color = guide_legend(
       override.aes = list(
         shape = unname(subset_shapes),
-        size  = unname(subset_sizes),
+        size  =6,
         stroke = 1.2,
         fill   = unname(subset_fills),
         color  = unname(subset_cols)
@@ -349,8 +349,8 @@ leg1 <- get_legend(
     legend.position    = "right",
     legend.direction   = "horizontal",
     legend.key.width   = unit(2,   "lines"),    
-    legend.key.height  = unit(1.2, "lines"),    
-    legend.text        = element_text(size = 20)
+    legend.key.height  = unit(1.3, "lines"),    
+    legend.text        = element_text(size = 22)
   )
 )
 
@@ -385,12 +385,12 @@ leg2 <- get_legend(
 final_fig2 <- plot_grid(
   row1, leg1, row2, row3, leg2,
   ncol        = 1,
-  rel_heights = c(1.2, 0.15, 1.15, 1.1, 0.15),
+  rel_heights = c(1.2, 0.12, 1.15, 1.1, 0.15),
   align       = "v"
 )
 
 # 11. Save
 ggsave(
   file.path(od, "Fig2_Global_FNConc_FNYield_multi.png"),
-  final_fig2, width=17, height=19, dpi=300, bg="white"
+  final_fig2, width=17, height=20, dpi=300, bg="white"
 )
