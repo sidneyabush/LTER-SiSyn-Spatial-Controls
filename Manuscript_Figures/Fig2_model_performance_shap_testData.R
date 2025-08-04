@@ -160,13 +160,13 @@ fn_r <- diff(fn_y)
 
 # Base colors
 subset_cols <- c(
-  "older70"  = "gray69",  
+  "older70"  = "gray40",  
   "recent30" = "#b9d7ef",  
   "unseen10" = "#525693"   
 )
 
 subset_ann_cols <- c(
-  "older70"  = "gray50",  
+  "older70"  = "gray40",  
   "recent30" = "#6ea8d3",  # or "#356b9c"
   "unseen10" = "#525693"   
 )
@@ -364,13 +364,13 @@ row2 <- plot_grid(
 # 9. row3 + scale‐bar legend
 E <- dot_plot(SV_FN, kept_FNConc_scaled) +
   labs(tag = "E") +
-  scale_x_continuous(expand = expansion(mult = c(0.03, 0.25))) +
+  scale_x_continuous(expand = expansion(mult = c(0.03, 0.2))) +
   theme(plot.margin = unit(c(5, 5, 5, 5), "pt"),
         legend.position = "none")
 
 F <- dot_plot(SV_FY, kept_FNYield_scaled) +
   labs(tag = "F") +
-  scale_x_continuous(expand = expansion(mult = c(0.03, 0.25))) +
+  scale_x_continuous(expand = expansion(mult = c(0.03, 0.2))) +
   theme(plot.margin = unit(c(5, 5, 5, 5), "pt"),
         legend.position = "none")
 
