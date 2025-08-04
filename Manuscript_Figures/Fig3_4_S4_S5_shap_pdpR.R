@@ -31,12 +31,13 @@ X_FNYield <- recent30_df[, colnames(shap_FNYield)]
 
 # 5) Recode map
 recode_map <- setNames(
-  c("N","P","NPP","ET","Greenup Day","Precip","Temp","Snow Cover","Permafrost",
+  c("log(N)","log(P)","NPP","ET","Greenup Day","Precip","Temp","Snow Cover","Permafrost",
     "Elevation","Basin Slope","Flashiness (RBI)","Recession Curve Slope",
-    "Land: Bare","Land: Cropland","Land: Forest","Land: Grass & Shrub",
-    "Land: Ice & Snow","Land: Impervious","Land: Salt Water","Land: Tidal Wetland",
-    "Land: Water Body","Land: Wetland Marsh","Rock: Volcanic","Rock: Sedimentary",
-    "Rock: Carbonate Evaporite","Rock: Metamorphic","Rock: Plutonic"),
+    "Bare Land Cover","Cropland","Forest","Grass & Shrubland",
+    "Ice & Snow Cover","Impervious Land","Salt Water Cover","Tidal Wetland",
+    "Open Water Cover","Wetland","Volcanic Rock","Sedimentary Rock",
+    "Carbonate-Evaporite Rock","Metamorphic Rock","Plutonic Rock"),
+  
   c("NOx","P","npp","evapotrans","greenup_day","precip","temp",
     "snow_cover","permafrost","elevation","basin_slope","RBI",
     "recession_slope","land_Bare","land_Cropland","land_Forest",
@@ -46,27 +47,123 @@ recode_map <- setNames(
     "rocks_metamorphic","rocks_plutonic")
 )
 
-# 6) “Other”‐features grid function
-make_shap_loess_grid <- function(shap_matrix, drivers_data, response,
-                                 units_expr, recode_map){
-  lims <- range(response, na.rm = TRUE)
-  label_for <- function(feat){
-    # ALWAYS use recode_map for every feature, including rocks_*
-    recode_map[[feat]] %||% feat
+# helper to build one panel safely
+build_one_panel <- function(feat, shap_matrix, drivers_data, response, lims, recode_map) {
+  df <- tibble(
+    driver_value = drivers_data[[feat]],
+    shap_value   = shap_matrix[, feat],
+    response     = response
+  ) %>% filter(is.finite(driver_value), is.finite(shap_value))
+  
+  if (feat %in% c("P", "NOx")) {
+    df <- df %>% filter(driver_value > 0)
   }
-  panels <- map(colnames(shap_matrix), function(feat){
+  
+  if (nrow(df) > 0) {
+    xlims_feat <- quantile(df$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
+    df <- df %>% filter(driver_value >= xlims_feat[1], driver_value <= xlims_feat[2])
+  } else {
+    warning("No data left after filtering for feature: ", feat)
+  }
+  
+  label_for <- function(f) if (!is.null(recode_map[[f]])) recode_map[[f]] else f
+  
+  p <- ggplot(df, aes(driver_value, shap_value, fill = response)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_vline(xintercept = 0, linetype = "dashed") +
+    geom_point(shape = 21, color = "darkgray", size = 2.7, alpha = 0.9) +
+    geom_smooth(method = "loess", se = FALSE, size = 1, color = "#6699CC") +
+    scale_fill_gradient(low = "white", high = "black", limits = lims, guide = "none") +
+    labs(x = label_for(feat), y = "SHAP value") +
+    theme_classic(base_size = 18) +
+    theme(
+      axis.title = element_text(size = 16),
+      axis.text  = element_text(size = 14)
+    )
+  # appropriate x-axis limits from trimmed df
+  if (feat %in% c("P", "NOx")) {
+    xlims_feat <- quantile(df$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
+    p <- p + scale_x_log10(
+      limits = c(xlims_feat[1], xlims_feat[2]),
+      breaks = trans_breaks("log10", function(x) 10^x),
+      labels = trans_format("log10", math_format(10^.x))
+    )
+  } else {
+    p <- p + scale_x_continuous(
+      limits = range(df$driver_value, na.rm = TRUE),
+      expand = expansion(mult = c(0.03, 0.03))
+    )
+  }
+  
+  
+  if (feat %in% c("P", "NOx")) {
+    p <- p + scale_x_log10(
+      breaks = trans_breaks("log10", function(x) 10^x),
+      labels = trans_format("log10", math_format(10^.x))
+    )
+  }
+  # if (feat == "land_Wetland_Marsh") {
+  #   p <- p + coord_cartesian(xlim = c(0, 35), expand = FALSE)
+  # }
+  p
+}
+
+# 6) “Other”‐features grid function (revised to use safe panel builder)
+make_shap_loess_grid <- function(shap_matrix, drivers_data, response,
+                                 units_expr, recode_map,
+                                 verbose = FALSE) {
+  # 1. Sanity checks
+  if (ncol(shap_matrix) == 0) stop("shap_matrix has no columns")
+  if (!all(colnames(shap_matrix) %in% colnames(drivers_data))) {
+    stop("drivers_data missing columns: ", paste(setdiff(colnames(shap_matrix), colnames(drivers_data)), collapse = ", "))
+  }
+  if (length(response) != nrow(shap_matrix)) {
+    stop("Length of response does not match rows of shap_matrix")
+  }
+  
+  # 2. Build trimmed data for each feature first
+  trimmed_list <- purrr::map(colnames(shap_matrix), function(feat) {
     df <- tibble(
       driver_value = drivers_data[[feat]],
       shap_value   = shap_matrix[, feat],
       response     = response
     ) %>% filter(is.finite(driver_value), is.finite(shap_value))
+    
+    if (feat %in% c("P", "NOx")) {
+      df <- df %>% filter(driver_value > 0)
+    }
+    
+    # trim driver_value to 5th–95th percentile
+    if (nrow(df) > 0) {
+      xlims_feat <- quantile(df$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
+      df <- df %>% filter(driver_value >= xlims_feat[1], driver_value <= xlims_feat[2])
+    } else {
+      warning("No data left after filtering for feature: ", feat)
+    }
+    
+    df$feature <- feat  # keep track
+    df
+  })
+  
+  names(trimmed_list) <- colnames(shap_matrix)
+  
+  # 3. Compute shared response limits from the trimmed data
+  combined_trimmed <- bind_rows(trimmed_list)
+  lims_trimmed <- range(combined_trimmed$response, na.rm = TRUE)
+  
+  # 4. Panel builder using pre-trimmed dfs
+  label_for <- function(feat) if (!is.null(recode_map[[feat]])) recode_map[[feat]] else feat
+  
+  panels <- purrr::map(colnames(shap_matrix), function(feat) {
+    if (verbose) message("Building panel for: ", feat)
+    df <- trimmed_list[[feat]]
     p <- ggplot(df, aes(driver_value, shap_value, fill = response)) +
       geom_hline(yintercept = 0, linetype = "dashed") +
       geom_vline(xintercept = 0, linetype = "dashed") +
       geom_point(shape = 21, color = "darkgray", size = 2.7, alpha = 0.9) +
       geom_smooth(method = "loess", se = FALSE, size = 1, color = "#6699CC") +
       scale_fill_gradient(
-        low = "white", high = "black", limits = lims, guide = "none"
+        low = "white", high = "black", limits = lims_trimmed, guide = "none"
       ) +
       labs(x = label_for(feat), y = "SHAP value") +
       theme_classic(base_size = 18) +
@@ -74,24 +171,45 @@ make_shap_loess_grid <- function(shap_matrix, drivers_data, response,
         axis.title = element_text(size = 16),
         axis.text  = element_text(size = 14)
       )
+    
     if (feat %in% c("P", "NOx")) {
       p <- p + scale_x_log10(
         breaks = trans_breaks("log10", function(x) 10^x),
         labels = trans_format("log10", math_format(10^.x))
       )
     }
-    if (feat == "land_Wetland_Marsh") {
-      p <- p + coord_cartesian(xlim = c(0, 35), expand = FALSE)
+    # if (feat == "land_Wetland_Marsh") {
+    #   p <- p + coord_cartesian(xlim = c(0, 35), expand = FALSE)
+    # }
+    # determine xlims based on trimmed data, but for ET drop exact zeros so axis doesn't anchor at 0
+    if (feat == "ET") {
+      df_for_xlim <- df %>% filter(driver_value > 0)
+      if (nrow(df_for_xlim) > 0) {
+        xlims_feat <- quantile(df_for_xlim$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
+      } else {
+        xlims_feat <- quantile(df$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
+      }
+    } else {
+      xlims_feat <- quantile(df$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
     }
+    
+    # apply as continuous scale
+    p <- p + scale_x_continuous(
+      limits = c(xlims_feat[1], xlims_feat[2]),
+      expand = expansion(mult = c(0, 0))
+    )
+    
     p
   })
+  
+  # 5. Shared legend based on trimmed response range
   legend_plot <- ggplot(
-    tibble(x = 1, y = 1, response = response),
+    tibble(x = 1, y = 1, response = combined_trimmed$response),
     aes(x, y, fill = response)
   ) +
     geom_tile() +
     scale_fill_gradient(
-      low = "white", high = "black", limits = lims,
+      low = "white", high = "black", limits = lims_trimmed,
       name  = units_expr,
       guide = guide_colourbar(
         title.position = "top", title.hjust = 0.5,
@@ -105,7 +223,9 @@ make_shap_loess_grid <- function(shap_matrix, drivers_data, response,
       legend.title      = element_text(size = 14),
       legend.text       = element_text(size = 12)
     )
+  
   shared_leg <- get_legend(legend_plot)
+  
   grid <- plot_grid(
     plotlist       = panels, ncol = 2,
     labels         = LETTERS[1:length(panels)],
@@ -131,6 +251,21 @@ build_panel3 <- function(feat, idx) {
     shap_value   = shap_FNConc[, feat],
     response     = response_FNConc
   ) %>% filter(is.finite(driver_value), is.finite(shap_value))
+  
+  if (feat %in% c("P", "NOx")) {
+    df <- df %>% filter(driver_value > 0)
+  }
+  
+  # trim driver_value to 5th–95th percentile
+  if (nrow(df) > 0) {
+    xlims_feat <- quantile(df$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
+    df <- df %>% filter(driver_value >= xlims_feat[1], driver_value <= xlims_feat[2])
+  }
+  
+  # compute fill limits from this trimmed df
+  fill_lims <- range(df$response, na.rm = TRUE)
+  
+  # base plot
   p <- ggplot(df, aes(driver_value, shap_value, fill = response)) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
     geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
@@ -138,7 +273,7 @@ build_panel3 <- function(feat, idx) {
     geom_smooth(method = "loess", se = FALSE, size = 1, color = "#6699CC") +
     scale_fill_gradient(
       low = "white", high = "black",
-      limits = c(global_fn_min, global_fn_max),
+      limits = fill_lims,
       name   = expression("Concentration (mg " * L^-1 * ")"),
       guide  = guide_colourbar(
         title.position = "top", title.hjust = 0.5,
@@ -146,7 +281,7 @@ build_panel3 <- function(feat, idx) {
       )
     ) +
     labs(
-      x = recode_map[[feat]],    # use recode_map directly
+      x = recode_map[[feat]],
       y = if (idx %% 2 == 1) "SHAP value" else NULL
     ) +
     theme_classic(base_size = 18) +
@@ -156,24 +291,75 @@ build_panel3 <- function(feat, idx) {
       axis.text       = element_text(size = 14),
       plot.margin     = ggplot2::margin(t = 20, r = 5, b = 5, l = 30, unit = "pt")
     )
+  
+  # x-axis scaling with trimmed limits
   if (feat %in% c("P", "NOx")) {
     p <- p + scale_x_log10(
+      limits = c(xlims_feat[1], xlims_feat[2]),
       breaks = trans_breaks("log10", function(x) 10^x),
       labels = trans_format("log10", math_format(10^.x))
     )
+  } else {
+    p <- p + scale_x_continuous(
+      limits = range(df$driver_value, na.rm = TRUE),
+      expand = expansion(mult = c(0.03, 0.03))
+    )
   }
+  
   if (feat == "land_Wetland_Marsh") {
     p <- p + coord_cartesian(xlim = c(0, 35), expand = FALSE)
   }
   p
 }
 
-leg3 <- build_panel3(present3[1], 1) +
+# build shared legend for Fig 3 from the union of all trimmed panels
+all_trimmed3 <- purrr::map_dfr(present3, function(feat) {
+  df <- tibble(
+    driver_value = X_FNConc[[feat]],
+    shap_value   = shap_FNConc[, feat],
+    response     = response_FNConc
+  ) %>% filter(is.finite(driver_value), is.finite(shap_value))
+  
+  if (feat %in% c("P", "NOx")) {
+    df <- df %>% filter(driver_value > 0)
+  }
+  
+  if (nrow(df) > 0) {
+    xlims_feat <- quantile(df$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
+    df <- df %>% filter(driver_value >= xlims_feat[1], driver_value <= xlims_feat[2])
+  }
+  df
+})
+
+fill_lims3 <- range(all_trimmed3$response, na.rm = TRUE)
+
+legend_plot3 <- ggplot(all_trimmed3, aes(x = 1, y = 1, fill = response)) +
+  geom_tile() +
+  scale_fill_gradient(
+    low = "white", high = "black",
+    limits = fill_lims3,
+    name = expression("Concentration (mg " * L^-1 * ")"),
+    guide = guide_colourbar(
+      title.position = "top",
+      title.hjust = 0.5,
+      barwidth  = unit(25, "lines"),
+      barheight = unit(1, "cm"),
+      label.theme = element_text(size = 14),
+      title.theme = element_text(size = 16)
+    )
+  ) +
+  theme_void() +
   theme(
     legend.position  = "right",
-    legend.direction = "horizontal"
+    legend.direction = "horizontal",
+    legend.title     = element_text(size = 16),
+    legend.text      = element_text(size = 14),
+    legend.key.width = unit(3, "lines"),
+    legend.key.height= unit(1.2, "lines")
   )
-shared_leg3 <- get_legend(leg3)
+
+shared_leg3 <- get_legend(legend_plot3)
+
 
 panels3 <- map2(present3, seq_along(present3), build_panel3)
 grid3   <- plot_grid(
@@ -202,6 +388,18 @@ build_panel4 <- function(feat, idx) {
     shap_value   = shap_FNYield[, feat],
     response     = response_FNYield
   ) %>% filter(is.finite(driver_value), is.finite(shap_value))
+  
+  if (feat %in% c("P", "NOx")) {
+    df <- df %>% filter(driver_value > 0)
+  }
+  
+  if (nrow(df) > 0) {
+    xlims_feat <- quantile(df$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
+    df <- df %>% filter(driver_value >= xlims_feat[1], driver_value <= xlims_feat[2])
+  }
+  
+  fill_lims <- range(df$response, na.rm = TRUE)
+  
   p <- ggplot(df, aes(driver_value, shap_value, fill = response)) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
     geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
@@ -209,7 +407,7 @@ build_panel4 <- function(feat, idx) {
     geom_smooth(method = "loess", se = FALSE, size = 1, color = "#6699CC") +
     scale_fill_gradient(
       low = "white", high = "black",
-      limits = c(global_y_min, global_y_max),
+      limits = fill_lims,
       name   = expression("Yield (kg " * km^-2 * " yr"^-1 * ")"),
       guide  = guide_colourbar(
         title.position = "top", title.hjust = 0.5,
@@ -217,7 +415,7 @@ build_panel4 <- function(feat, idx) {
       )
     ) +
     labs(
-      x = recode_map[[feat]],    # use recode_map directly
+      x = recode_map[[feat]],
       y = if (idx %% 2 == 1) "SHAP value" else NULL
     ) +
     theme_classic(base_size = 18) +
@@ -227,24 +425,74 @@ build_panel4 <- function(feat, idx) {
       axis.text       = element_text(size = 14),
       plot.margin     = ggplot2::margin(t = 20, r = 5, b = 5, l = 30, unit = "pt")
     )
+  
   if (feat %in% c("P", "NOx")) {
     p <- p + scale_x_log10(
+      limits = c(xlims_feat[1], xlims_feat[2]),
       breaks = trans_breaks("log10", function(x) 10^x),
       labels = trans_format("log10", math_format(10^.x))
     )
+  } else {
+    p <- p + scale_x_continuous(
+      limits = range(df$driver_value, na.rm = TRUE),
+      expand = expansion(mult = c(0.03, 0.03))
+    )
   }
-  if (feat == "land_Wetland_Marsh") {
-    p <- p + coord_cartesian(xlim = c(0, 35), ylim = c(NA, 3200), expand = FALSE)
-  }
+  
+  # if (feat == "land_Wetland_Marsh") {
+  #   p <- p + coord_cartesian(xlim = c(0, 35), ylim = c(NA, 3200), expand = FALSE)
+  # }
   p
 }
 
-leg4 <- build_panel4(present4[1], 1) +
+
+
+all_trimmed4 <- purrr::map_dfr(present4, function(feat) {
+  df <- tibble(
+    driver_value = X_FNYield[[feat]],
+    shap_value   = shap_FNYield[, feat],
+    response     = response_FNYield
+  ) %>% filter(is.finite(driver_value), is.finite(shap_value))
+  
+  if (feat %in% c("P", "NOx")) {
+    df <- df %>% filter(driver_value > 0)
+  }
+  
+  if (nrow(df) > 0) {
+    xlims_feat <- quantile(df$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
+    df <- df %>% filter(driver_value >= xlims_feat[1], driver_value <= xlims_feat[2])
+  }
+  df
+})
+
+fill_lims4 <- range(all_trimmed4$response, na.rm = TRUE)
+
+legend_plot4 <- ggplot(all_trimmed4, aes(x = 1, y = 1, fill = response)) +
+  geom_tile() +
+  scale_fill_gradient(
+    low = "white", high = "black",
+    limits = fill_lims4,
+    name = expression("Yield (kg " * km^-2 * " yr"^-1 * ")"),
+    guide = guide_colourbar(
+      title.position = "top",
+      title.hjust = 0.5,
+      barwidth  = unit(25, "lines"),
+      barheight = unit(1, "cm"),
+      label.theme = element_text(size = 14),
+      title.theme = element_text(size = 16)
+    )
+  ) +
+  theme_void() +
   theme(
-    legend.position  = "right",
-    legend.direction = "horizontal"
+    legend.position   = "right",
+    legend.direction  = "horizontal",
+    legend.title      = element_text(size = 16),
+    legend.text       = element_text(size = 14),
+    legend.key.width  = unit(3, "lines"),
+    legend.key.height = unit(1.2, "lines")
   )
-shared_leg4 <- get_legend(leg4)
+
+shared_leg4 <- get_legend(legend_plot4)
 
 panels4 <- map2(present4, seq_along(present4), build_panel4)
 grid4   <- plot_grid(
@@ -252,6 +500,7 @@ grid4   <- plot_grid(
   labels     = LETTERS[1:length(panels4)],
   label_size = 16, label_fontface = "plain", align = "hv"
 )
+
 fig4_recent30 <- plot_grid(grid4, shared_leg4, ncol = 1, rel_heights = c(1, 0.1))
 
 ggsave(
@@ -271,7 +520,7 @@ figS_conc  <- make_shap_loess_grid(
   recode_map
 )
 ggsave(
-  "Final_Figures/FigSX_recent30_Conc_SHAP_Grid.png",
+  "Final_Figures/FigS4_recent30_Conc_SHAP_Grid.png",
   figS_conc, width = 12, height = 15, dpi = 300, bg = "white"
 )
 
@@ -284,6 +533,6 @@ figS_yield  <- make_shap_loess_grid(
   recode_map
 )
 ggsave(
-  "Final_Figures/FigSX_recent30_Yield_SHAP_Grid.png",
+  "Final_Figures/FigS5_recent30_Yield_SHAP_Grid.png",
   figS_yield, width = 12, height = 15, dpi = 300, bg = "white"
 )

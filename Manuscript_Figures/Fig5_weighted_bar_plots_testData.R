@@ -70,19 +70,21 @@ drivers_FNYield_scaled <- recent30 %>%
   mutate(across(where(is.numeric), ~ scales::rescale(., to = c(0, 1))))
 
 # 7. Pretty feature recoding (exclude rock predictors intentionally here)
-recode_map_box <- setNames(
-  c("N", "P", "NPP", "ET", "Greenup Day", "Precip", "Temp",
-    "Snow Cover", "Permafrost", "Elevation", "Basin Slope",
-    "Flashiness (RBI)", "Recession Curve Slope", "Land: Bare", "Land: Cropland",
-    "Land: Forest", "Land: Grass & Shrub", "Land: Ice & Snow",
-    "Land: Impervious", "Land: Salt Water", "Land: Tidal Wetland",
-    "Land: Water Body", "Land: Wetland Marsh"),
-  c("NOx", "P", "npp", "evapotrans", "greenup_day", "precip", "temp",
-    "snow_cover", "permafrost", "elevation", "basin_slope", "RBI",
-    "recession_slope", "land_Bare", "land_Cropland", "land_Forest",
-    "land_Grassland_Shrubland", "land_Ice_Snow", "land_Impervious",
-    "land_Salt_Water", "land_Tidal_Wetland", "land_Water",
-    "land_Wetland_Marsh")
+recode_map <- setNames(
+  c("log(N)","log(P)","NPP","ET","Greenup Day","Precip","Temp","Snow Cover","Permafrost",
+    "Elevation","Basin Slope","Flashiness (RBI)","Recession Curve Slope",
+    "Bare Land Cover","Cropland","Forest","Grass & Shrubland",
+    "Ice & Snow Cover","Impervious Land","Salt Water Cover","Tidal Wetland",
+    "Open Water Cover","Wetland","Volcanic Rock","Sedimentary Rock",
+    "Carbonate-Evaporite Rock","Metamorphic Rock","Plutonic Rock"),
+  
+  c("NOx","P","npp","evapotrans","greenup_day","precip","temp",
+    "snow_cover","permafrost","elevation","basin_slope","RBI",
+    "recession_slope","land_Bare","land_Cropland","land_Forest",
+    "land_Grassland_Shrubland","land_Ice_Snow","land_Impervious",
+    "land_Salt_Water","land_Tidal_Wetland","land_Water","land_Wetland_Marsh",
+    "rocks_volcanic","rocks_sedimentary","rocks_carbonate_evaporite",
+    "rocks_metamorphic","rocks_plutonic")
 )
 
 # 8. Cluster levels & colors
@@ -123,7 +125,7 @@ conc_shap_litho <- as.data.frame(shap_values_FNConc) %>%
   ) %>%
   ungroup() %>%
   mutate(
-    feature       = recode(feature, !!!recode_map_box),
+    feature       = recode(feature, !!!recode_map),
     final_cluster = factor(final_cluster, levels = cluster_levels)
   )
 
@@ -159,7 +161,7 @@ yield_shap_litho <- as.data.frame(shap_values_FNYield) %>%
   ) %>%
   ungroup() %>%
   mutate(
-    feature       = recode(feature, !!!recode_map_box),
+    feature       = recode(feature, !!!recode_map),
     final_cluster = factor(final_cluster, levels = cluster_levels)
   )
 

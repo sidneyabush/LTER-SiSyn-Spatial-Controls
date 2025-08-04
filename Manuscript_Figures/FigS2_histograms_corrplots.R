@@ -38,13 +38,14 @@ hist_long <- hist_input_df %>%
   mutate(value = if_else(driver %in% c("NOx", "P"), log10(value), value))
 
 # Recode variable names to pretty labels
+# 5) Recode map
 recode_map <- setNames(
   c("log(N)","log(P)","NPP","ET","Greenup Day","Precip","Temp","Snow Cover","Permafrost",
     "Elevation","Basin Slope","Flashiness (RBI)","Recession Curve Slope",
-    "Land: Bare","Land: Cropland","Land: Forest","Land: Grass & Shrub",
-    "Land: Ice & Snow","Land: Impervious","Land: Salt Water","Land: Tidal Wetland",
-    "Land: Water Body","Land: Wetland Marsh","Rock: Volcanic","Rock: Sedimentary",
-    "Rock: Carbonate Evaporite","Rock: Metamorphic","Rock: Plutonic"),
+    "Bare Land Cover","Cropland","Forest","Grass & Shrubland",
+    "Ice & Snow Cover","Impervious Land","Salt Water Cover","Tidal Wetland",
+    "Open Water Cover","Wetland","Volcanic Rock","Sedimentary Rock",
+    "Carbonate-Evaporite Rock","Metamorphic Rock","Plutonic Rock"),
   
   c("NOx","P","npp","evapotrans","greenup_day","precip","temp",
     "snow_cover","permafrost","elevation","basin_slope","RBI",
@@ -58,11 +59,11 @@ recode_map <- setNames(
 driver_order <- c(
   "log(N)", "log(P)", "NPP", "ET", "Greenup Day", "Precip",
   "Temp", "Snow Cover", "Permafrost", "Elevation", "Basin Slope", "Flashiness (RBI)",
-  "Recession Curve Slope", "Land: Bare", "Land: Cropland", "Land: Forest",
-  "Land: Grass & Shrub", "Land: Ice & Snow", "Land: Impervious",
-  "Land: Salt Water", "Land: Tidal Wetland", "Land: Water Body",
-  "Land: Wetland Marsh", "Rock: Volcanic", "Rock: Sedimentary",
-  "Rock: Carbonate Evaporite", "Rock: Metamorphic", "Rock: Plutonic"
+  "Recession Curve Slope", "Bare Land Cover", "Cropland", "Forest",
+  "Grass & Shrubland", "Ice & Snow Cover", "Impervious Land",
+  "Salt Water Cover", "Tidal Wetland", "Open Water Cover",
+  "Wetland", "Volcanic Rock","Sedimentary Rock",
+  "Carbonate-Evaporite Rock","Metamorphic Rock","Plutonic Rock"
 )
 
 hist_long <- hist_long %>%
@@ -94,7 +95,7 @@ p <- ggplot(hist_long, aes(x = value, fill = subset)) +
 
 # Save to file
 ggsave(
-  filename = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures/FigSX_histograms.png",
+  filename = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures/FigS2_histograms.png",
   plot     = p,
   width    = 16,
   height   = 18,
@@ -126,7 +127,7 @@ save_subset_corrplot <- function(df, label) {
   png(
     filename = file.path(
       "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures",
-      sprintf("corrplot_%s.png", label_file)
+      sprintf("FigS3_corrplot_%s.png", label_file)
     ),
     width  = 10, 
     height = 10, 
@@ -152,6 +153,6 @@ save_subset_corrplot <- function(df, label) {
 
 
 # Call for each subset
-save_subset_corrplot(older70,     "Training")
+# save_subset_corrplot(older70,     "Training")
 save_subset_corrplot(recent30,    "Testing")
-save_subset_corrplot(unseen10_df, "Cross_Validation")
+# save_subset_corrplot(unseen10_df, "Cross_Validation")

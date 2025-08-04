@@ -39,15 +39,13 @@ load(file.path(fm, "FNYield_Yearly_kept_drivers.RData")); KD_FY  <- kept_drivers
 
 # 4. Recode & scale setup
 recode_map <- setNames(
-  # Pretty Labels:
-  c("N","P","NPP","ET","Greenup Day","Precip","Temp","Snow Cover","Permafrost",
+  c("log(N)","log(P)","NPP","ET","Greenup Day","Precip","Temp","Snow Cover","Permafrost",
     "Elevation","Basin Slope","Flashiness (RBI)","Recession Curve Slope",
-    "Land: Bare","Land: Cropland","Land: Forest","Land: Grass & Shrub",
-    "Land: Ice & Snow","Land: Impervious","Land: Salt Water","Land: Tidal Wetland",
-    "Land: Water Body","Land: Wetland Marsh","Rock: Volcanic","Rock: Sedimentary",
-    "Rock: Carbonate Evaporite","Rock: Metamorphic","Rock: Plutonic"),
+    "Bare Land Cover","Cropland","Forest","Grass & Shrubland",
+    "Ice & Snow Cover","Impervious Land","Salt Water Cover","Tidal Wetland",
+    "Open Water Cover","Wetland","Volcanic Rock","Sedimentary Rock",
+    "Carbonate-Evaporite Rock","Metamorphic Rock","Plutonic Rock"),
   
-  # Variable Names from the DataFrame:
   c("NOx","P","npp","evapotrans","greenup_day","precip","temp",
     "snow_cover","permafrost","elevation","basin_slope","RBI",
     "recession_slope","land_Bare","land_Cropland","land_Forest",
@@ -348,9 +346,9 @@ leg1 <- get_legend(
   A + theme(
     legend.position    = "right",
     legend.direction   = "horizontal",
-    legend.key.width   = unit(2,   "lines"),    
+    legend.key.width   = unit(1.5,   "lines"),    
     legend.key.height  = unit(1.3, "lines"),    
-    legend.text        = element_text(size = 22)
+    legend.text        = element_text(size = 18)
   )
 )
 
@@ -385,7 +383,7 @@ leg2 <- get_legend(
 final_fig2 <- plot_grid(
   row1, leg1, row2, row3, leg2,
   ncol        = 1,
-  rel_heights = c(1.2, 0.12, 1.15, 1.1, 0.15),
+  rel_heights = c(1.15, 0.12, 1.15, 1.1, 0.15),
   align       = "v"
 )
 
