@@ -253,7 +253,12 @@ A <- ggplot(pred_FNConc, aes(predicted, observed)) +
            label = sprintf("R² = %.3f, pRMSE = %.1f%%", metrics_FNConc$R2[3], metrics_FNConc$pRMSE[3]),
            hjust = 0, size = 6.5,
            color = subset_ann_cols[["unseen10"]]) +
-  labs(x = "Predicted", y = "Observed", title = "Concentration", tag = "A") +
+  labs(
+    x = expression(paste("Predicted (", mg~L^{-1}, ")")),
+    y = expression(paste("Observed (", mg~L^{-1}, ")")),
+    title = "Concentration",
+    tag = "A") +
+  #labs(x = "Predicted", y = "Observed", title = "Concentration", tag = "A") +
   scale_x_continuous(expand = expansion(mult = c(0.03, 0.2))) +
   scale_y_continuous(expand = expansion(mult = c(0.02, 0.02))) +
   theme(plot.margin = unit(c(5, 5, 5, 0), "pt"))
@@ -321,7 +326,13 @@ B <- ggplot(pred_FNYield, aes(predicted, observed)) +
            label = sprintf("R² = %.3f, pRMSE = %.1f%%", metrics_FNYield$R2[3], metrics_FNYield$pRMSE[3]),
            hjust = 0, size = 6.5,
            color = subset_ann_cols[["unseen10"]]) +
-  labs(x = "Predicted", y = NULL, title = "Yield", tag = "B") +
+  # labs(x = "Predicted", y = NULL, title = "Yield", tag = "B") +
+  labs(
+    x = expression(paste("Predicted (", kg~km^{-2}~yr^{-1}, ")")),
+    y = expression(paste("Observed (", kg~km^{-2}~yr^{-1}, ")")),
+    title = "Yield",
+    tag = "B"
+  ) +
   scale_x_continuous(expand = expansion(mult = c(0.03, 0.2))) +
   scale_y_continuous(expand = expansion(mult = c(0.02, 0.02))) +
   theme(plot.margin = unit(c(5, 5, 5, 0),"pt"))

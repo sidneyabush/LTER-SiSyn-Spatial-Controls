@@ -1,4 +1,4 @@
-# ----- Fig 5: weighted lithology SHAP bars for Concentration & Yield -----
+# ----- Fig 5: weighted lithology SHAP bars (using recent30 directly) -----
 
 # 0. Packages
 library(ggplot2)
@@ -6,103 +6,70 @@ library(dplyr)
 library(tidyr)
 library(patchwork)
 library(colorspace)
+library(scales)  # for rescale
 
 # 1. Paths & output
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 fm <- "Final_Models"
+recent30_path <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files/AllDrivers_cc_recent30.csv"
 output_dir <- "Final_Figures"
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
-# 2. Load SHAP data (recent30)
-load(file.path(fm, "FNConc_Yearly_shap_values_recent30.RData"))   # defines shap_values_FNConc
-load(file.path(fm, "FNYield_Yearly_shap_values_recent30.RData"))  # defines shap_values_FNYield
-
-# ---- prep for step 12: get scaled recent30 driver data + clusters ----
-
-# 0. Packages (if not already loaded)
-library(dplyr)
-library(tidyr)
-library(scales)       # for rescale
-# (ggplot2 / patchwork etc. used later in plotting section)
-
-# 1. Paths
-setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
-fm <- "Final_Models"
-output_dir <- "Final_Figures"
-dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-
-# 2. Load SHAP (recent30)
+# 2. Load SHAP values (recent30)
 load(file.path(fm, "FNConc_Yearly_shap_values_recent30.RData"))   # shap_values_FNConc
 load(file.path(fm, "FNYield_Yearly_shap_values_recent30.RData"))  # shap_values_FNYield
 
-# 3. Load hierarchical clustering workflow to get full_scaled (for cluster labels)
-load(file.path(fm, "FNConc_HierClust_Workflow_Objects.RData"))    # expects object full_scaled
-# If the yield side has a separate clustering object and differs, load that too:
-# load(file.path(fm, "FNYield_HierClust_Workflow_Objects.RData"))
+# 3. Read recent30 split
+recent30 <- read.csv(recent30_path, stringsAsFactors = FALSE)
 
-if (!exists("full_scaled") || is.null(full_scaled$final_cluster)) {
-  stop("full_scaled$final_cluster not found; need the hierarchical clustering object with cluster labels.")
-}
-
-# 4. Prepare recent30 driver numeric data
-# === YOU MUST PROVIDE these objects ===
-# e.g., they might come from your existing recent30 split pipeline; placeholder names:
-# drivers_numeric_recent30_FNConc
-# drivers_numeric_recent30_FNYield
-
-if (!exists("drivers_numeric_recent30_FNConc") || !exists("drivers_numeric_recent30_FNYield")) {
-  stop("Please supply 'drivers_numeric_recent30_FNConc' and 'drivers_numeric_recent30_FNYield' (raw numeric driver tables for recent30).")
-}
-
-# 5. Apply log transform + rescale as in your original logic
-drivers_FNConc_scaled <- drivers_numeric_recent30_FNConc %>%
+# 4. Recreate final_cluster (same logic as original)
+site_clusters <- recent30 %>%
+  distinct(Stream_ID, major_rock, rocks_volcanic, rocks_sedimentary,
+           rocks_carbonate_evaporite, rocks_metamorphic, rocks_plutonic) %>%
   mutate(
-    # NOx = log10(NOx),  # intentionally omitted for concentration
+    consolidated_rock = case_when(
+      major_rock %in% c("volcanic", "volcanic; plutonic") ~ "Volcanic",
+      major_rock %in% c("sedimentary", "sedimentary; metamorphic",
+                        "sedimentary; carbonate_evaporite",
+                        "volcanic; sedimentary; carbonate_evaporite",
+                        "sedimentary; plutonic; carbonate_evaporite; metamorphic") ~ "Sedimentary",
+      major_rock %in% c("plutonic", "plutonic; metamorphic", "volcanic; plutonic; metamorphic") ~ "Plutonic",
+      major_rock %in% c("metamorphic", "carbonate_evaporite; metamorphic") ~ "Metamorphic",
+      major_rock %in% c("carbonate_evaporite", "volcanic; carbonate_evaporite") ~ "Carbonate Evaporite",
+      TRUE ~ NA_character_
+    ),
+    final_cluster = case_when(
+      consolidated_rock == "Sedimentary" & rocks_sedimentary >= 70 ~ "Sedimentary",
+      consolidated_rock == "Sedimentary" & rocks_sedimentary < 70  ~ "Mixed Sedimentary",
+      TRUE ~ consolidated_rock
+    )
+  ) %>%
+  select(Stream_ID, final_cluster)
+
+recent30 <- recent30 %>%
+  left_join(site_clusters, by = "Stream_ID")
+
+# 5. Sanity check: row counts
+if (nrow(recent30) != nrow(shap_values_FNConc) || nrow(recent30) != nrow(shap_values_FNYield)) {
+  warning("Row count mismatch between recent30 and SHAP objects. Ensure the SHAP values were computed on this exact recent30 split. If possible, align via an ID vector used during SHAP extraction.")
+}
+
+# 6. Build scaled driver tables
+drivers_FNConc_scaled <- recent30 %>%
+  mutate(
+    # NOx = log10(NOx), # omitted per concentration logic
     P = log10(P)
   ) %>%
-  mutate(across(everything(), ~ scales::rescale(., to = c(0, 1))))
+  mutate(across(where(is.numeric), ~ scales::rescale(., to = c(0, 1))))
 
-drivers_FNYield_scaled <- drivers_numeric_recent30_FNYield %>%
+drivers_FNYield_scaled <- recent30 %>%
   mutate(
     NOx = log10(NOx),
     P   = log10(P)
   ) %>%
-  mutate(across(everything(), ~ scales::rescale(., to = c(0, 1))))
+  mutate(across(where(is.numeric), ~ scales::rescale(., to = c(0, 1))))
 
-# 6. Attach cluster labels: subset full_scaled$final_cluster to the recent30 rows
-# This assumes rownames or an ID allows mapping. Prefer explicit matching if possible.
-# If the driver tables and full_scaled share rownames:
-if (!is.null(rownames(drivers_FNConc_scaled)) &&
-    all(rownames(drivers_FNConc_scaled) %in% rownames(full_scaled))) {
-  drivers_FNConc_scaled$final_cluster <- full_scaled[rownames(drivers_FNConc_scaled), "final_cluster"]
-} else {
-  warning("Row names of drivers_FNConc_scaled do not align with full_scaled. You need to supply a matching key to map clusters.")
-  # Example alternative (if you have an 'id' column in both):
-  # drivers_FNConc_scaled <- drivers_FNConc_scaled %>%
-  #   left_join(full_scaled %>% select(final_cluster) %>% mutate(id = rownames(.)), by = "id")
-}
-
-if (!is.null(rownames(drivers_FNYield_scaled)) &&
-    all(rownames(drivers_FNYield_scaled) %in% rownames(full_scaled))) {
-  drivers_FNYield_scaled$final_cluster <- full_scaled[rownames(drivers_FNYield_scaled), "final_cluster"]
-} else {
-  warning("Row names of drivers_FNYield_scaled do not align with full_scaled. You need to supply a matching key to map clusters.")
-}
-
-# At this point the objects drivers_FNConc_scaled and drivers_FNYield_scaled
-# have the required final_cluster column and can be fed into the step 12 plotting code.
-
-
-# 3. Expectation: drivers_*_scaled exist in workspace with a column final_cluster.
-#    If not, stop with message.
-if (!exists("drivers_FNConc_scaled") || !"final_cluster" %in% colnames(drivers_FNConc_scaled)) {
-  stop("drivers_FNConc_scaled with final_cluster is required in the environment.")
-}
-if (!exists("drivers_FNYield_scaled") || !"final_cluster" %in% colnames(drivers_FNYield_scaled)) {
-  stop("drivers_FNYield_scaled with final_cluster is required in the environment.")
-}
-
-# 4. Define recoding map (for pretty feature labels)
+# 7. Pretty feature recoding (exclude rock predictors intentionally here)
 recode_map_box <- setNames(
   c("N", "P", "NPP", "ET", "Greenup Day", "Precip", "Temp",
     "Snow Cover", "Permafrost", "Elevation", "Basin Slope",
@@ -118,7 +85,7 @@ recode_map_box <- setNames(
     "land_Wetland_Marsh")
 )
 
-# 5. Lithology ordering & colors
+# 8. Cluster levels & colors
 cluster_levels <- c(
   "Volcanic",
   "Sedimentary",
@@ -130,37 +97,24 @@ cluster_levels <- c(
 base_colors <- c("#AC7B32", "#579C8E", "#89C8A0", "#8D9A40", "#C26F86", "#5E88B0")
 my_cluster_colors <- setNames(lighten(base_colors, amount = 0.05), cluster_levels)
 
-# 6. Concentration: driver importance (mean absolute SHAP, excluding rocks_)
+# 9. Concentration: overall driver importance (exclude rock features)
 conc_driver_importance <- as.data.frame(shap_values_FNConc) %>%
   select(-any_of("final_cluster")) %>%
   select(-matches("^rocks_", ignore.case = TRUE)) %>%
   summarise(across(everything(), ~ mean(abs(.x), na.rm = TRUE))) %>%
-  pivot_longer(
-    cols = everything(),
-    names_to = "feature",
-    values_to = "driver_mean_abs_shap"
-  )
+  pivot_longer(cols = everything(), names_to = "feature", values_to = "driver_mean_abs_shap")
 
-# 7. Concentration: lithology-specific weighted contributions
+# 10. Concentration: lithology-weighted SHAP
 conc_shap_litho <- as.data.frame(shap_values_FNConc) %>%
   mutate(id = row_number()) %>%
-  pivot_longer(
-    cols = -id,
-    names_to = "feature",
-    values_to = "shap_value"
-  ) %>%
+  pivot_longer(cols = -id, names_to = "feature", values_to = "shap_value") %>%
   left_join(
-    drivers_FNConc_scaled %>%
-      mutate(id = row_number()) %>%
-      select(id, final_cluster),
+    drivers_FNConc_scaled %>% mutate(id = row_number()) %>% select(id, final_cluster),
     by = "id"
   ) %>%
   filter(!grepl("^rocks_", feature, ignore.case = TRUE)) %>%
   group_by(feature, final_cluster) %>%
-  summarize(
-    litho_mean_abs = mean(abs(shap_value), na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
+  summarize(litho_mean_abs = mean(abs(shap_value), na.rm = TRUE), .groups = "drop") %>%
   left_join(conc_driver_importance, by = "feature") %>%
   group_by(feature) %>%
   mutate(
@@ -179,37 +133,24 @@ feature_order_conc <- conc_shap_litho %>%
   pull(feature)
 conc_shap_litho$feature <- factor(conc_shap_litho$feature, levels = feature_order_conc)
 
-# 8. Yield: driver importance
+# 11. Yield: overall driver importance
 yield_driver_importance <- as.data.frame(shap_values_FNYield) %>%
   select(-any_of("final_cluster")) %>%
   select(-matches("^rocks_", ignore.case = TRUE)) %>%
   summarise(across(everything(), ~ mean(abs(.x), na.rm = TRUE))) %>%
-  pivot_longer(
-    cols = everything(),
-    names_to = "feature",
-    values_to = "driver_mean_abs_shap"
-  )
+  pivot_longer(cols = everything(), names_to = "feature", values_to = "driver_mean_abs_shap")
 
-# 9. Yield: lithology-weighted
+# 12. Yield: lithology-weighted SHAP
 yield_shap_litho <- as.data.frame(shap_values_FNYield) %>%
   mutate(id = row_number()) %>%
-  pivot_longer(
-    cols = -id,
-    names_to = "feature",
-    values_to = "shap_value"
-  ) %>%
+  pivot_longer(cols = -id, names_to = "feature", values_to = "shap_value") %>%
   left_join(
-    drivers_FNYield_scaled %>%
-      mutate(id = row_number()) %>%
-      select(id, final_cluster),
+    drivers_FNYield_scaled %>% mutate(id = row_number()) %>% select(id, final_cluster),
     by = "id"
   ) %>%
   filter(!grepl("^rocks_", feature, ignore.case = TRUE)) %>%
   group_by(feature, final_cluster) %>%
-  summarize(
-    litho_mean_abs = mean(abs(shap_value), na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
+  summarize(litho_mean_abs = mean(abs(shap_value), na.rm = TRUE), .groups = "drop") %>%
   left_join(yield_driver_importance, by = "feature") %>%
   group_by(feature) %>%
   mutate(
@@ -228,10 +169,10 @@ feature_order_yield <- yield_shap_litho %>%
   pull(feature)
 yield_shap_litho$feature <- factor(yield_shap_litho$feature, levels = feature_order_yield)
 
-# 10. Plot panels
+# 13. Plot panels
 conc_litho_bar <- ggplot(conc_shap_litho,
                          aes(x = weighted_value, y = feature, fill = final_cluster)) +
-  geom_col(position = position_stack(reverse = TRUE)) +
+  geom_col(position = position_stack(reverse = TRUE), color = "black", size = 0.3) +
   scale_fill_manual(
     name   = "Lithology",
     values = my_cluster_colors,
@@ -259,7 +200,7 @@ conc_litho_bar <- ggplot(conc_shap_litho,
 
 yield_litho_bar <- ggplot(yield_shap_litho,
                           aes(x = weighted_value, y = feature, fill = final_cluster)) +
-  geom_col(position = position_stack(reverse = TRUE)) +
+  geom_col(position = position_stack(reverse = TRUE), color = "black", size = 0.3) +
   scale_fill_manual(
     name   = "Lithology",
     values = my_cluster_colors,
@@ -285,7 +226,7 @@ yield_litho_bar <- ggplot(yield_shap_litho,
     legend.text      = element_text(size = 22)
   )
 
-# 11. Combine & save
+# 14. Combine & save
 fig_litho_shap <- conc_litho_bar + yield_litho_bar +
   plot_layout(ncol = 2, guides = "collect") &
   theme(legend.position = "bottom")
