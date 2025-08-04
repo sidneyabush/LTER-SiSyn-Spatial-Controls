@@ -350,7 +350,7 @@ leg1 <- get_legend(
     legend.direction   = "horizontal",
     legend.key.width   = unit(2,   "lines"),    
     legend.key.height  = unit(1.2, "lines"),    
-    legend.text        = element_text(size = 17)
+    legend.text        = element_text(size = 20)
   )
 )
 
@@ -385,7 +385,7 @@ leg2 <- get_legend(
 final_fig2 <- plot_grid(
   row1, leg1, row2, row3, leg2,
   ncol        = 1,
-  rel_heights = c(1.2, 0.1, 1.15, 1.1, 0.15),
+  rel_heights = c(1.2, 0.15, 1.15, 1.1, 0.15),
   align       = "v"
 )
 
