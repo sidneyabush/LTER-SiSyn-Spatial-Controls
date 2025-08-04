@@ -157,6 +157,19 @@ make_shap_loess_grid <- function(shap_matrix, drivers_data, response,
   panels <- purrr::map(colnames(shap_matrix), function(feat) {
     if (verbose) message("Building panel for: ", feat)
     df <- trimmed_list[[feat]]
+    
+    # determine trimmed x-limits; for ET drop exact zeros so axis doesn't anchor at 0
+    if (feat == "ET") {
+      df_for_xlim <- df %>% filter(driver_value > 0)
+      if (nrow(df_for_xlim) > 0) {
+        xlims_feat <- quantile(df_for_xlim$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
+      } else {
+        xlims_feat <- quantile(df$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
+      }
+    } else {
+      xlims_feat <- quantile(df$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
+    }
+    
     p <- ggplot(df, aes(driver_value, shap_value, fill = response)) +
       geom_hline(yintercept = 0, linetype = "dashed") +
       geom_vline(xintercept = 0, linetype = "dashed") +
@@ -169,38 +182,31 @@ make_shap_loess_grid <- function(shap_matrix, drivers_data, response,
       theme_classic(base_size = 18) +
       theme(
         axis.title = element_text(size = 16),
-        axis.text  = element_text(size = 14)
+        axis.text  = element_text(size = 14),
+        plot.margin = ggplot2::margin(t = 10, r = 5, b = 25, l = 10, unit = "pt")  # extra bottom space
       )
     
+    # x-axis scaling with trimmed limits and small buffer
     if (feat %in% c("P", "NOx")) {
       p <- p + scale_x_log10(
+        limits = c(xlims_feat[1], xlims_feat[2]),
+        expand = expansion(mult = c(0.02, 0.02)),
         breaks = trans_breaks("log10", function(x) 10^x),
         labels = trans_format("log10", math_format(10^.x))
       )
-    }
-    # if (feat == "land_Wetland_Marsh") {
-    #   p <- p + coord_cartesian(xlim = c(0, 35), expand = FALSE)
-    # }
-    # determine xlims based on trimmed data, but for ET drop exact zeros so axis doesn't anchor at 0
-    if (feat == "ET") {
-      df_for_xlim <- df %>% filter(driver_value > 0)
-      if (nrow(df_for_xlim) > 0) {
-        xlims_feat <- quantile(df_for_xlim$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
-      } else {
-        xlims_feat <- quantile(df$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
-      }
     } else {
-      xlims_feat <- quantile(df$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
+      p <- p + scale_x_continuous(
+        limits = c(xlims_feat[1], xlims_feat[2]),
+        expand = expansion(mult = c(0.02, 0.02))
+      )
     }
     
-    # apply as continuous scale
-    p <- p + scale_x_continuous(
-      limits = c(xlims_feat[1], xlims_feat[2]),
-      expand = expansion(mult = c(0, 0))
-    )
+    # prevent clipping of labels
+    p <- p + coord_cartesian(clip = "off")
     
     p
   })
+  
   
   # 5. Shared legend based on trimmed response range
   legend_plot <- ggplot(
@@ -260,12 +266,13 @@ build_panel3 <- function(feat, idx) {
   if (nrow(df) > 0) {
     xlims_feat <- quantile(df$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
     df <- df %>% filter(driver_value >= xlims_feat[1], driver_value <= xlims_feat[2])
+  } else {
+    xlims_feat <- c(NA, NA)
   }
   
   # compute fill limits from this trimmed df
   fill_lims <- range(df$response, na.rm = TRUE)
   
-  # base plot
   p <- ggplot(df, aes(driver_value, shap_value, fill = response)) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
     geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
@@ -289,28 +296,29 @@ build_panel3 <- function(feat, idx) {
       legend.position = "none",
       axis.title.y    = element_text(size = 16),
       axis.text       = element_text(size = 14),
-      plot.margin     = ggplot2::margin(t = 20, r = 5, b = 5, l = 30, unit = "pt")
+      plot.margin     = ggplot2::margin(t = 10, r = 5, b = 25, l = 30, unit = "pt")
     )
   
-  # x-axis scaling with trimmed limits
+  # x-axis scaling with trimmed limits and buffer
   if (feat %in% c("P", "NOx")) {
     p <- p + scale_x_log10(
       limits = c(xlims_feat[1], xlims_feat[2]),
+      expand = expansion(mult = c(0.02, 0.02)),
       breaks = trans_breaks("log10", function(x) 10^x),
       labels = trans_format("log10", math_format(10^.x))
     )
   } else {
     p <- p + scale_x_continuous(
-      limits = range(df$driver_value, na.rm = TRUE),
-      expand = expansion(mult = c(0.03, 0.03))
+      limits = c(xlims_feat[1], xlims_feat[2]),
+      expand = expansion(mult = c(0.02, 0.02))
     )
   }
   
-  if (feat == "land_Wetland_Marsh") {
-    p <- p + coord_cartesian(xlim = c(0, 35), expand = FALSE)
-  }
+  p <- p + coord_cartesian(clip = "off")
+  
   p
 }
+
 
 # build shared legend for Fig 3 from the union of all trimmed panels
 all_trimmed3 <- purrr::map_dfr(present3, function(feat) {
@@ -396,6 +404,8 @@ build_panel4 <- function(feat, idx) {
   if (nrow(df) > 0) {
     xlims_feat <- quantile(df$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
     df <- df %>% filter(driver_value >= xlims_feat[1], driver_value <= xlims_feat[2])
+  } else {
+    xlims_feat <- c(NA, NA)
   }
   
   fill_lims <- range(df$response, na.rm = TRUE)
@@ -423,29 +433,27 @@ build_panel4 <- function(feat, idx) {
       legend.position = "none",
       axis.title.y    = element_text(size = 16),
       axis.text       = element_text(size = 14),
-      plot.margin     = ggplot2::margin(t = 20, r = 5, b = 5, l = 30, unit = "pt")
+      plot.margin     = ggplot2::margin(t = 10, r = 5, b = 25, l = 30, unit = "pt")
     )
   
   if (feat %in% c("P", "NOx")) {
     p <- p + scale_x_log10(
       limits = c(xlims_feat[1], xlims_feat[2]),
+      expand = expansion(mult = c(0.02, 0.02)),
       breaks = trans_breaks("log10", function(x) 10^x),
       labels = trans_format("log10", math_format(10^.x))
     )
   } else {
     p <- p + scale_x_continuous(
-      limits = range(df$driver_value, na.rm = TRUE),
-      expand = expansion(mult = c(0.03, 0.03))
+      limits = c(xlims_feat[1], xlims_feat[2]),
+      expand = expansion(mult = c(0.02, 0.02))
     )
   }
   
-  # if (feat == "land_Wetland_Marsh") {
-  #   p <- p + coord_cartesian(xlim = c(0, 35), ylim = c(NA, 3200), expand = FALSE)
-  # }
+  p <- p + coord_cartesian(clip = "off")
+  
   p
 }
-
-
 
 all_trimmed4 <- purrr::map_dfr(present4, function(feat) {
   df <- tibble(
