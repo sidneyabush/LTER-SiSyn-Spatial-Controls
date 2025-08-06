@@ -39,12 +39,12 @@ load(file.path(fm, "FNYield_Yearly_kept_drivers.RData")); KD_FY  <- kept_drivers
 
 # 4. Recode & scale setup
 recode_map <- setNames(
-  c("log(N)","log(P)","NPP","ET","Greenup Day","Precip","Temp","Snow Cover","Permafrost",
-    "Elevation","Basin Slope","Flashiness (RBI)","Recession Curve Slope",
-    "Bare Land Cover","Cropland","Forest","Grass & Shrubland",
-    "Ice & Snow Cover","Impervious Land","Salt Water Cover","Tidal Wetland",
-    "Open Water Cover","Wetland","Volcanic Rock","Sedimentary Rock",
-    "Carbonate-Evaporite Rock","Metamorphic Rock","Plutonic Rock"),
+  c("Log(N)","Log(P)","NPP","ET","Green-up day","Precip","Temp","Snow cover","Permafrost",
+    "Elevation","Basin slope","RBI","RCS",
+    "Bare land cover","Cropland cover","Forest cover","Grass & shrubland cover",
+    "Ice & snow cover","Impervious cover","Saltwater cover","Tidal wetland cover",
+    "Open water cover","Wetland cover","Volcanic rock","Sedimentary rock",
+    "Carbonate-evaporite rock","Metamorphic rock","Plutonic rock"),
   
   c("NOx","P","npp","evapotrans","greenup_day","precip","temp",
     "snow_cover","permafrost","elevation","basin_slope","RBI",
