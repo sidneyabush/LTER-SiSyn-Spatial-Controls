@@ -167,7 +167,7 @@ p2 <- p +
     panel.grid.minor = element_blank(),
     
     # AXES
-    axis.text.x      = element_text(angle = 90, vjust = .5, hjust = 1, size = 10),
+    axis.text.x      = element_text(angle = 90, vjust = .5, hjust = 1, size = 12),
     axis.title.y     = element_text(size = 14),
     
     legend.position  = "none"
