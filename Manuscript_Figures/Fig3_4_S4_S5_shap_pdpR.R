@@ -31,12 +31,12 @@ X_FNYield <- recent30_df[, colnames(shap_FNYield)]
 
 # 5) Recode map
 recode_map <- setNames(
-  c("log(N)","log(P)","NPP","ET","Greenup Day","Precip","Temp","Snow Cover","Permafrost",
-    "Elevation","Basin Slope","Flashiness (RBI)","Recession Curve Slope",
-    "Bare Land Cover","Cropland","Forest","Grass & Shrubland",
-    "Ice & Snow Cover","Impervious Land","Salt Water Cover","Tidal Wetland",
-    "Open Water Cover","Wetland","Volcanic Rock","Sedimentary Rock",
-    "Carbonate-Evaporite Rock","Metamorphic Rock","Plutonic Rock"),
+  c("Log(N)","Log(P)","NPP","ET","Green-up day","Precip","Temp","Snow cover","Permafrost",
+    "Elevation","Basin slope","RBI","RCS",
+    "Bare land cover","Cropland cover","Forest cover","Grass & shrub cover",
+    "Ice & snow cover","Impervious cover","Saltwater cover","Tidal wetland cover",
+    "Open water cover","Wetland cover","Volcanic rock","Sedimentary rock",
+    "Carbonate-evaporite rock","Metamorphic rock","Plutonic rock"),
   
   c("NOx","P","npp","evapotrans","greenup_day","precip","temp",
     "snow_cover","permafrost","elevation","basin_slope","RBI",
@@ -377,15 +377,11 @@ grid3   <- plot_grid(
 )
 fig3_recent30 <- plot_grid(grid3, shared_leg3, ncol = 1, rel_heights = c(1, 0.1))
 
-ggsave(
-  "Final_Figures/Fig3_recent30_Concentration_SHAP_grid.png",
-  fig3_recent30, width = 12, height = 14, dpi = 300, bg = "white"
-)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 12) Fig 4: Yield SHAP–LOESS grid (4 panels, linear fill scale)
 # ──────────────────────────────────────────────────────────────────────────────
-yield_feats4 <- c("recession_slope","land_Wetland_Marsh","npp","NOx")
+yield_feats4 <- c("evapotrans","temp","recession_slope","land_Wetland_Marsh","npp","NOx")
 present4   <- intersect(yield_feats4, colnames(shap_FNYield))
 global_y_min <- min(response_FNYield, na.rm = TRUE)
 global_y_max <- max(response_FNYield, na.rm = TRUE)
@@ -511,11 +507,6 @@ grid4   <- plot_grid(
 
 fig4_recent30 <- plot_grid(grid4, shared_leg4, ncol = 1, rel_heights = c(1, 0.1))
 
-ggsave(
-  "Final_Figures/Fig4_recent30_Yield_SHAP_grid_linear.png",
-  fig4_recent30, width = 12, height = 11.2, dpi = 300, bg = "white"
-)
-
 # ──────────────────────────────────────────────────────────────────────────────
 # 13) Figure S‑“Other”: remaining features
 # ──────────────────────────────────────────────────────────────────────────────
@@ -527,9 +518,12 @@ figS_conc  <- make_shap_loess_grid(
   expression("Concentration (mg " * L^-1 * ")"),
   recode_map
 )
+n <- length(other_conc)        
+rows <- 5/2
+
 ggsave(
   "Final_Figures/FigS4_recent30_Conc_SHAP_Grid.png",
-  figS_conc, width = 12, height = 15, dpi = 300, bg = "white"
+  figS_conc, width = 12, height = 6*rows, dpi = 300, bg = "white"
 )
 
 other_yield <- setdiff(colnames(shap_FNYield), yield_feats4)
@@ -540,7 +534,19 @@ figS_yield  <- make_shap_loess_grid(
   expression("Yield (kg " * km^-2 * " yr"^-1 * ")"),
   recode_map
 )
-ggsave(
-  "Final_Figures/FigS5_recent30_Yield_SHAP_Grid.png",
-  figS_yield, width = 12, height = 15, dpi = 300, bg = "white"
-)
+
+# Fig 3: 
+ggsave("Final_Figures/Fig3_recent30_Concentration_SHAP_grid.png",
+       fig3_recent30, width = 12, height = 15, dpi = 300, bg = "white")
+
+# Fig 4: 
+ggsave("Final_Figures/Fig4_recent30_Yield_SHAP_grid_linear.png",
+       fig4_recent30, width = 12, height = 15, dpi = 300, bg = "white")
+
+# Fig S4: 
+ggsave("Final_Figures/FigS4_recent30_Conc_SHAP_Grid.png",
+       figS_conc, width = 12, height = 15, dpi = 300, bg = "white")
+
+# Fig S5: 
+ggsave("Final_Figures/FigS5_recent30_Yield_SHAP_Grid.png",
+       figS_yield, width = 12, height = 15, dpi = 300, bg = "white")

@@ -37,34 +37,35 @@ hist_long <- hist_input_df %>%
                names_to = "driver", values_to = "value") %>%
   mutate(value = if_else(driver %in% c("NOx", "P"), log10(value), value))
 
-# Recode variable names to pretty labels
-# 5) Recode map
+# 5) Updated recode map
 recode_map <- setNames(
-  c("log(N)","log(P)","NPP","ET","Greenup Day","Precip","Temp","Snow Cover","Permafrost",
-    "Elevation","Basin Slope","Flashiness (RBI)","Recession Curve Slope",
-    "Bare Land Cover","Cropland","Forest","Grass & Shrubland",
-    "Ice & Snow Cover","Impervious Land","Salt Water Cover","Tidal Wetland",
-    "Open Water Cover","Wetland","Volcanic Rock","Sedimentary Rock",
-    "Carbonate-Evaporite Rock","Metamorphic Rock","Plutonic Rock"),
-  
-  c("NOx","P","npp","evapotrans","greenup_day","precip","temp",
-    "snow_cover","permafrost","elevation","basin_slope","RBI",
-    "recession_slope","land_Bare","land_Cropland","land_Forest",
-    "land_Grassland_Shrubland","land_Ice_Snow","land_Impervious",
-    "land_Salt_Water","land_Tidal_Wetland","land_Water","land_Wetland_Marsh",
-    "rocks_volcanic","rocks_sedimentary","rocks_carbonate_evaporite",
-    "rocks_metamorphic","rocks_plutonic")
+  # pretty labels
+  c(
+    "Log(N)", "Log(P)", "NPP", "ET", "Green-up day", "Precip", "Temp",
+    "Snow cover", "Permafrost", "Elevation", "Basin slope",
+    "RBI", "RCS",
+    "Bare land cover", "Cropland cover", "Forest cover", "Grass & shrub cover",
+    "Ice & snow cover", "Impervious cover", "Saltwater cover",
+    "Tidal wetland cover", "Open water cover", "Wetland cover",
+    "Volcanic rock", "Sedimentary rock", "Carbonate-evaporite rock",
+    "Metamorphic rock", "Plutonic rock"
+  ),
+  # original variable names
+  c(
+    "NOx", "P", "npp", "evapotrans", "greenup_day", "precip", "temp",
+    "snow_cover", "permafrost", "elevation", "basin_slope",
+    "RBI", "recession_slope",
+    "land_Bare", "land_Cropland", "land_Forest", "land_Grassland_Shrubland",
+    "land_Ice_Snow", "land_Impervious", "land_Salt_Water",
+    "land_Tidal_Wetland", "land_Water", "land_Wetland_Marsh",
+    "rocks_volcanic", "rocks_sedimentary", "rocks_carbonate_evaporite",
+    "rocks_metamorphic", "rocks_plutonic"
+  )
 )
 
-driver_order <- c(
-  "log(N)", "log(P)", "NPP", "ET", "Greenup Day", "Precip",
-  "Temp", "Snow Cover", "Permafrost", "Elevation", "Basin Slope", "Flashiness (RBI)",
-  "Recession Curve Slope", "Bare Land Cover", "Cropland", "Forest",
-  "Grass & Shrubland", "Ice & Snow Cover", "Impervious Land",
-  "Salt Water Cover", "Tidal Wetland", "Open Water Cover",
-  "Wetland", "Volcanic Rock","Sedimentary Rock",
-  "Carbonate-Evaporite Rock","Metamorphic Rock","Plutonic Rock"
-)
+# 6) Driver ordering for facets
+driver_order <- unname(recode_map)
+
 
 hist_long <- hist_long %>%
   mutate(
