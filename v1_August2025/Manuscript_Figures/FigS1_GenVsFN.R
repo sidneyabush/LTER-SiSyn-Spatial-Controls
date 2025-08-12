@@ -123,26 +123,27 @@ S1D <- panel_ols(
   ylab = expression("Observed (kg Si km"^-2*" yr"^-1*")")
 ) + labs(tag = "D")
 
-###### Assemble & Save Figure S1 (exact axis alignment) ######
-library(grid)
-library(gridExtra)
+###### Assemble & Save Figure S1 (Option A: responsive + strict hv align) ######
+library(cowplot)
 
-# Convert to gtables
-gA <- ggplotGrob(S1A)
-gB <- ggplotGrob(S1B)
-gC <- ggplotGrob(S1C)
-gD <- ggplotGrob(S1D)
+# override coord_equal() so panels can resize; identical margins help alignment
+m <- ggplot2::margin(6, 6, 6, 6)
+S1A_r <- S1A + coord_cartesian(expand = FALSE) + theme(plot.margin = m)
+S1B_r <- S1B + coord_cartesian(expand = FALSE) + theme(plot.margin = m)
+S1C_r <- S1C + coord_cartesian(expand = FALSE) + theme(plot.margin = m)
+S1D_r <- S1D + coord_cartesian(expand = FALSE) + theme(plot.margin = m)
 
-# Force identical column widths (left/right axes + panel) across ALL plots
-max_widths  <- do.call(grid::unit.pmax, lapply(list(gA, gB, gC, gD), function(g) g$widths))
-gA$widths <- gB$widths <- gC$widths <- gD$widths <- max_widths
+# align all four in one shot (both horizontal & vertical; lock tick baselines)
+aligned <- cowplot::align_plots(
+  S1A_r, S1B_r, S1C_r, S1D_r,
+  align = "hv", axis = "tblr"
+)
 
-# Force identical row heights (top/bottom axes + panel)
-max_heights <- do.call(grid::unit.pmax, lapply(list(gA, gB, gC, gD), function(g) g$heights))
-gA$heights <- gB$heights <- gC$heights <- gD$heights <- max_heights
-
-# Arrange 2×2 — now A↔C and B↔D y-axes line up perfectly
-FigS1_grob <- gridExtra::arrangeGrob(gA, gB, gC, gD, ncol = 2)
+FigS1 <- cowplot::plot_grid(
+  aligned[[1]], aligned[[2]],
+  aligned[[3]], aligned[[4]],
+  ncol = 2, align = "hv", axis = "tblr"
+)
 
 ggsave(file.path(od, "FigS1_GenFN_and_OLS.png"),
-       FigS1_grob, width = 9.5, height = 9, dpi = 300, bg = "white")
+       FigS1, width = 9, height = 8, dpi = 300, bg = "white")
