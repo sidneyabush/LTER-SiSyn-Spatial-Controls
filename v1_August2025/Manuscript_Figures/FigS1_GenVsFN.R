@@ -1,19 +1,23 @@
 # ############################################################
-# Gen vs FN comparison: concentrations & yields (two-panel)
-# theme_classic; top/right lines only (no ticks/labels)
-# Primary axis labels on bottom/left; figure TITLE added
+# Figure S1 — Gen vs FN (A,B) + OLS Predicted vs Observed (C,D)
+# theme_classic; top/right axis lines only (no ticks/labels)
 # R² & p-value in upper-left; regression line = #6699CC
 # ############################################################
 
 librarian::shelf(dplyr, ggplot2, readr, patchwork)
 
-record_length <- 5
-infile   <- sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.csv", record_length)
-out_png  <- "Fig_GenFN_conc_yield.png"
-out_pdf  <- "Fig_GenFN_conc_yield.pdf"
-fig_title <- "Gen vs FN: Concentrations and Yields"
+# ---- Paths (match your Fig 2 import style) ----
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
+fm <- "Final_Models"; od <- "Final_Figures"
+dir.create(od, recursive = TRUE, showWarnings = FALSE)
 
-# ---- Load ----
+# ---- Inputs for S1A/S1B (Gen vs FN) ----
+record_length <- 5
+infile <- sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.csv", record_length)
+
+# ############################################################
+# Load data for S1A/S1B
+# ############################################################
 df <- readr::read_csv(infile, show_col_types = FALSE) |>
   dplyr::select(GenConc, FNConc, GenYield, FNYield) |>
   dplyr::mutate(
@@ -23,7 +27,9 @@ df <- readr::read_csv(infile, show_col_types = FALSE) |>
     FNYield  = as.numeric(FNYield)
   )
 
-# ---- Helpers ----
+# ############################################################
+# Helpers
+# ############################################################
 p_fmt <- function(p) {
   if (is.na(p)) return("= NA")
   if (p < 1e-16) return("< 1e-16")
@@ -51,49 +57,82 @@ panel_scatter <- function(data, x, y, xlab, ylab, r2, pval) {
              x = -Inf, y = Inf,
              label = sprintf("R² = %.2f\np %s", r2, p_fmt(pval)),
              hjust = -0.1, vjust = 1.3) +
-    # Create empty secondary axes so top/right LINES draw (no ticks/labels/titles)
-    scale_x_continuous(sec.axis = dup_axis(name = NULL, breaks = NULL, labels = NULL)) +
-    scale_y_continuous(sec.axis = dup_axis(name = NULL, breaks = NULL, labels = NULL)) +
+    # Top/right lines only (no ticks/labels)
+    scale_x_continuous(sec.axis = dup_axis(breaks = NULL, labels = NULL)) +
+    scale_y_continuous(sec.axis = dup_axis(breaks = NULL, labels = NULL)) +
     theme_classic(base_size = 11) +
     theme(
-      panel.grid.minor      = element_blank(),
       axis.line             = element_line(color = "black"),  # bottom/left
       axis.line.x.top       = element_line(color = "black"),  # top line
       axis.line.y.right     = element_line(color = "black"),  # right line
-      axis.ticks.length.x.top = grid::unit(0, "pt"),
+      axis.ticks.length.x.top   = grid::unit(0, "pt"),
       axis.ticks.length.y.right = grid::unit(0, "pt")
     )
 }
 
-# ---- Stats + panels ----
+# ############################################################
+# S1A/S1B — Gen vs FN panels
+# ############################################################
 conc_stats  <- r2_p_lm(df$FNConc,  df$GenConc)
 yield_stats <- r2_p_lm(df$FNYield, df$GenYield)
 
-p_conc <- panel_scatter(
+S1A <- panel_scatter(
   df, GenConc, FNConc,
   xlab = expression("GenConc (mg Si L"^-1*")"),
   ylab = expression("FNConc (mg Si L"^-1*")"),
   r2 = conc_stats$r2, pval = conc_stats$p
-)
+) + labs(tag = "A")
 
-p_yield <- panel_scatter(
+S1B <- panel_scatter(
   df, GenYield, FNYield,
   xlab = expression("GenYield (kg Si km"^-2*" yr"^-1*")"),
   ylab = expression("FNYield (kg Si km"^-2*" yr"^-1*")"),
   r2 = yield_stats$r2, pval = yield_stats$p
-)
+) + labs(tag = "B")
 
-fig <- (p_conc + p_yield) +
-  plot_annotation(
-    title = fig_title,
-    tag_levels = "A",
-    theme = theme(
-      plot.title = element_blank()
+# ############################################################
+# S1C/S1D — OLS Predicted vs Observed (import like your Fig 2)
+# ############################################################
+pred_GenConc  <- read.csv(file.path(fm, "Predictions_GenConc.csv"))
+pred_GenYield <- read.csv(file.path(fm, "Predictions_GenYield.csv"))
+
+panel_ols <- function(df, title_txt) {
+  ok <- stats::complete.cases(df$predicted, df$observed)
+  m  <- stats::lm(observed ~ predicted, data = df[ok, ])
+  s  <- summary(m)
+  r2 <- s$r.squared
+  p  <- coef(s)[2, 4]
+  ptxt <- if (is.na(p)) "NA" else if (p < 1e-16) "< 1e-16" else formatC(p, format = "e", digits = 2)
+  
+  ggplot(df, aes(x = predicted, y = observed)) +
+    geom_point(color = "grey40", alpha = 0.5, size = 1.8) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey55") +
+    geom_smooth(method = "lm", se = FALSE, color = "#6699CC", linewidth = 1.1) +
+    coord_equal() +
+    labs(x = "Predicted", y = "Observed", title = title_txt) +
+    annotate("text", x = -Inf, y = Inf,
+             label = sprintf("R² = %.2f\np = %s", r2, ptxt),
+             hjust = -0.1, vjust = 1.3) +
+    scale_x_continuous(sec.axis = dup_axis(breaks = NULL, labels = NULL)) +
+    scale_y_continuous(sec.axis = dup_axis(breaks = NULL, labels = NULL)) +
+    theme_classic(base_size = 11) +
+    theme(
+      axis.line.x.top   = element_line(color = "black"),
+      axis.line.y.right = element_line(color = "black"),
+      axis.ticks.length.x.top   = grid::unit(0, "pt"),
+      axis.ticks.length.y.right = grid::unit(0, "pt")
     )
-  )
+}
 
-# ---- Save ----
-ggsave(out_png, fig, width = 8, height = 4, dpi = 300)
-ggsave(out_pdf, fig, width = 8, height = 4)
+S1C <- panel_ols(pred_GenConc,  "Linear regression: Concentration") + labs(tag = "C")
+S1D <- panel_ols(pred_GenYield, "Linear regression: Yield")         + labs(tag = "D")
 
-fig
+# ############################################################
+# Assemble & Save Figure S1
+# ############################################################
+FigS1 <- ((S1A + S1B) / (S1C + S1D)) + plot_annotation(tag_levels = "A")
+
+ggsave(file.path(od, "Figure_S1_GenFN_and_OLS.png"),
+       FigS1, width = 12, height = 10, dpi = 300, bg = "white")
+ggsave(file.path(od, "Figure_S1_GenFN_and_OLS.pdf"),
+       FigS1, width = 12, height = 10, bg = "white")
