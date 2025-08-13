@@ -1,5 +1,8 @@
 # ----- Fig S6: Faceted 3x2 Boxplots with shared Y-axis -----
 
+rm(list = ls())
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
+
 # 0. Load libraries
 library(ggplot2)
 library(dplyr)

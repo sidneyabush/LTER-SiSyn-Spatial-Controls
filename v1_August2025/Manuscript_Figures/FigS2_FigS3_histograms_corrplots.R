@@ -46,7 +46,7 @@ recode_map <- setNames(
     "RBI", "RCS",
     "Bare land cover", "Cropland cover", "Forest cover", "Grass & shrub cover",
     "Ice & snow cover", "Impervious cover", "Saltwater cover",
-    "Tidal wetland cover", "Open water cover", "Wetland cover",
+    "Tidal wetland cover", "Open-water cover", "Wetland cover",
     "Volcanic rock", "Sedimentary rock", "Carbonate-evaporite rock",
     "Metamorphic rock", "Plutonic rock"
   ),
