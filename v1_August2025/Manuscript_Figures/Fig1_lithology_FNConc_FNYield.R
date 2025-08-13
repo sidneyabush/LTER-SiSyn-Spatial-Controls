@@ -12,8 +12,8 @@ librarian::shelf(dplyr, stringr, ggplot2, maps, patchwork, scales, colorspace, g
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files")
 rm(list = ls())
 
-# 1a) Final site-years (recent30) — keep one row per Stream_ID for mapping metadata
-drivers_df_final_sites <- read.csv("AllDrivers_cc_recent30.csv", stringsAsFactors = FALSE) %>%
+# 1a) Final site-years 
+drivers_df_final_sites <- read.csv("AllDrivers_Harmonized_Yearly_filtered_5_years.csv", stringsAsFactors = FALSE) %>%
   dplyr::distinct(Stream_ID, .keep_all = TRUE)
 
 # 1b) Site reference table -> build Stream_ID exactly as requested, then keep lat/long
@@ -60,7 +60,8 @@ site_clusters <- drivers_df_filtered %>%
       TRUE ~ consolidated_rock
     )
   ) %>%
-  dplyr::select(Stream_ID, final_cluster)
+  dplyr::select(Stream_ID, consolidated_rock, final_cluster)  
+
 
 # Join clusters back onto the recent30 + coordinates, then convert to sf for mapping
 drivers_sf <- sf::st_as_sf(
@@ -76,9 +77,9 @@ drivers_sf <- sf::st_as_sf(
 sites_with_clusters <- drivers_sf %>%
   sf::st_drop_geometry() %>%
   dplyr::left_join(site_clusters, by = "Stream_ID") %>%
-  dplyr::filter(!is.na(final_cluster))
+  dplyr::filter(!is.na(final_cluster), !is.na(consolidated_rock))
 
-# (Optional) palette + factor levels used later in your plotting
+# colors by cluster (as you had)
 my_cluster_colors <- c(
   "Volcanic"            = "#AC7B32",
   "Sedimentary"         = "#579C8E",
@@ -87,10 +88,38 @@ my_cluster_colors <- c(
   "Metamorphic"         = "#C26F86",
   "Carbonate Evaporite" = "#5E88B0"
 )
-sites_with_clusters$final_cluster <- factor(
+
+# One legend: map both fill & shape to the same factor
+sites_with_clusters$legend_lith <- factor(
   sites_with_clusters$final_cluster,
   levels = names(my_cluster_colors)
 )
+
+# Shapes (Mixed Sedimentary uses Sedimentary’s shape)
+shape_map_legend <- c(
+  "Volcanic"            = 21,
+  "Sedimentary"         = 22,
+  "Mixed Sedimentary"   = 22,
+  "Plutonic"            = 23,
+  "Metamorphic"         = 24,
+  "Carbonate Evaporite" = 25
+)
+
+
+sites_with_clusters$final_cluster <- factor(sites_with_clusters$final_cluster,
+                                            levels = names(my_cluster_colors))
+
+# shapes by lithology
+shape_map <- c(
+  "Volcanic"            = 21,
+  "Sedimentary"         = 22,
+  "Plutonic"            = 23,
+  "Metamorphic"         = 24,
+  "Carbonate Evaporite" = 25
+)
+sites_with_clusters$consolidated_rock <- factor(sites_with_clusters$consolidated_rock,
+                                                levels = names(shape_map))
+
 
 # --------------------------------------------------
 # 3) Global Map (Panel A)
@@ -115,30 +144,66 @@ global_base <- ggplot() +
     legend.title         = element_blank()
   )
 
+# global_map <- global_base +
+#   geom_point(data = sites_with_clusters,
+#              aes(x = Longitude, y = Latitude, fill = final_cluster),
+#              shape = 21, size = 2, alpha = 0.8, stroke = 0.1, color = "gray20") +
+#   scale_fill_manual(values = my_cluster_colors,
+#                     guide = guide_legend(override.aes = list(size = 4, alpha = 1)))
+
 global_map <- global_base +
-  geom_point(data = sites_with_clusters,
-             aes(x = Longitude, y = Latitude, fill = final_cluster),
-             shape = 21, size = 2, alpha = 0.5, stroke = 0.1, color = "gray20") +
-  scale_fill_manual(values = my_cluster_colors,
-                    guide = guide_legend(override.aes = list(size = 4, alpha = 1)))
+  geom_point(
+    data = sites_with_clusters,
+    aes(x = Longitude, y = Latitude,
+        fill = legend_lith,         # same variable
+        shape = legend_lith),       # same variable
+    size = 2, alpha = 0.5, stroke = 0.1, color = "gray20"
+  ) +
+  scale_fill_manual(name = "Lithology", values = my_cluster_colors, drop = FALSE) +
+  scale_shape_manual(name = "Lithology", values = shape_map_legend, drop = FALSE) +
+  guides(
+    # because both scales share the same name and variable, ggplot merges them
+    fill = guide_legend(override.aes = list(color = "gray20", size = 4, alpha = 1, stroke = 0.1))
+  )
 
 # --------------------------------------------------
 # 4) Regional Insets
 # --------------------------------------------------
+# create_regional_map <- function(xlim, ylim, data_df) {
+#   ggplot() +
+#     geom_polygon(data = world, aes(x = long, y = lat, group = group),
+#                  fill = "lightgray", color = "white") +
+#     geom_point(data = data_df,
+#                aes(x = Longitude, y = Latitude, fill = final_cluster),
+#                shape = 21, size = 2, alpha = 0.8, stroke = 0.1, color = "gray20") +
+#     scale_fill_manual(values = my_cluster_colors, guide = "none") +
+#     coord_sf(xlim = xlim, ylim = ylim, crs = st_crs(3857), expand = FALSE) +
+#     theme_void() +
+#     theme(panel.background = element_rect(fill = "white", color = NA),
+#           plot.background  = element_rect(fill = "white", color = NA),
+#           panel.border     = element_rect(color = "black", fill = NA, size = 0.5))
+# }
+
 create_regional_map <- function(xlim, ylim, data_df) {
   ggplot() +
     geom_polygon(data = world, aes(x = long, y = lat, group = group),
                  fill = "lightgray", color = "white") +
-    geom_point(data = data_df,
-               aes(x = Longitude, y = Latitude, fill = final_cluster),
-               shape = 21, size = 2, alpha = 0.4, stroke = 0.1, color = "gray20") +
-    scale_fill_manual(values = my_cluster_colors, guide = "none") +
+    geom_point(
+      data = data_df,
+      aes(x = Longitude, y = Latitude,
+          fill = legend_lith,
+          shape = legend_lith),
+      size = 2, alpha = 0.4, stroke = 0.1, color = "gray20"
+    ) +
+    scale_fill_manual(values = my_cluster_colors, drop = FALSE, guide = "none") +
+    scale_shape_manual(values = shape_map_legend, drop = FALSE, guide = "none") +
     coord_sf(xlim = xlim, ylim = ylim, crs = st_crs(3857), expand = FALSE) +
     theme_void() +
     theme(panel.background = element_rect(fill = "white", color = NA),
           plot.background  = element_rect(fill = "white", color = NA),
           panel.border     = element_rect(color = "black", fill = NA, size = 0.5))
 }
+
 
 # Define inset extents
 uk_xlim          <- c(-10, 2);   uk_ylim <- c(49, 61)
@@ -168,38 +233,44 @@ p_map_labeled <- final_map +
         plot.tag.position = c(0.02, 0.98))
 
 # --------------------------------------------------
-# 5) Boxplots (Panels B & C) plotting average by site
+# 5) Boxplots (Panels B & C) plotting average by site (FNConc / FNYield)
 # --------------------------------------------------
 site_summary <- sites_with_clusters %>%
-  group_by(Stream_ID, final_cluster) %>%
-  summarise(
+  dplyr::group_by(Stream_ID, final_cluster) %>%
+  dplyr::summarise(
     FNConc  = mean(FNConc,  na.rm = TRUE),
     FNYield = mean(FNYield, na.rm = TRUE),
     .groups = "drop"
   )
 
-site_summary$final_cluster <- factor(site_summary$final_cluster, levels = names(my_cluster_colors))
+site_summary$final_cluster <- factor(site_summary$final_cluster,
+                                     levels = names(my_cluster_colors))
 
 p1 <- ggplot(site_summary, aes(x = FNConc, y = final_cluster)) +
   geom_boxplot(aes(fill = final_cluster), outlier.shape = NA, alpha = 0.8) +
-  geom_jitter(aes(fill = final_cluster, color = final_cluster), width = 0.1, size = 2.2, stroke = 0.1, shape = 21, alpha = 0.6) +
+  geom_jitter(aes(fill = final_cluster, color = final_cluster),
+              width = 0.1, size = 2.2, stroke = 0.1, shape = 21, alpha = 0.6) +
   scale_fill_manual(values = my_cluster_colors) +
   scale_color_manual(values = my_cluster_colors) +
   labs(x = expression("Concentration (mg L"^-1*")"), y = NULL) +
   theme_classic(base_size = 14) +
   scale_y_discrete(limits = rev(levels(site_summary$final_cluster))) +
-  theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 45, hjust = 1))
 
 p2 <- ggplot(site_summary, aes(x = FNYield, y = final_cluster)) +
   geom_boxplot(aes(fill = final_cluster), outlier.shape = NA, alpha = 0.8) +
-  geom_jitter(aes(fill = final_cluster, color = final_cluster), width = 0.1, size = 2.2, stroke = 0.1, shape = 21, alpha = 0.6) +
+  geom_jitter(aes(fill = final_cluster, color = final_cluster),
+              width = 0.1, size = 2.2, stroke = 0.1, shape = 21, alpha = 0.6) +
   scale_fill_manual(values = my_cluster_colors) +
   scale_color_manual(values = my_cluster_colors) +
   labs(x = expression("Yield (kg km"^-2*" year"^-1*")"), y = NULL) +
   theme_classic(base_size = 14) +
   scale_y_discrete(limits = rev(levels(site_summary$final_cluster))) +
   scale_x_continuous(labels = function(x) format(x, scientific = FALSE)) +
-  theme(legend.position = "none", axis.text.y = element_blank(), axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(legend.position = "none",
+        axis.text.y = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1))
 
 p1_labeled <- p1 + labs(tag = "B") + theme(plot.tag = element_text(size = 16, hjust = 0))
 p2_labeled <- p2 + labs(tag = "C") + theme(plot.tag = element_text(size = 16, hjust = 0))
