@@ -79,7 +79,7 @@ sites_with_clusters <- drivers_sf %>%
   dplyr::left_join(site_clusters, by = "Stream_ID") %>%
   dplyr::filter(!is.na(final_cluster), !is.na(consolidated_rock))
 
-# colors by cluster (as you had)
+# Colors (same as before)
 my_cluster_colors <- c(
   "Volcanic"            = "#AC7B32",
   "Sedimentary"         = "#579C8E",
@@ -89,37 +89,21 @@ my_cluster_colors <- c(
   "Carbonate Evaporite" = "#5E88B0"
 )
 
-# One legend: map both fill & shape to the same factor
-sites_with_clusters$legend_lith <- factor(
-  sites_with_clusters$final_cluster,
-  levels = names(my_cluster_colors)
-)
-
-# Shapes (Mixed Sedimentary uses Sedimentary’s shape)
-shape_map_legend <- c(
-  "Volcanic"            = 21,
-  "Sedimentary"         = 22,
-  "Mixed Sedimentary"   = 22,
-  "Plutonic"            = 23,
-  "Metamorphic"         = 24,
-  "Carbonate Evaporite" = 25
-)
-
-
-sites_with_clusters$final_cluster <- factor(sites_with_clusters$final_cluster,
-                                            levels = names(my_cluster_colors))
-
-# shapes by lithology
+# Six easy-to-see shapes (note: 8 = star; ignores fill, so we'll map colour too)
 shape_map <- c(
-  "Volcanic"            = 21,
-  "Sedimentary"         = 22,
-  "Plutonic"            = 23,
-  "Metamorphic"         = 24,
-  "Carbonate Evaporite" = 25
+  "Volcanic"            = 21,  # filled circle
+  "Sedimentary"         = 22,  # filled square
+  "Mixed Sedimentary"   = 22,   # star (distinct)
+  "Plutonic"            = 23,  # filled diamond
+  "Metamorphic"         = 24,  # filled triangle up
+  "Carbonate Evaporite" = 25   # filled triangle down
 )
-sites_with_clusters$consolidated_rock <- factor(sites_with_clusters$consolidated_rock,
-                                                levels = names(shape_map))
 
+# One factor used everywhere for aesthetics
+sites_with_clusters <- sites_with_clusters %>%
+  dplyr::mutate(
+    legend_lith = factor(final_cluster, levels = names(my_cluster_colors))
+  )
 
 # --------------------------------------------------
 # 3) Global Map (Panel A)
@@ -160,7 +144,7 @@ global_map <- global_base +
     size = 2, alpha = 0.5, stroke = 0.1, color = "gray20"
   ) +
   scale_fill_manual(name = "Lithology", values = my_cluster_colors, drop = FALSE) +
-  scale_shape_manual(name = "Lithology", values = shape_map_legend, drop = FALSE) +
+  scale_shape_manual(name = "Lithology", values = shape_map, drop = FALSE) +
   guides(
     # because both scales share the same name and variable, ggplot merges them
     fill = guide_legend(override.aes = list(color = "gray20", size = 4, alpha = 1, stroke = 0.1))
@@ -196,7 +180,7 @@ create_regional_map <- function(xlim, ylim, data_df) {
       size = 2, alpha = 0.4, stroke = 0.1, color = "gray20"
     ) +
     scale_fill_manual(values = my_cluster_colors, drop = FALSE, guide = "none") +
-    scale_shape_manual(values = shape_map_legend, drop = FALSE, guide = "none") +
+    scale_shape_manual(values = shape_map, drop = FALSE, guide = "none") +
     coord_sf(xlim = xlim, ylim = ylim, crs = st_crs(3857), expand = FALSE) +
     theme_void() +
     theme(panel.background = element_rect(fill = "white", color = NA),
@@ -236,22 +220,23 @@ p_map_labeled <- final_map +
 # 5) Boxplots (Panels B & C) plotting average by site (FNConc / FNYield)
 # --------------------------------------------------
 site_summary <- sites_with_clusters %>%
-  dplyr::group_by(Stream_ID, final_cluster) %>%
+  dplyr::group_by(Stream_ID, final_cluster, consolidated_rock) %>%  # keep lithology for shapes
   dplyr::summarise(
     FNConc  = mean(FNConc,  na.rm = TRUE),
     FNYield = mean(FNYield, na.rm = TRUE),
     .groups = "drop"
   )
 
-site_summary$final_cluster <- factor(site_summary$final_cluster,
-                                     levels = names(my_cluster_colors))
+site_summary$final_cluster     <- factor(site_summary$final_cluster,     levels = names(my_cluster_colors))
+site_summary$consolidated_rock <- factor(site_summary$consolidated_rock, levels = names(shape_map))
 
 p1 <- ggplot(site_summary, aes(x = FNConc, y = final_cluster)) +
   geom_boxplot(aes(fill = final_cluster), outlier.shape = NA, alpha = 0.8) +
-  geom_jitter(aes(fill = final_cluster, color = final_cluster),
-              width = 0.1, size = 2.2, stroke = 0.1, shape = 21, alpha = 0.6) +
+  geom_jitter(aes(fill = final_cluster, color = final_cluster, shape = consolidated_rock),  # <-- map shape
+              width = 0.1, size = 2.2, stroke = 0.1, alpha = 0.6) +
   scale_fill_manual(values = my_cluster_colors) +
   scale_color_manual(values = my_cluster_colors) +
+  scale_shape_manual(values = shape_map, drop = FALSE) +  # <-- add shape scale
   labs(x = expression("Concentration (mg L"^-1*")"), y = NULL) +
   theme_classic(base_size = 14) +
   scale_y_discrete(limits = rev(levels(site_summary$final_cluster))) +
@@ -260,10 +245,11 @@ p1 <- ggplot(site_summary, aes(x = FNConc, y = final_cluster)) +
 
 p2 <- ggplot(site_summary, aes(x = FNYield, y = final_cluster)) +
   geom_boxplot(aes(fill = final_cluster), outlier.shape = NA, alpha = 0.8) +
-  geom_jitter(aes(fill = final_cluster, color = final_cluster),
-              width = 0.1, size = 2.2, stroke = 0.1, shape = 21, alpha = 0.6) +
+  geom_jitter(aes(fill = final_cluster, color = final_cluster, shape = consolidated_rock),  # <-- map shape
+              width = 0.1, size = 2.2, stroke = 0.1, alpha = 0.6) +
   scale_fill_manual(values = my_cluster_colors) +
   scale_color_manual(values = my_cluster_colors) +
+  scale_shape_manual(values = shape_map, drop = FALSE) +  # <-- add shape scale
   labs(x = expression("Yield (kg km"^-2*" year"^-1*")"), y = NULL) +
   theme_classic(base_size = 14) +
   scale_y_discrete(limits = rev(levels(site_summary$final_cluster))) +
