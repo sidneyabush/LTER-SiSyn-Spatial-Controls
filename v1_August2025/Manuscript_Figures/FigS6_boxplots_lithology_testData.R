@@ -63,7 +63,7 @@ recode_map <- setNames(
     "Snow cover", "Permafrost probability", "Elevation", "Basin slope", "RBI", "RCS",
     "Bare land cover", "Cropland cover", "Forest cover", "Grass & shrub cover",
     "Ice & snow cover", "Impervious cover", "Saltwater cover", "Tidal wetland cover",
-    "Open water cover", "Wetland cover", "Volcanic rock", "Sedimentary rock",
+    "Open-water cover", "Wetland cover", "Volcanic rock", "Sedimentary rock",
     "Carbonate-evaporite rock", "Metamorphic rock", "Plutonic rock"
   ),
   c(

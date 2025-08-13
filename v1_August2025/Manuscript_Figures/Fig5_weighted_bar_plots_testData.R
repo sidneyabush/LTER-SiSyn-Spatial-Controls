@@ -71,11 +71,11 @@ drivers_FNYield_scaled <- recent30 %>%
 
 # 7. Pretty feature recoding (exclude rock predictors intentionally here)
 recode_map <- setNames(
-  c("Log(N)","Log(P)","NPP","ET","Green-up day","Precip","Temp","Snow cover","Permafrost",
+  c("Log(N)","Log(P)","NPP","ET","Green-up day","Precip","Temp","Snow cover","Permafrost probability",
     "Elevation","Basin slope","RBI","RCS",
     "Bare land cover","Cropland cover","Forest cover","Grass & shrub cover",
     "Ice & snow cover","Impervious cover","Saltwater cover","Tidal wetland cover",
-    "Open water cover","Wetland cover","Volcanic rock","Sedimentary rock",
+    "Open-water cover","Wetland cover","Volcanic rock","Sedimentary rock",
     "Carbonate-evaporite rock","Metamorphic rock","Plutonic rock"),
   
   c("NOx","P","npp","evapotrans","greenup_day","precip","temp",
