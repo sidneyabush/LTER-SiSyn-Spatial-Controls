@@ -687,7 +687,7 @@ cat(sprintf("[Outliers | FNYield] mean=%.3f sd=%.3f lo=%.3f hi=%.3f | dropped=%d
 cat(sprintf("[Outliers | TOTAL] dropped=%d (%.2f%% of %d) | remain=%d\n",
             n0 - n2, 100*(n0 - n2)/n0, n0, n2))
 
-## (Optional) sites lost by outliers alone (before ≥5-year rule)
+# Sites lost by outliers alone (before ≥5-year rule)
 sites_pre  <- dplyr::n_distinct(drivers_pre_outlier$Stream_ID)
 sites_post <- dplyr::n_distinct(drivers_after_outliers$Stream_ID)
 cat(sprintf("[Outliers | SITES] pre=%d | post=%d | lost_by_outliers=%d\n",
@@ -1036,6 +1036,28 @@ summary_FN_FY <- bind_rows(
 
 print(summary_FN_FY)
 
-# Optional: write out
 write.csv(summary_FN_FY, "Summary_FNConc_FNYield_by_subset.csv", row.names = FALSE)
+
+# --- Sites per lithology (final_cluster) ---
+rock_counts_sites <- drivers_df %>%
+  distinct(Stream_ID) %>%
+  left_join(site_clusters, by = "Stream_ID") %>%
+  count(final_cluster, name = "n_sites") %>%
+  mutate(pct_sites = round(100 * n_sites / sum(n_sites), 1)) %>%
+  arrange(desc(n_sites))
+
+print(rock_counts_sites)
+
+# --- Site-years per lithology ---
+rock_counts_siteyears <- drivers_df %>%
+  left_join(site_clusters, by = "Stream_ID") %>%
+  count(final_cluster, name = "n_siteyears") %>%
+  mutate(pct_siteyears = round(100 * n_siteyears / sum(n_siteyears), 1)) %>%
+  arrange(desc(n_siteyears))
+
+print(rock_counts_siteyears)
+
+write.csv(rock_counts_sites,      "Counts_sites_by_lithology.csv", row.names = FALSE)
+write.csv(rock_counts_siteyears,  "Counts_siteyears_by_lithology.csv", row.names = FALSE)
+
 

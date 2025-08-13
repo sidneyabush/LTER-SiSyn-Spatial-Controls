@@ -1,11 +1,11 @@
-# =============================================================================
+# #############################################################################
 # Prepare histogram input from split subsets
-# =============================================================================
+# #############################################################################
 rm(list = ls())
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files")
 
 # Load libraries
-librarian::shelf(dplyr, readr, tidyr, stringr, ggplot2)
+librarian::shelf(dplyr, readr, tidyr, stringr, ggplot2, corrplot)
 
 theme_set(
   theme_bw(base_size = 20) +
@@ -103,11 +103,9 @@ ggsave(
   dpi      = 300
 )
 
-# =============================================================================
-# Save correlation plots for each subset (using driver order & recode map)
-# =============================================================================
-
-library(corrplot)
+# #############################################################################
+# Save correlation plots for each subset 
+# #############################################################################
 
 # Define variable subset to match the histogram drivers
 drivers_to_use <- names(recode_map)
@@ -153,7 +151,7 @@ save_subset_corrplot <- function(df, label) {
 }
 
 
-# Call for each subset
+# Save each subset
 # save_subset_corrplot(older70,     "Training")
 save_subset_corrplot(recent30,    "Testing")
 # save_subset_corrplot(unseen10_df, "Cross_Validation")

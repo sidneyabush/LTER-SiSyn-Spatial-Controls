@@ -1,8 +1,7 @@
-# =============================================================================
-# SHAP × LOESS Grids – recent30 Only – Figures 3, 4, and S‑“Other”
-# =============================================================================
+# #############################################################################
+# SHAP × LOESS Grids – recent30 Only – Figures 3, 4, and remaining in SI
+# #############################################################################
 
-# 0) Clear & set WD
 rm(list = ls())
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
@@ -18,9 +17,9 @@ recent30_df <- read_csv(
 )
 
 # 3) Load recent30 SHAP values
-load("Final_Models/FNConc_Yearly_shap_values_recent30.RData")    # shap_values_FNConc
+load("Final_Models/FNConc_Yearly_shap_values_recent30.RData")    
 shap_FNConc  <- shap_values_FNConc
-load("Final_Models/FNYield_Yearly_shap_values_recent30.RData")  # shap_values_FNYield
+load("Final_Models/FNYield_Yearly_shap_values_recent30.RData")  
 shap_FNYield <- shap_values_FNYield
 
 # 4) Extract responses & matching predictors
@@ -47,7 +46,7 @@ recode_map <- setNames(
     "rocks_metamorphic","rocks_plutonic")
 )
 
-# helper to build one panel safely
+# helper to build one panel 
 build_one_panel <- function(feat, shap_matrix, drivers_data, response, lims, recode_map) {
   df <- tibble(
     driver_value = drivers_data[[feat]],
@@ -102,13 +101,10 @@ build_one_panel <- function(feat, shap_matrix, drivers_data, response, lims, rec
       labels = trans_format("log10", math_format(10^.x))
     )
   }
-  # if (feat == "land_Wetland_Marsh") {
-  #   p <- p + coord_cartesian(xlim = c(0, 35), expand = FALSE)
-  # }
   p
 }
 
-# 6) “Other”‐features grid function (revised to use safe panel builder)
+# 6) SI features grid function 
 make_shap_loess_grid <- function(shap_matrix, drivers_data, response,
                                  units_expr, recode_map,
                                  verbose = FALSE) {
@@ -207,7 +203,6 @@ make_shap_loess_grid <- function(shap_matrix, drivers_data, response,
     p
   })
   
-  
   # 5. Shared legend based on trimmed response range
   legend_plot <- ggplot(
     tibble(x = 1, y = 1, response = combined_trimmed$response),
@@ -240,9 +235,9 @@ make_shap_loess_grid <- function(shap_matrix, drivers_data, response,
   plot_grid(grid, shared_leg, ncol = 1, rel_heights = c(1, 0.1))
 }
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 11) Fig 3: Concentration SHAP–LOESS grid (6 panels)
-# ──────────────────────────────────────────────────────────────────────────────
+# #############################################################################
+# 11) Fig3: Concentration SHAP–LOESS grid (6 panels)
+# #############################################################################
 conc_feats3 <- c(
   "basin_slope", "recession_slope", "land_Water",
   "land_Grassland_Shrubland", "precip", "P"
@@ -319,7 +314,6 @@ build_panel3 <- function(feat, idx) {
   p
 }
 
-
 # build shared legend for Fig 3 from the union of all trimmed panels
 all_trimmed3 <- purrr::map_dfr(present3, function(feat) {
   df <- tibble(
@@ -378,9 +372,9 @@ grid3   <- plot_grid(
 fig3_recent30 <- plot_grid(grid3, shared_leg3, ncol = 1, rel_heights = c(1, 0.1))
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 12) Fig 4: Yield SHAP–LOESS grid (4 panels, linear fill scale)
-# ──────────────────────────────────────────────────────────────────────────────
+# #############################################################################
+# 12) Fig4: Yield SHAP–LOESS grid 
+# #############################################################################
 yield_feats4 <- c("evapotrans","temp","recession_slope","land_Wetland_Marsh","npp","NOx")
 present4   <- intersect(yield_feats4, colnames(shap_FNYield))
 global_y_min <- min(response_FNYield, na.rm = TRUE)
@@ -507,9 +501,9 @@ grid4   <- plot_grid(
 
 fig4_recent30 <- plot_grid(grid4, shared_leg4, ncol = 1, rel_heights = c(1, 0.1))
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 13) Figure S‑“Other”: remaining features
-# ──────────────────────────────────────────────────────────────────────────────
+# #############################################################################
+# 13) SI Figs: remaining features
+# #############################################################################
 other_conc <- setdiff(colnames(shap_FNConc), conc_feats3)
 figS_conc  <- make_shap_loess_grid(
   shap_FNConc[, other_conc],
