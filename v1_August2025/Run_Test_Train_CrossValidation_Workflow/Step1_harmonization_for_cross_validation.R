@@ -26,7 +26,7 @@ wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv", stringsAsF
   rename(LTER = LTER.x) %>%
   filter(chemical == "DSi", !if_any(where(is.numeric), ~ . %in% c(Inf, -Inf))) %>%
   dplyr::select(-Conc, -Flux, -PeriodLong, -PeriodStart, -LTER.y,
-         -contains("date"), -contains("month"), -min_year, -max_year, -duration) %>%
+                -contains("date"), -contains("month"), -min_year, -max_year, -duration) %>%
   mutate(
     Stream_Name = case_when(
       Stream_Name == "East Fork"              ~ "east fork",
@@ -208,7 +208,7 @@ tot <- left_join(tot, KG, by="Stream_ID") %>%
   rename_with(~str_remove(., "\\.y$"))
 
 # =============================================================================
-# 5) Spatial Drivers + Basin Slope Gap‑Fill
+# 5) Spatial Drivers + Basin Slope Gap-Fill
 # =============================================================================
 
 # a) read & tidy raw spatial‐drivers sheet
@@ -229,13 +229,13 @@ si_drivers <- read.csv("all-data_si-extract_2_20250325.csv",
 # clean up Stream_ID text
 si_drivers <- standardize_stream_id(si_drivers)
 
-# b) convert any greenup_ dates → day‑of‑year
+# b) convert any greenup_ dates → day-of-year
 gcols <- grep("greenup_", names(si_drivers), value = TRUE)
 si_drivers[gcols] <- lapply(si_drivers[gcols], function(x) {
   as.numeric(format(as.Date(x, "%Y-%m-%d"), "%j"))
 })
 
-# c) zero‑fill all permafrost & prop_area
+# c) zero-fill all permafrost & prop_area
 pcols <- grep("permafrost|prop_area", names(si_drivers), value = TRUE)
 si_drivers[pcols] <- lapply(si_drivers[pcols], function(x) {
   x <- as.numeric(x); x[is.na(x)] <- 0; x
@@ -312,7 +312,7 @@ tot <- tot %>%
             as.numeric) %>%
   replace_na(list(permafrost_mean_m = 0, prop_area = 0))
 
-# i) Gap‑fill basin_slope_mean_degree from US & Krycklan sources
+# i) Gap-fill basin_slope_mean_degree from US & Krycklan sources
 # (a) Ensure tot has the slope column
 if (!"basin_slope_mean_degree" %in% names(tot)) {
   tot$basin_slope_mean_degree <- NA_real_
@@ -378,7 +378,7 @@ tot <- tot[!is.na(major_rock) &
              major_rock != "0"]
 
 # =============================================================================
-# 9) Land Cover + N/P gap‑fill
+# 9) Land Cover + N/P gap-fill
 # =============================================================================
 # — First, land cover as before:
 # (remove any existing land_*, major_land columns)
@@ -425,7 +425,7 @@ tot <- tot %>% left_join(lulc_wide, by = c("Stream_Name","Year")) %>%
   mutate(across(where(is.list), ~ sapply(., paste, collapse = ",")))
 
 
-# — Now the unified N/P gap‑fill:
+# — Now the unified N/P gap-fill:
 
 # 1) Read & bind WRTDS (filtered) + CJ NP
 wrtds_NP <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv",
@@ -570,7 +570,67 @@ num_unique_stream_ids <- drivers_df %>%
 
 print(num_unique_stream_ids)
 
+# =============================================================================
+# FINAL-CONTEXT DIAGNOSTICS (percent of ALL obs removed by ±50% rule,
+# and how many FINAL true sites removed by that rule)
+# =============================================================================
+stopifnot(exists("tot_annual"))
+
+# helper: apply outlier screens WITHOUT the 50% rule
+apply_outliers_only <- function(df, sd_val = 5) {
+  FN_m <- mean(df$FNConc, na.rm=TRUE); FN_sd <- sd(df$FNConc, na.rm=TRUE)
+  df <- df %>% dplyr::filter(dplyr::between(FNConc, FN_m - sd_val*FN_sd, FN_m + sd_val*FN_sd))
+  FY_m <- mean(df$FNYield, na.rm=TRUE); FY_sd <- sd(df$FNYield, na.rm=TRUE)
+  df %>% dplyr::filter(dplyr::between(FNYield, FY_m - sd_val*FY_sd, FY_m + sd_val*FY_sd))
+}
+
+# build denominator AFTER outliers ONLY, BEFORE the ±50% rule
+pre50_base <- tot_annual %>%
+  dplyr::distinct(Stream_ID, Year, .keep_all = TRUE) %>%
+  dplyr::mutate(across(where(is.character), ~ na_if(., ""))) %>%
+  dplyr::select(FNConc, everything()) %>%
+  dplyr::mutate_at(vars(24:38), ~ replace(., is.na(.), 0)) %>%
+  dplyr::filter(complete.cases(.)) %>%
+  dplyr::mutate(FNConc = as.numeric(FNConc),
+                GenConc = as.numeric(GenConc),
+                FNYield = as.numeric(FNYield)) %>%
+  dplyr::filter(is.finite(FNConc), is.finite(GenConc), is.finite(FNYield),
+                FNConc > 0, GenConc > 0) %>%
+  apply_outliers_only()
+
+# 1) Percent of ALL observations removed by ±50% rule (final context = after OUTLIERS only)
+total_obs_final_context <- nrow(pre50_base)
+fail_mask_50 <- !(pre50_base$FNConc >= 0.5*pre50_base$GenConc &
+                    pre50_base$FNConc <= 1.5*pre50_base$GenConc)
+removed_obs_final_context <- sum(fail_mask_50)
+pct_removed_50_final_context <- 100 * removed_obs_final_context / total_obs_final_context
+
+cat(sprintf("[50%% rule | ALL obs AFTER OUTLIERS ONLY] total=%d | removed=%d | pct_removed=%.1f%%\n",
+            total_obs_final_context, removed_obs_final_context, pct_removed_50_final_context))
+
+# 2) Number of FINAL true sites removed by the ±50% rule
+final_sites_no50 <- pre50_base %>%
+  dplyr::group_by(Stream_ID) %>%
+  dplyr::filter(dplyr::n_distinct(Year) >= 5) %>%
+  dplyr::ungroup()
+
+final_sites_with50 <- pre50_base %>%
+  dplyr::filter(FNConc >= 0.5*GenConc, FNConc <= 1.5*GenConc) %>%
+  dplyr::group_by(Stream_ID) %>%
+  dplyr::filter(dplyr::n_distinct(Year) >= 5) %>%
+  dplyr::ungroup()
+
+sites_removed_by_50 <- setdiff(unique(final_sites_no50$Stream_ID),
+                               unique(final_sites_with50$Stream_ID))
+
+cat(sprintf("[50%% rule | FINAL true sites] without_50=%d | with_50=%d | removed_by_50=%d\n",
+            dplyr::n_distinct(final_sites_no50$Stream_ID),
+            dplyr::n_distinct(final_sites_with50$Stream_ID),
+            length(sites_removed_by_50)))
+
+# =============================================================================
 # ---- Remove Outliers for FNConc (5 SD Rule) ----
+# =============================================================================
 FNConc_mean <- mean(drivers_df$FNConc, na.rm = TRUE)
 SD_val <- 5
 FNConc_sd <- sd(drivers_df$FNConc, na.rm = TRUE)
@@ -626,6 +686,31 @@ unique_stream_id_count <- drivers_df %>%
   pull(unique_count)
 
 print(unique_stream_id_count)
+
+# =============================================================================
+# N & P substitutions in the FINAL dataset (after ±50% + outliers + ≥5 yrs)
+# =============================================================================
+stopifnot(exists("combined_NP"))
+
+final_flags <- drivers_df %>%
+  dplyr::select(Stream_ID, Year) %>%
+  dplyr::left_join(
+    combined_NP %>% dplyr::select(Stream_ID, Year, P_source, NOx_source),
+    by = c("Stream_ID", "Year")
+  )
+
+n_final_obs  <- nrow(final_flags)
+NOx_sub_n    <- sum(final_flags$NOx_source == "raw", na.rm = TRUE)
+P_sub_n      <- sum(final_flags$P_source   == "raw", na.rm = TRUE)
+BOTH_sub_n   <- sum(final_flags$NOx_source == "raw" & final_flags$P_source == "raw", na.rm = TRUE)
+EITHER_sub_n <- sum(final_flags$NOx_source == "raw" | final_flags$P_source == "raw", na.rm = TRUE)
+
+cat(sprintf("[FINAL subs | site-years=%d] NOx=%d (%.1f%%) | P=%d (%.1f%%) | BOTH=%d (%.1f%%) | EITHER=%d (%.1f%%)\n",
+            n_final_obs,
+            NOx_sub_n, 100*NOx_sub_n/n_final_obs,
+            P_sub_n,   100*P_sub_n/n_final_obs,
+            BOTH_sub_n,100*BOTH_sub_n/n_final_obs,
+            EITHER_sub_n,100*EITHER_sub_n/n_final_obs))
 
 # write out tot_si
 write.csv(
