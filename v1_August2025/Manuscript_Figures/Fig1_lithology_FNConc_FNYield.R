@@ -89,14 +89,13 @@ my_cluster_colors <- c(
   "Carbonate Evaporite" = "#5E88B0"
 )
 
-# Six easy-to-see shapes (note: 8 = star; ignores fill, so we'll map colour too)
 shape_map <- c(
-  "Volcanic"            = 21,  # filled circle
-  "Sedimentary"         = 22,  # filled square
-  "Mixed Sedimentary"   = 22,   # star (distinct)
-  "Plutonic"            = 23,  # filled diamond
-  "Metamorphic"         = 24,  # filled triangle up
-  "Carbonate Evaporite" = 25   # filled triangle down
+  "Volcanic"            = 22,  
+  "Sedimentary"         = 21,  
+  "Mixed Sedimentary"   = 21,   
+  "Plutonic"            = 23,  
+  "Metamorphic"         = 24,  
+  "Carbonate Evaporite" = 25   
 )
 
 # One factor used everywhere for aesthetics
@@ -131,7 +130,7 @@ global_base <- ggplot() +
 # global_map <- global_base +
 #   geom_point(data = sites_with_clusters,
 #              aes(x = Longitude, y = Latitude, fill = final_cluster),
-#              shape = 21, size = 2, alpha = 0.8, stroke = 0.1, color = "gray20") +
+#              shape = 21, size = 2, alpha = 0.7, stroke = 0.1, color = "gray20") +
 #   scale_fill_manual(values = my_cluster_colors,
 #                     guide = guide_legend(override.aes = list(size = 4, alpha = 1)))
 
@@ -141,7 +140,7 @@ global_map <- global_base +
     aes(x = Longitude, y = Latitude,
         fill = legend_lith,         # same variable
         shape = legend_lith),       # same variable
-    size = 2, alpha = 0.5, stroke = 0.1, color = "gray20"
+    size = 2, alpha = 0.7, stroke = 0.1, color = "gray20"
   ) +
   scale_fill_manual(name = "Lithology", values = my_cluster_colors, drop = FALSE) +
   scale_shape_manual(name = "Lithology", values = shape_map, drop = FALSE) +
@@ -159,7 +158,7 @@ global_map <- global_base +
 #                  fill = "lightgray", color = "white") +
 #     geom_point(data = data_df,
 #                aes(x = Longitude, y = Latitude, fill = final_cluster),
-#                shape = 21, size = 2, alpha = 0.8, stroke = 0.1, color = "gray20") +
+#                shape = 21, size = 2, alpha = 0.7, stroke = 0.1, color = "gray20") +
 #     scale_fill_manual(values = my_cluster_colors, guide = "none") +
 #     coord_sf(xlim = xlim, ylim = ylim, crs = st_crs(3857), expand = FALSE) +
 #     theme_void() +
@@ -177,7 +176,7 @@ create_regional_map <- function(xlim, ylim, data_df) {
       aes(x = Longitude, y = Latitude,
           fill = legend_lith,
           shape = legend_lith),
-      size = 2, alpha = 0.4, stroke = 0.1, color = "gray20"
+      size = 2, alpha = 0.7, stroke = 0.1, color = "gray20"
     ) +
     scale_fill_manual(values = my_cluster_colors, drop = FALSE, guide = "none") +
     scale_shape_manual(values = shape_map, drop = FALSE, guide = "none") +
@@ -231,7 +230,7 @@ site_summary$final_cluster     <- factor(site_summary$final_cluster,     levels 
 site_summary$consolidated_rock <- factor(site_summary$consolidated_rock, levels = names(shape_map))
 
 p1 <- ggplot(site_summary, aes(x = FNConc, y = final_cluster)) +
-  geom_boxplot(aes(fill = final_cluster), outlier.shape = NA, alpha = 0.8) +
+  geom_boxplot(aes(fill = final_cluster), outlier.shape = NA, alpha = 0.7) +
   geom_jitter(aes(fill = final_cluster, color = final_cluster, shape = consolidated_rock),  # <-- map shape
               width = 0.1, size = 2.2, stroke = 0.1, alpha = 0.6) +
   scale_fill_manual(values = my_cluster_colors) +
@@ -244,7 +243,7 @@ p1 <- ggplot(site_summary, aes(x = FNConc, y = final_cluster)) +
         axis.text.x = element_text(angle = 45, hjust = 1))
 
 p2 <- ggplot(site_summary, aes(x = FNYield, y = final_cluster)) +
-  geom_boxplot(aes(fill = final_cluster), outlier.shape = NA, alpha = 0.8) +
+  geom_boxplot(aes(fill = final_cluster), outlier.shape = NA, alpha = 0.7) +
   geom_jitter(aes(fill = final_cluster, color = final_cluster, shape = consolidated_rock),  # <-- map shape
               width = 0.1, size = 2.2, stroke = 0.1, alpha = 0.6) +
   scale_fill_manual(values = my_cluster_colors) +
