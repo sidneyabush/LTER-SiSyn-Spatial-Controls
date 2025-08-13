@@ -628,9 +628,58 @@ cat(sprintf("[50%% rule | FINAL true sites] without_50=%d | with_50=%d | removed
             dplyr::n_distinct(final_sites_with50$Stream_ID),
             length(sites_removed_by_50)))
 
-# =============================================================================
+# --- DIAGNOSTIC: How many observations are dropped by the outlier removal step? ---
+# Context: drivers_df has already passed the ±50% FNConc:GenConc rule and complete.cases()
+
+stopifnot(exists("drivers_df"), exists("SD_val"))
+
+drivers_pre_outlier <- drivers_df           # snapshot before outlier screens
+n0 <- nrow(drivers_pre_outlier)
+
+## Step 1: FNConc outlier screen (± SD_val * SD), thresholds computed on pre-outlier pool
+FNConc_mean0 <- mean(drivers_pre_outlier$FNConc, na.rm = TRUE)
+FNConc_sd0   <- sd(  drivers_pre_outlier$FNConc, na.rm = TRUE)
+FNConc_lower <- FNConc_mean0 - SD_val * FNConc_sd0
+FNConc_upper <- FNConc_mean0 + SD_val * FNConc_sd0
+
+fn_out_mask <- !(drivers_pre_outlier$FNConc >= FNConc_lower &
+                   drivers_pre_outlier$FNConc <= FNConc_upper)
+drop_FN <- sum(fn_out_mask, na.rm = TRUE)
+
+drivers_after_FN <- drivers_pre_outlier[!fn_out_mask, , drop = FALSE]
+n1 <- nrow(drivers_after_FN)
+
+## Step 2: FNYield outlier screen (± SD_val * SD), thresholds computed AFTER FNConc removal
+FNYield_mean1 <- mean(drivers_after_FN$FNYield, na.rm = TRUE)
+FNYield_sd1   <- sd(  drivers_after_FN$FNYield, na.rm = TRUE)
+FNYield_lower <- FNYield_mean1 - SD_val * FNYield_sd1
+FNYield_upper <- FNYield_mean1 + SD_val * FNYield_sd1
+
+fy_out_mask <- !(drivers_after_FN$FNYield >= FNYield_lower &
+                   drivers_after_FN$FNYield <= FNYield_upper)
+drop_FY <- sum(fy_out_mask, na.rm = TRUE)
+
+drivers_after_outliers <- drivers_after_FN[!fy_out_mask, , drop = FALSE]
+n2 <- nrow(drivers_after_outliers)
+
+## Prints
+cat(sprintf("[Outliers | FNConc] dropped=%d (%.2f%% of pre-outlier %d) | kept=%d\n",
+            drop_FN, 100*drop_FN/n0, n0, n1))
+cat(sprintf("[Outliers | FNYield] dropped=%d (%.2f%% of post-FNConc %d) | kept=%d\n",
+            drop_FY, 100*drop_FY/n1, n1, n2))
+cat(sprintf("[Outliers | TOTAL] dropped=%d (%.2f%% of pre-outlier %d) | remain=%d\n",
+            n0 - n2, 100*(n0 - n2)/n0, n0, n2))
+
+## (Optional) also show how many *sites* would be lost by outliers alone (before ≥5-year rule)
+sites_pre  <- dplyr::n_distinct(drivers_pre_outlier$Stream_ID)
+sites_post <- dplyr::n_distinct(drivers_after_outliers$Stream_ID)
+cat(sprintf("[Outliers | SITES] pre=%d | post=%d | lost_by_outliers=%d\n",
+            sites_pre, sites_post, sites_pre - sites_post))
+
+
+# #############################################################################
 # ---- Remove Outliers for FNConc (5 SD Rule) ----
-# =============================================================================
+# #############################################################################
 FNConc_mean <- mean(drivers_df$FNConc, na.rm = TRUE)
 SD_val <- 5
 FNConc_sd <- sd(drivers_df$FNConc, na.rm = TRUE)
@@ -687,9 +736,9 @@ unique_stream_id_count <- drivers_df %>%
 
 print(unique_stream_id_count)
 
-# =============================================================================
+# #############################################################################
 # N & P substitutions in the FINAL dataset (after ±50% + outliers + ≥5 yrs)
-# =============================================================================
+# #############################################################################
 stopifnot(exists("combined_NP"))
 
 final_flags <- drivers_df %>%
@@ -719,9 +768,9 @@ write.csv(
   row.names = FALSE
 )
 
-# =============================================================================
+# #############################################################################
 # 11) Stratified Split by final_cluster
-# =============================================================================
+# #############################################################################
 site_clusters <- drivers_df %>%
   distinct(Stream_ID,major_rock,rocks_volcanic,rocks_sedimentary,
            rocks_carbonate_evaporite,rocks_metamorphic,rocks_plutonic) %>%
@@ -773,9 +822,9 @@ write.csv(unseen10_df,"AllDrivers_cc_unseen10.csv",row.names=FALSE)
 write.csv(older70,     "AllDrivers_cc_older70.csv", row.names=FALSE)
 write.csv(recent30,    "AllDrivers_cc_recent30.csv",row.names=FALSE)
 
-# =============================================================================
-# 11) Compute 70/30 split–specific RBI & recession slope (inline)
-# =============================================================================
+# #############################################################################
+# 11) Compute 70/30 split–specific RBI & recession slope
+# #############################################################################
 # Create a Year column: 
 daily_kalman <- daily_kalman %>%
   mutate(Year = year(Date))
@@ -867,9 +916,9 @@ recent30 <- recent30 %>%
   left_join(rbi_recent30, by = "Stream_ID") %>%
   left_join(rec_recent30, by = "Stream_ID")
 
-# =============================================================================
+# #############################################################################
 # 12) Recalculate median NOx & P per 70/30 training/testing split
-# =============================================================================
+# #############################################################################
 recalc_medians <- function(df) {
   df %>%
     group_by(Stream_ID) %>%
@@ -885,9 +934,9 @@ med_unseen10 <- recalc_medians(unseen10_df)
 med_older70  <- recalc_medians(older70)
 med_recent30 <- recalc_medians(recent30)
 
-# =============================================================================
+# #############################################################################
 # Quick sanity checks
-# =============================================================================
+# #############################################################################
 
 # 1. Collapse discharge metrics to one row per site for each split
 rbi_older_summary <- older70 %>%

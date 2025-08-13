@@ -42,7 +42,7 @@ recode_map <- setNames(
   # pretty labels
   c(
     "Log(N)", "Log(P)", "NPP", "ET", "Green-up day", "Precip", "Temp",
-    "Snow cover", "Permafrost", "Elevation", "Basin slope",
+    "Snow cover", "Permafrost probability", "Elevation", "Basin slope",
     "RBI", "RCS",
     "Bare land cover", "Cropland cover", "Forest cover", "Grass & shrub cover",
     "Ice & snow cover", "Impervious cover", "Saltwater cover",

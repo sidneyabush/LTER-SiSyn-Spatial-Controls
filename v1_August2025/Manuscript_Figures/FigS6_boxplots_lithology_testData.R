@@ -57,7 +57,7 @@ df <- recent30 %>%
 recode_map <- setNames(
   c(
     "Log(N)", "Log(P)", "NPP", "ET", "Green-up day", "Precip", "Temp",
-    "Snow cover", "Permafrost", "Elevation", "Basin slope", "RBI", "RCS",
+    "Snow cover", "Permafrost probability", "Elevation", "Basin slope", "RBI", "RCS",
     "Bare land cover", "Cropland cover", "Forest cover", "Grass & shrub cover",
     "Ice & snow cover", "Impervious cover", "Saltwater cover", "Tidal wetland cover",
     "Open water cover", "Wetland cover", "Volcanic rock", "Sedimentary rock",
@@ -101,7 +101,7 @@ df_long <- df %>%
 # 5. Precompute shading spans
 span       <- function(lbl) which(feature_labels == lbl)
 prod_range <- c(span("Log(N)") - .5, span("Green-up day") + .5)
-clim_range <- c(span("Precip") - .5, span("Permafrost") + .5)
+clim_range <- c(span("Precip") - .5, span("Permafrost probability") + .5)
 topo_range <- c(span("Elevation") - .5, span("Basin slope") + .5)
 disc_range <- c(span("RBI") - .5, span("RCS") + .5)
 lulc_range <- c(span("Bare land cover") - .5, span("Wetland cover") + .5)
