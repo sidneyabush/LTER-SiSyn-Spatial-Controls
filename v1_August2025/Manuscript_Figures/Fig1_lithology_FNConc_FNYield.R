@@ -1,56 +1,84 @@
-library(dplyr)
-library(stringr)
-library(ggplot2)
-library(maps)
-library(patchwork)
-library(scales)
-library(colorspace)
-library(ggrepel)
-library(ggspatial)
-library(sf)
-library(ggpubr)
-library(cowplot)
+# #########################################################
+# Create final map plot using the testing data only
+# #########################################################
+
+librarian::shelf(dplyr, stringr, ggplot2, maps, patchwork, scales, colorspace, ggrepel, 
+                 ggspatial, sf, ggpubr, cowplot)
+
 
 # --------------------------------------------------
-# 1) Data Preparation
+# 1) Data Preparation  
 # --------------------------------------------------
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files")
 rm(list = ls())
 
-record_length <- 5
+# 1a) Final site-years (recent30) — keep one row per Stream_ID for mapping metadata
+drivers_df_final_sites <- read.csv("AllDrivers_cc_recent30.csv", stringsAsFactors = FALSE) %>%
+  dplyr::distinct(Stream_ID, .keep_all = TRUE)
 
-drivers_df_uncleaned <- read.csv(
-  sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.csv", record_length)
-) %>% distinct(Stream_ID, .keep_all = TRUE)
+# 1b) Site reference table -> build Stream_ID exactly as requested, then keep lat/long
+site_ref <- read.csv("Site_Reference_Table - WRTDS_Reference_Table_LTER_V2.csv",
+                     check.names = FALSE, stringsAsFactors = FALSE) %>%
+  # if your table may have duplicate stream names, keep first occurrence
+  dplyr::distinct(Stream_Name, .keep_all = TRUE) %>%
+  dplyr::mutate(
+    Stream_ID = paste0(LTER, "__", Stream_Name),
+    Latitude  = as.numeric(Latitude),
+    Longitude = as.numeric(Longitude)
+  ) %>%
+  dplyr::select(Stream_ID, Latitude, Longitude)
 
-# Read all yearly FNConc/FNYield rows (one per year per site)
-drivers_df_final_sites <- read.csv(
-  sprintf("All_Drivers_Harmonized_Yearly_FNConc_FNYield_%d_years.csv", record_length)
-)
-
+# 1c) Attach coordinates to the recent30 set
 drivers_df_filtered <- drivers_df_final_sites %>%
-  left_join(drivers_df_uncleaned, by = "Stream_ID") %>%
-  rename_with(~ str_remove(., "\\.x$"), ends_with(".x"))
+  dplyr::left_join(site_ref, by = "Stream_ID") %>%
+  dplyr::filter(!is.na(Latitude), !is.na(Longitude))
 
-# Convert to sf for mapping, Need to add back in coordinates (pull from reference table)
-drivers_sf <- st_as_sf(
+# --------------------------------------------------
+# 2) Add lithology clusters (replaces loading from RData)
+#    Uses your logic: consolidated_rock + final_cluster
+# --------------------------------------------------
+site_clusters <- drivers_df_filtered %>%
+  dplyr::distinct(Stream_ID,
+                  major_rock,
+                  rocks_volcanic, rocks_sedimentary,
+                  rocks_carbonate_evaporite, rocks_metamorphic, rocks_plutonic) %>%
+  dplyr::mutate(
+    consolidated_rock = dplyr::case_when(
+      major_rock %in% c("volcanic","volcanic; plutonic") ~ "Volcanic",
+      major_rock %in% c("sedimentary", "sedimentary; metamorphic",
+                        "sedimentary; carbonate_evaporite",
+                        "volcanic; sedimentary; carbonate_evaporite",
+                        "sedimentary; plutonic; carbonate_evaporite; metamorphic") ~ "Sedimentary",
+      major_rock %in% c("plutonic","plutonic; metamorphic","volcanic; plutonic; metamorphic") ~ "Plutonic",
+      major_rock %in% c("metamorphic","carbonate_evaporite; metamorphic") ~ "Metamorphic",
+      major_rock %in% c("carbonate_evaporite","volcanic; carbonate_evaporite") ~ "Carbonate Evaporite",
+      TRUE ~ NA_character_
+    ),
+    final_cluster = dplyr::case_when(
+      consolidated_rock == "Sedimentary" & rocks_sedimentary >= 70 ~ "Sedimentary",
+      consolidated_rock == "Sedimentary" & rocks_sedimentary <  70 ~ "Mixed Sedimentary",
+      TRUE ~ consolidated_rock
+    )
+  ) %>%
+  dplyr::select(Stream_ID, final_cluster)
+
+# Join clusters back onto the recent30 + coordinates, then convert to sf for mapping
+drivers_sf <- sf::st_as_sf(
   drivers_df_filtered,
   coords = c("Longitude", "Latitude"),
   crs    = 4326
-) %>% mutate(
-  Longitude = st_coordinates(.)[,1],
-  Latitude  = st_coordinates(.)[,2]
-)
+) %>%
+  dplyr::mutate(
+    Longitude = sf::st_coordinates(.)[,1],
+    Latitude  = sf::st_coordinates(.)[,2]
+  )
 
-# --------------------------------------------------
-# 2) Load clustering results & merge rock clusters
-# --------------------------------------------------
-load("../Final_Models/FNConc_HierClust_Workflow_Objects.RData")
 sites_with_clusters <- drivers_sf %>%
-  st_drop_geometry() %>%
-  inner_join(full_scaled %>% select(Stream_ID, final_cluster), by = "Stream_ID")
+  sf::st_drop_geometry() %>%
+  dplyr::left_join(site_clusters, by = "Stream_ID") %>%
+  dplyr::filter(!is.na(final_cluster))
 
-# Define rock cluster palette
+# (Optional) palette + factor levels used later in your plotting
 my_cluster_colors <- c(
   "Volcanic"            = "#AC7B32",
   "Sedimentary"         = "#579C8E",
@@ -58,6 +86,10 @@ my_cluster_colors <- c(
   "Plutonic"            = "#8D9A40",
   "Metamorphic"         = "#C26F86",
   "Carbonate Evaporite" = "#5E88B0"
+)
+sites_with_clusters$final_cluster <- factor(
+  sites_with_clusters$final_cluster,
+  levels = names(my_cluster_colors)
 )
 
 # --------------------------------------------------

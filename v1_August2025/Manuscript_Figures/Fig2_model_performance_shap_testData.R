@@ -3,14 +3,7 @@
 ###############################################################################
 
 # 1. Packages & theme
-library(iml)
-library(ggplot2)
-library(dplyr)
-library(tidyr)
-library(randomForest)
-library(tibble)
-library(scales)
-library(cowplot)
+librarian::shelf(iml, ggplot2, dplyr, tidyr, randomForest, tibble, scales, cowplot)
 
 theme_set(
   theme_classic(base_size = 20) +
