@@ -167,7 +167,7 @@ metrics_FNConc <- pred_FNConc %>%
   group_by(subset) %>%
   summarize(
     R2    = cor(predicted, observed)^2,
-    pRMSE = sqrt(mean((predicted - observed)^2)) / mean(observed) * 100,
+    RRMSE = sqrt(mean((predicted - observed)^2)) / mean(observed),
     .groups = "drop"
   )
 
@@ -203,21 +203,21 @@ A <- ggplot(pred_FNConc, aes(predicted, observed)) +
     "text",
     x = fn_x[1] + 0.02 * diff(fn_x),
     y = a_y_base,
-    label = sprintf("R² = %.3f, %%RMSE = %.1f%%", metrics_FNConc$R2[1], metrics_FNConc$pRMSE[1]),
+    label = sprintf("R² = %.3f, RRMSE = %.3f", metrics_FNConc$R2[1], metrics_FNConc$RRMSE[1]),
     hjust = 0, size = 6.5, color = subset_ann_cols["older70"]
   ) +
   annotate(
     "text",
     x = fn_x[1] + 0.02 * diff(fn_x),
     y = a_y_base - 0.08 * diff(fn_y),
-    label = sprintf("R² = %.3f, %%RMSE = %.1f%%", metrics_FNConc$R2[2], metrics_FNConc$pRMSE[2]),
+    label = sprintf("R² = %.3f, RRMSE = %.3f", metrics_FNConc$R2[2], metrics_FNConc$RRMSE[2]),
     hjust = 0, size = 6.5, color = subset_ann_cols["recent30"]
   ) +
   annotate(
     "text",
     x = fn_x[1] + 0.02 * diff(fn_x),
     y = a_y_base - 2 * 0.08 * diff(fn_y),
-    label = sprintf("R² = %.3f, %%RMSE = %.1f%%", metrics_FNConc$R2[3], metrics_FNConc$pRMSE[3]),
+    label = sprintf("R² = %.3f, RRMSE = %.3f", metrics_FNConc$R2[3], metrics_FNConc$RRMSE[3]),
     hjust = 0, size = 6.5, color = subset_ann_cols["unseen10"]
   ) +
   labs(
@@ -234,7 +234,7 @@ metrics_FNYield <- pred_FNYield %>%
   group_by(subset) %>%
   summarize(
     R2    = cor(predicted, observed)^2,
-    pRMSE = sqrt(mean((predicted - observed)^2)) / mean(observed) * 100,
+    RRMSE = sqrt(mean((predicted - observed)^2)) / mean(observed),
     .groups = "drop"
   )
 
@@ -270,21 +270,21 @@ B <- ggplot(pred_FNYield, aes(predicted, observed)) +
     "text",
     x = fy_x[1] + 0.02 * diff(fy_x),
     y = b_y_base,
-    label = sprintf("R² = %.3f, %%RMSE = %.1f%%", metrics_FNYield$R2[1], metrics_FNYield$pRMSE[1]),
+    label = sprintf("R² = %.3f, RRMSE = %.3f", metrics_FNYield$R2[1], metrics_FNYield$RRMSE[1]),
     hjust = 0, size = 6.5, color = subset_ann_cols["older70"]
   ) +
   annotate(
     "text",
     x = fy_x[1] + 0.02 * diff(fy_x),
     y = b_y_base - 0.08 * diff(fy_y),
-    label = sprintf("R² = %.3f, %%RMSE = %.1f%%", metrics_FNYield$R2[2], metrics_FNYield$pRMSE[2]),
+    label = sprintf("R² = %.3f, RRMSE = %.3f", metrics_FNYield$R2[2], metrics_FNYield$RRMSE[2]),
     hjust = 0, size = 6.5, color = subset_ann_cols["recent30"]
   ) +
   annotate(
     "text",
     x = fy_x[1] + 0.02 * diff(fy_x),
     y = b_y_base - 2 * 0.08 * diff(fy_y),
-    label = sprintf("R² = %.3f, %%RMSE = %.1f%%", metrics_FNYield$R2[3], metrics_FNYield$pRMSE[3]),
+    label = sprintf("R² = %.3f, RRMSE = %.3f", metrics_FNYield$R2[3], metrics_FNYield$RRMSE[3]),
     hjust = 0, size = 6.5, color = subset_ann_cols["unseen10"]
   ) +
   labs(
