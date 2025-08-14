@@ -162,15 +162,18 @@ metrics_FNConc <- pred_FNConc %>%
     R2    = cor(predicted, observed)^2,
     RRMSE = sqrt(mean((predicted - observed)^2)) / mean(observed),
     .groups = "drop"
-  )
-
-fn_x <- range(pred_FNConc$predicted)
-fn_y <- range(pred_FNConc$observed)
+  ) %>%
+  mutate(subset = factor(subset, levels = subset_levels)) %>%
+  arrange(subset)
 
 pred_FNConc$subset <- factor(pred_FNConc$subset, levels = subset_levels)
 
-a_y_upper <- max(fn_y) + 0.02 * diff(fn_y)
-a_y_base  <- a_y_upper - 0.05 * diff(fn_y)
+fn_x <- range(pred_FNConc$predicted, na.rm = TRUE)
+
+# Put annotations near the top of the capped axis (0–20)
+yr        <- c(0, 20)
+a_y_base  <- yr[2] - 0.02 * diff(yr)   # ~19.6
+line_gap  <- 0.06 * diff(yr)           # ~1.2 between lines
 
 A <- ggplot(pred_FNConc, aes(predicted, observed)) +
   geom_point(aes(color = subset, fill = subset, shape = subset, size = subset),
@@ -202,14 +205,14 @@ A <- ggplot(pred_FNConc, aes(predicted, observed)) +
   annotate(
     "text",
     x = fn_x[1] + 0.02 * diff(fn_x),
-    y = a_y_base - 0.08 * diff(fn_y),
+    y = a_y_base - 1 * line_gap,
     label = sprintf("R² = %.3f, RRMSE = %.3f", metrics_FNConc$R2[2], metrics_FNConc$RRMSE[2]),
     hjust = 0, size = 6.5, color = subset_ann_cols["recent30"]
   ) +
   annotate(
     "text",
     x = fn_x[1] + 0.02 * diff(fn_x),
-    y = a_y_base - 2 * 0.08 * diff(fn_y),
+    y = a_y_base - 2 * line_gap,
     label = sprintf("R² = %.3f, RRMSE = %.3f", metrics_FNConc$R2[3], metrics_FNConc$RRMSE[3]),
     hjust = 0, size = 6.5, color = subset_ann_cols["unseen10"]
   ) +
@@ -220,7 +223,7 @@ A <- ggplot(pred_FNConc, aes(predicted, observed)) +
   ) +
   scale_x_continuous(expand = expansion(mult = c(0.03, 0.2))) +
   scale_y_continuous(expand = expansion(mult = c(0.02, 0.02))) +
-  coord_cartesian(ylim = c(0, 20)) +
+  coord_cartesian(ylim = c(0, 20), xlim = c(0,20)) +
   theme(plot.margin = unit(c(5, 5, 5, 0), "pt"))
 
 ## B: Yield
