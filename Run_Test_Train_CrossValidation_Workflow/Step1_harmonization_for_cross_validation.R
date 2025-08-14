@@ -2,6 +2,20 @@
 # Harmonize  drivers for use in downstream analyses (modeling, SHAP, plotting)
 # #############################################################################
 
+# Required CSV inputs:
+#  1. Full_Results_WRTDS_kalman_annual_filtered.csv
+#  2. wrtds_kalman_annual_CatalinaJemez.csv
+#  3. Full_Results_WRTDS_kalman_daily_filtered.csv
+#  4. WRTDS-input_discharge.csv
+#  5. all-data_si-extract_2_20250325.csv
+#  6. Krycklan_basin_slopes.csv
+#  7. DSi_Basin_Slope_missing_sites.csv
+#  8. basin_stream_id_conversions.csv
+#  9. DSi_LULC_filled_interpolated_Simple.csv
+# 10. converted_raw_NP.csv
+
+# Outputs produced by this code: 
+
 rm(list = ls())
 librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr, stringr, readr, corrplot)
 
@@ -11,18 +25,6 @@ record_length <- 5
 # Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files")
 
-# Required CSV inputs:
-#  1. Full_Results_WRTDS_kalman_annual_filtered.csv
-#  2. wrtds_kalman_annual_CatalinaJemez.csv
-#  3. Full_Results_WRTDS_kalman_daily_filtered.csv
-#  4. WRTDS-input_discharge.csv
-#  5. Koeppen_Geiger_2.csv
-#  6. all-data_si-extract_2_20250325.csv
-#  7. Krycklan_basin_slopes.csv
-#  8. DSi_Basin_Slope_missing_sites.csv
-#  9. basin_stream_id_conversions.csv
-# 10. DSi_LULC_filled_interpolated_Simple.csv
-# 11. converted_raw_NP.csv
 
 # helper to clean up Stream_ID formatting
 standardize_stream_id <- function(df) {
@@ -715,54 +717,28 @@ unseen10_metrics <- compute_split_metrics(daily_kalman, unseen10_df, "RBI_unseen
 older70_metrics  <- compute_split_metrics(daily_kalman, older70,      "RBI_older70",  "slope_older70")
 recent30_metrics <- compute_split_metrics(daily_kalman, recent30,     "RBI_recent30", "slope_recent30")
 
-# attach metrics to split rows (NOx/P already present) and export
-unseen10_out <- unseen10_df %>% dplyr::left_join(unseen10_metrics, by = "Stream_ID")
-older70_out  <- older70     %>% dplyr::left_join(older70_metrics,  by = "Stream_ID")
-recent30_out <- recent30    %>% dplyr::left_join(recent30_metrics, by = "Stream_ID")
+# Keep GLOBAL RBI/recession_slope in unseen10 (spatial-only split)
+unseen10_out <- unseen10_df
 
-# Partition NOx/P medians 
-recalc_medians <- function(df) {
-  df %>%
-    dplyr::group_by(Stream_ID) %>%
-    dplyr::summarise(
-      NOx_med = median(NOx, na.rm=TRUE),
-      P_med   = median(P,   na.rm=TRUE),
-      .groups = "drop"
-    )
-}
+# For time-splits, drop global metrics and attach split-specific ones
+older70_out <- older70 %>%
+  dplyr::select(-any_of(c("RBI","recession_slope"))) %>%
+  dplyr::left_join(older70_metrics,  by = "Stream_ID")
 
-med_full     <- recalc_medians(drivers_df)
-med_unseen10 <- recalc_medians(unseen10_df)
-med_older70  <- recalc_medians(older70)
-med_recent30 <- recalc_medians(recent30)
-
-
-# Combine all subsets for each partition
-# Attach partition-specific NOx/P medians to each split output
-unseen10_out <- unseen10_out %>%
-  dplyr::left_join(
-    med_unseen10 %>% dplyr::rename(NOx_med_unseen10 = NOx_med,
-                                   P_med_unseen10   = P_med),
-    by = "Stream_ID"
-  )
-
-older70_out <- older70_out %>%
-  dplyr::left_join(
-    med_older70 %>% dplyr::rename(NOx_med_older70 = NOx_med,
-                                  P_med_older70   = P_med),
-    by = "Stream_ID"
-  )
-
-recent30_out <- recent30_out %>%
-  dplyr::left_join(
-    med_recent30 %>% dplyr::rename(NOx_med_recent30 = NOx_med,
-                                   P_med_recent30   = P_med),
-    by = "Stream_ID"
-  )
+recent30_out <- recent30 %>%
+  dplyr::select(-any_of(c("RBI","recession_slope"))) %>%
+  dplyr::left_join(recent30_metrics, by = "Stream_ID")
 
 # #############################################################################
-# 9. Export all partitions
+# 9. Combine and export all partitions
 # #############################################################################
-write.csv(unseen10_out, "AllDrivers_unseen10_split_test.csv", row.names = FALSE)
-write.csv(older70_out,  "AllDrivers_older70_split_test.csv",  row.names = FALSE)
-write.csv(recent30_out, "AllDrivers_recent30_split_test.csv", row.names = FALSE)
+
+unseen10_out <- unseen10_df %>% left_join(unseen10_metrics, by = "Stream_ID")
+older70_out  <- older70     %>% left_join(older70_metrics,  by = "Stream_ID")
+recent30_out <- recent30    %>% left_join(recent30_metrics, by = "Stream_ID")
+
+# Export the full partitions (not just metrics)
+write.csv(unseen10_out, "AllDrivers_unseen10_not_split.csv", row.names = FALSE)
+write.csv(older70_out,  "AllDrivers_older70_split.csv",  row.names = FALSE)
+write.csv(recent30_out, "AllDrivers_recent30_split.csv", row.names = FALSE)
+
