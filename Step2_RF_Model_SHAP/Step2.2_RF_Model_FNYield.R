@@ -1,5 +1,25 @@
 # #############################################################################
-# Train RF for FNYield: older70 (training),  RF1, stability, RF2, predict on recent30 & unseen10
+# Train RF for FNYield: older70 (training) RF1, stability, RF2, predict on recent30 & unseen10
+# #############################################################################
+# Required inputs (expected in `drv_dir`):
+#   1) AllDrivers_Harmonized_Yearly_filtered_5_years.csv
+#      - Must include: FNYield and predictor columns used below:
+#        NOx, P, npp, evapotrans, greenup_day, precip, temp, snow_cover,
+#        permafrost, elevation, basin_slope, RBI, recession_slope, land_*, rocks_*
+#      - Columns like Gen*, Q, drainage_area may be present (dropped in script)
+#   2) AllDrivers_older70_split.csv
+#   3) AllDrivers_recent30_split.csv
+#   4) AllDrivers_unseen10_not_split.csv
+#
+# Outputs (written to `output_dir`):
+#   A) FNYield_Yearly_5yrs_corrplot.png
+#   B) RF_variable_importance_FNYield_Yearly_5_years.png
+#   C) RF2_lm_plot_FNYield_Yearly_5_years.png
+#   D) RF2_all_subsets_FNYield_pred_vs_obs.png
+#   E) Predictions_FNYield.csv                          # per-subset predicted vs observed
+#   F) FNYield_08_Feature_Stability_and_medianImportance.csv
+#      - First line: comment with importance threshold
+#      - Then CSV with columns: variable, frequency, incMSE, selected
 # #############################################################################
 
 # 0) Load packages & clear
@@ -25,7 +45,7 @@ dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
 # 3) Utility functions
 save_correlation_plot <- function(driver_cor, output_dir, name) {
-  png(sprintf("%s/%s_Yearly_5yrs_corrplot.png", output_dir, name),
+  png(sprintf("%s/%s_Yearly_5yrs_corrplot_split.png", output_dir, name),
       width = 2500, height = 2500, res = 300)
   corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = FALSE)
   title(sprintf("All Data Yearly %s", name))
@@ -33,7 +53,7 @@ save_correlation_plot <- function(driver_cor, output_dir, name) {
 }
 
 save_rf_importance_plot <- function(rf_model, output_dir, name) {
-  png(sprintf("%s/RF_variable_importance_%s_Yearly_5_years.png", output_dir, name),
+  png(sprintf("%s/RF_variable_importance_%s_Yearly_5_years_split.png", output_dir, name),
       width = 10, height = 10, units = "in", res = 300)
   randomForest::varImpPlot(rf_model,
                            main = sprintf("rf_model2 - Yearly %s", name),
@@ -45,7 +65,7 @@ save_lm_plot <- function(rf_model2, observed, output_dir, name) {
   preds <- rf_model2$predicted
   rmse  <- sqrt(mean((preds - observed)^2))
   rsq   <- mean(rf_model2$rsq)
-  png(sprintf("%s/RF2_lm_plot_%s_Yearly_5_years.png", output_dir, name),
+  png(sprintf("%s/RF2_lm_plot_%s_Yearly_5_years_split.png", output_dir, name),
       width = 1500, height = 1500, res = 300)
   plot(preds, observed,
        pch = 16, cex = 1.5,
@@ -63,7 +83,7 @@ save_rf2_all_subsets_plot <- function(pred_df, name, output_dir) {
   pred_df <- pred_df %>%
     mutate(subset = factor(subset,
                            levels = c("older70","recent30","unseen10"),
-                           labels = c("Train","Test","Cross‑Val")))
+                           labels = c("Train","Test","Cross-Val")))
   x_min   <- min(pred_df$predicted, na.rm = TRUE)
   x_range <- diff(range(pred_df$predicted, na.rm = TRUE))
   y_max   <- max(pred_df$observed,  na.rm = TRUE)
@@ -87,11 +107,11 @@ save_rf2_all_subsets_plot <- function(pred_df, name, output_dir) {
     geom_text(data = metrics_df,
               aes(x = x, y = y, label = label, color = subset),
               inherit.aes = FALSE, hjust = 0, vjust = 1, size = 3.5, show.legend = FALSE) +
-    scale_color_manual(values = c("Train"="#1b9e77","Test"="#d95f02","Cross‑Val"="#7570b3")) +
+    scale_color_manual(values = c("Train"="#1b9e77","Test"="#d95f02","Cross-Val"="#7570b3")) +
     theme_bw() +
     labs(title = paste("RF Model 2 Predictions for", name),
          x = "Predicted", y = "Observed", color = "Subset")
-  ggsave(sprintf("%s/RF2_all_subsets_%s_pred_vs_obs.png", output_dir, name),
+  ggsave(sprintf("%s/RF2_all_subsets_%s_pred_vs_obs_split.png", output_dir, name),
          plot = p, width = 10, height = 6, dpi = 300)
 }
 
@@ -139,14 +159,12 @@ load_split <- function(path) {
     select(-contains("Gen"), -contains("major"), -Q, -drainage_area) %>%
     mutate(greenup_day = as.numeric(greenup_day))
 }
-df_train    <- load_split("AllDrivers_cc_older70.csv")
-df_recent30 <- load_split("AllDrivers_cc_recent30.csv")
-df_unseen10 <- load_split("AllDrivers_cc_unseen10.csv")
-
+df_train    <- load_split("AllDrivers_older70_split.csv")
+df_recent30 <- load_split("AllDrivers_recent30_split.csv")
+df_unseen10 <- load_split("AllDrivers_unseen10_not_split.csv")
 
 # Define tree grid for RF1 & RF2
 tree_grid <- seq(100, 2000, by = 100)
-
 
 # #############################################################################
 # a) RF1 tuning for FNYield
@@ -177,8 +195,9 @@ rf1 <- randomForest(x = x1, y = y1,
 # cache RF1 & importances, rename for stability
 rf1_FNYield  <- rf1
 imps_FNYield <- randomForest::importance(rf1)[, "%IncMSE"]
+
 save(rf1_FNYield, imps_FNYield,
-     file = file.path(output_dir, "FNYield_RF1.RData"))
+     file = file.path(output_dir, "FNYield_RF1_split.RData"))
 
 # #############################################################################
 # b) Stability selection
@@ -189,21 +208,22 @@ freq_thr_FNYield <- 0.80
 stab_FNYield <- rf_stability_selection_parallel(
   x                     = df_train[predictors],
   y                     = df_train$FNYield,
-  n_bootstrap           = 500,
+  n_bootstrap           = 500, # change to 500 for robust run
   threshold             = freq_thr_FNYield,
   ntree                 = rf1_FNYield$ntree,
   mtry                  = rf1_FNYield$mtry,
   importance_threshold  = imp_thr_FNYield
 )
+
 feats_FNYield <- stab_FNYield$features
 
 # save stability outputs
 save(stab_FNYield, feats_FNYield, imp_thr_FNYield, freq_thr_FNYield,
-     file = file.path(output_dir, "FNYield_stability_selection.RData"))
+     file = file.path(output_dir, "FNYield_stability_selection_split.RData"))
 write.csv(
   tibble(variable = names(stab_FNYield$frequencies),
          frequency = stab_FNYield$frequencies),
-  file      = file.path(output_dir, "FNYield_stability_frequencies.csv"),
+  file      = file.path(output_dir, "FNYield_stability_frequencies_split.csv"),
   row.names = FALSE
 )
 
@@ -236,10 +256,10 @@ rf2_FNYield   <- randomForest(
 )
 
 save(rf2_FNYield, nt2_FNYield, mtry2_FNYield, feats_FNYield,
-     file = file.path(output_dir, "FNYield_RF2_model_and_settings.RData"))
+     file = file.path(output_dir, "FNYield_RF2_model_and_settings_split.RData"))
 
-save(rf2_FNYield, 
-     file = file.path(output_dir, "FNYield_Yearly_rf_model2.RData"))
+save(rf2_FNYield,
+     file = file.path(output_dir, "FNYield_Yearly_rf_model2_split.RData"))
 
 # #############################################################################
 # d) Export kept_drivers for SHAP
@@ -249,7 +269,7 @@ kept_drivers_FNYield <- df_recent30 %>%
   select(all_of(feats_FNYield))
 
 save(kept_drivers_FNYield,
-     file = file.path(output_dir, "FNYield_Yearly_kept_drivers.RData"))
+     file = file.path(output_dir, "FNYield_Yearly_kept_drivers_split.RData"))
 
 # #############################################################################
 # e) Diagnostics & plots
@@ -276,7 +296,7 @@ pred_list_FNYield <- list(
 pred_df_FNYield <- bind_rows(pred_list_FNYield)
 
 write.csv(pred_df_FNYield,
-          file      = file.path(output_dir, "Predictions_FNYield.csv"),
+          file      = file.path(output_dir, "Predictions_FNYield_split.csv"),
           row.names = FALSE)
 
 save_rf2_all_subsets_plot(pred_df_FNYield, "FNYield", output_dir)
@@ -291,7 +311,7 @@ stab_df <- tibble(
   selected  = names(stab_FNYield$frequencies) %in% feats_FNYield
 )
 
-stab_out <- file.path(output_dir, "FNYield_08_Feature_Stability_and_medianImportance.csv")
+stab_out <- file.path(output_dir, "FNYield_08_Feature_Stability_and_medianImportance_split.csv")
 writeLines(
   sprintf("# Importance threshold (median %%IncMSE from RF1) = %.5f", imp_thr_FNYield),
   con = stab_out

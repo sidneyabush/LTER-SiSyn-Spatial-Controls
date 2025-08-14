@@ -17,12 +17,12 @@ setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 final_models_dir <- "Final_Models"
 
 # 4. Load FNConc model & kept‑drivers into their own env to avoid name clashes
-load(file.path(final_models_dir, "FNConc_Yearly_rf_model2.RData"))
-load(file.path(final_models_dir, "FNConc_Yearly_kept_drivers.RData"))
+load(file.path(final_models_dir, "FNConc_Yearly_rf_model2_split.RData"))
+load(file.path(final_models_dir, "FNConc_Yearly_kept_drivers_split.RData"))
 
 # 5. Load FNYield model & kept‑drivers into a separate env
-load(file.path(final_models_dir, "FNYield_Yearly_rf_model2.RData"))
-load(file.path(final_models_dir, "FNYield_Yearly_kept_drivers.RData"))
+load(file.path(final_models_dir, "FNYield_Yearly_rf_model2_split.RData"))
+load(file.path(final_models_dir, "FNYield_Yearly_kept_drivers_split.RData"))
 
 # #############################################################################
 # 5. Helper to generate SHAP with a sanity‐check
@@ -30,6 +30,8 @@ load(file.path(final_models_dir, "FNYield_Yearly_kept_drivers.RData"))
 generate_shap_values <- function(model, kept_drivers, sample_size = 30) {
   # 1) which predictors did RF actually use?
   model_vars <- names(model$forest$xlevels)
+  # model_vars <- rownames(randomForest::importance(model))
+  
   
   # 2) check for any missing columns
   missing <- setdiff(model_vars, colnames(kept_drivers))
@@ -68,7 +70,7 @@ shap_values_FNConc <- generate_shap_values(
 )
 save(
   shap_values_FNConc,
-  file = file.path(final_models_dir, "FNConc_Yearly_shap_values_recent30.RData")
+  file = file.path(final_models_dir, "FNConc_Yearly_shap_values_recent30_split.RData")
 )
 
 # #############################################################################
@@ -79,7 +81,8 @@ shap_values_FNYield <- generate_shap_values(
   kept_drivers = kept_drivers_FNYield,
   sample_size  = 30
 )
+
 save(
   shap_values_FNYield,
-  file = file.path(final_models_dir, "FNYield_Yearly_shap_values_recent30.RData")
+  file = file.path(final_models_dir, "FNYield_Yearly_shap_values_recent30_split.RData")
 )

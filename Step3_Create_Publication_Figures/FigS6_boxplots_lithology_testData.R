@@ -12,7 +12,7 @@ librarian::shelf(ggplot2, dplyr, tidyr, scales, colorspace, quiet = TRUE)
 # #############################################################################
 
 recent30 <- read.csv(
-  "harmonization_files/AllDrivers_cc_recent30.csv",
+  "harmonization_files/AllDrivers_recent30_split.csv",
   stringsAsFactors = FALSE
 )
 
@@ -169,7 +169,7 @@ p <- ggplot(df_long, aes(x = feature, y = scaled_value)) +
 # 7. Save the figure
 # #############################################################################
 ggsave(
-  filename = "Final_Figures/FigS6_Boxplots_lithology_testData.png",
+  filename = "Final_Figures/FigS6_Boxplots_lithology_split.png",
   plot     = p,
   width    = 15,
   height   = 10,

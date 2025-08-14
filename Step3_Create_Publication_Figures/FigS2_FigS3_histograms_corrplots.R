@@ -22,9 +22,9 @@ theme_set(
 # #############################################################################
 # 1. Read in and clean data
 # #############################################################################
-older70     <- read_csv("AllDrivers_cc_older70.csv", show_col_types = FALSE)     %>% mutate(subset = "Training")
-recent30    <- read_csv("AllDrivers_cc_recent30.csv", show_col_types = FALSE)    %>% mutate(subset = "Testing")
-unseen10_df <- read_csv("AllDrivers_cc_unseen10.csv", show_col_types = FALSE)    %>% mutate(subset = "Validation")
+older70     <- read_csv("AllDrivers_older70_split.csv", show_col_types = FALSE)     %>% mutate(subset = "Training")
+recent30    <- read_csv("AllDrivers_recent30_split.csv", show_col_types = FALSE)    %>% mutate(subset = "Testing")
+unseen10_df <- read_csv("AllDrivers_unseen10_not_split.csv", show_col_types = FALSE)    %>% mutate(subset = "Validation")
 
 # Combine and set order
 hist_input_df <- bind_rows(older70, recent30, unseen10_df) %>%
@@ -97,7 +97,7 @@ p <- ggplot(hist_long, aes(x = value, fill = subset)) +
 
 # Save to file
 ggsave(
-  filename = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures/FigS2_histograms.png",
+  filename = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures/FigS2_histograms_split.png",
   plot     = p,
   width    = 16,
   height   = 18,
@@ -127,7 +127,7 @@ save_subset_corrplot <- function(df, label) {
   png(
     filename = file.path(
       "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures",
-      sprintf("FigS3_corrplot_%s.png", label_file)
+      sprintf("FigS3_corrplot_%s_split.png", label_file)
     ),
     width  = 10, 
     height = 10, 

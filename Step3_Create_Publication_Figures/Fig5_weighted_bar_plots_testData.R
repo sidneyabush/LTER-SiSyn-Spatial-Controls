@@ -11,15 +11,15 @@ librarian::shelf(ggplot2, dplyr, tidyr, patchwork, colorspace, scales, quiet = T
 # 1. Paths & output
 # #############################################################################
 fm <- "Final_Models"
-recent30_path <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files/AllDrivers_cc_recent30.csv"
+recent30_path <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files/AllDrivers_recent30_split.csv"
 output_dir <- "Final_Figures"
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
 # #############################################################################
 # 2. Load SHAP values (recent30)
 # #############################################################################
-load(file.path(fm, "FNConc_Yearly_shap_values_recent30.RData"))   
-load(file.path(fm, "FNYield_Yearly_shap_values_recent30.RData"))  
+load(file.path(fm, "FNConc_Yearly_shap_values_recent30_split.RData"))   
+load(file.path(fm, "FNYield_Yearly_shap_values_recent30_split.RData"))  
 
 # #############################################################################
 # 3. Read recent30 split
@@ -256,7 +256,7 @@ fig_litho_shap <- conc_litho_bar + yield_litho_bar +
   theme(legend.position = "bottom")
 
 ggsave(
-  file.path(output_dir, "Fig5_Lithology_Stacked_SHAP_WeightedValues.png"),
+  file.path(output_dir, "Fig5_Lithology_Stacked_SHAP_WeightedValues_split.png"),
   fig_litho_shap,
   width  = 20,
   height = 10,

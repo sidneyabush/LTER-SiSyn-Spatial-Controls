@@ -53,12 +53,12 @@ subset_ann_cols <- c(
 )
 
 # 4. Load data
-pred_FNConc  <- read.csv(file.path(fm, "Predictions_FNConc.csv"))
-pred_FNYield <- read.csv(file.path(fm, "Predictions_FNYield.csv"))
-load(file.path(fm, "FNConc_Yearly_shap_values_recent30.RData"));  SV_FN  <- shap_values_FNConc
-load(file.path(fm, "FNYield_Yearly_shap_values_recent30.RData")); SV_FY  <- shap_values_FNYield
-load(file.path(fm, "FNConc_Yearly_kept_drivers.RData"));  KD_FN  <- kept_drivers_FNConc
-load(file.path(fm, "FNYield_Yearly_kept_drivers.RData")); KD_FY  <- kept_drivers_FNYield
+pred_FNConc  <- read.csv(file.path(fm, "Predictions_FNConc_split.csv"))
+pred_FNYield <- read.csv(file.path(fm, "Predictions_FNYield_split.csv"))
+load(file.path(fm, "FNConc_Yearly_shap_values_recent30_split.RData"));  SV_FN  <- shap_values_FNConc
+load(file.path(fm, "FNYield_Yearly_shap_values_recent30_split.RData")); SV_FY  <- shap_values_FNYield
+load(file.path(fm, "FNConc_Yearly_kept_drivers_split.RData"));  KD_FN  <- kept_drivers_FNConc
+load(file.path(fm, "FNYield_Yearly_kept_drivers_split.RData")); KD_FY  <- kept_drivers_FNYield
 
 # 5. Recode & scale setup
 recode_map <- setNames(
@@ -331,6 +331,6 @@ final_fig2 <- plot_grid(
 )
 
 ggsave(
-  file.path(od, "Fig2_Global_FNConc_FNYield_multi.png"),
+  file.path(od, "Fig2_Global_FNConc_FNYield_multi_split.png"),
   final_fig2, width = 17, height = 20, dpi = 300, bg = "white"
 )
