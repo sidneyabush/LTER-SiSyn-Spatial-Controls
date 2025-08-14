@@ -3,16 +3,10 @@
 # #############################################################################
 # Required inputs:
 #   1) Catalina Jemez annual CSV files in working directory
-#      - Filename pattern: ^Catalina Jemez.*\\.csv$
-#      - Filenames encode analyte (NO3, DSi, P) and stream (e.g., OR_low, MG_WEIR)
-#      - Expected columns: DecYear, Q, FNConc, FNFlux, GenConc, GenFlux
 #   2) WRTDS-input_discharge.csv
-#      - Expected columns: Date (YYYY-MM-DD), Stream_ID, Q; optional 'indicate'
 #
 # Outputs:
 #   A) wrtds_kalman_annual_CatalinaJemez.csv
-#      - Columns: LTER, Stream_Name, chemical, DecYear, Q, FNConc, FNFlux,
-#                 GenConc, GenFlux, drainSqKm, Stream_ID, Year
 #   B) daily_Q_CatalinaJemez.csv
 #      - Daily discharge subset for Stream_ID {"Catalina Jemez__OR_low",
 #                                             "Catalina Jemez__OR_WEIR"}

@@ -3,9 +3,6 @@
 # #############################################################################
 # Required CSV inputs:
 #   1) 20241003_masterdata_chem.csv
-#      - Expected columns: LTER, Stream_Name, variable, value, date (YYYY-MM-DD)
-#      - Variables used: NOx, NO3, SRP, PO4
-#
 # Outputs produced by this script:
 #   A) converted_raw_NP.csv
 #      - Tidy N and P concentrations with value_converted in mg/L
