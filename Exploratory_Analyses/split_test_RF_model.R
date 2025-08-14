@@ -45,7 +45,7 @@ dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
 # 3) Utility functions
 save_correlation_plot <- function(driver_cor, output_dir, name) {
-  png(sprintf("%s/%s_Yearly_5yrs_corrplot.png", output_dir, name),
+  png(sprintf("%s/%s_Yearly_5yrs_corrplot_split.png", output_dir, name),
       width = 2500, height = 2500, res = 300)
   corrplot(driver_cor, type = "lower", pch.col = "black", tl.col = "black", diag = FALSE)
   title(sprintf("All Data Yearly %s", name))
@@ -53,7 +53,7 @@ save_correlation_plot <- function(driver_cor, output_dir, name) {
 }
 
 save_rf_importance_plot <- function(rf_model, output_dir, name) {
-  png(sprintf("%s/RF_variable_importance_%s_Yearly_5_years.png", output_dir, name),
+  png(sprintf("%s/RF_variable_importance_%s_Yearly_5_years_split.png", output_dir, name),
       width = 10, height = 10, units = "in", res = 300)
   randomForest::varImpPlot(rf_model,
                            main = sprintf("rf_model2 - Yearly %s", name),
@@ -65,7 +65,7 @@ save_lm_plot <- function(rf_model2, observed, output_dir, name) {
   preds <- rf_model2$predicted
   rmse  <- sqrt(mean((preds - observed)^2))
   rsq   <- mean(rf_model2$rsq)
-  png(sprintf("%s/RF2_lm_plot_%s_Yearly_5_years.png", output_dir, name),
+  png(sprintf("%s/RF2_lm_plot_%s_Yearly_5_years_split.png", output_dir, name),
       width = 1500, height = 1500, res = 300)
   plot(preds, observed,
        pch = 16, cex = 1.5,
@@ -111,7 +111,7 @@ save_rf2_all_subsets_plot <- function(pred_df, name, output_dir) {
     theme_bw() +
     labs(title = paste("RF Model 2 Predictions for", name),
          x = "Predicted", y = "Observed", color = "Subset")
-  ggsave(sprintf("%s/RF2_all_subsets_%s_pred_vs_obs.png", output_dir, name),
+  ggsave(sprintf("%s/RF2_all_subsets_%s_pred_vs_obs_split.png", output_dir, name),
          plot = p, width = 10, height = 6, dpi = 300)
 }
 
@@ -197,7 +197,7 @@ rf1_FNConc  <- rf1
 imps_FNConc <- randomForest::importance(rf1)[, "%IncMSE"]
 
 save(rf1_FNConc, imps_FNConc,
-     file = file.path(output_dir, "FNConc_RF1.RData"))
+     file = file.path(output_dir, "FNConc_RF1_split.RData"))
 
 # #############################################################################
 # b) Stability selection
@@ -208,7 +208,7 @@ freq_thr_FNConc <- 0.80
 stab_FNConc <- rf_stability_selection_parallel(
   x                     = df_train[predictors],
   y                     = df_train$FNConc,
-  n_bootstrap           = 10, # change to 500 for robust run
+  n_bootstrap           = 500, # change to 500 for robust run
   threshold             = freq_thr_FNConc,
   ntree                 = rf1_FNConc$ntree,
   mtry                  = rf1_FNConc$mtry,
@@ -217,13 +217,13 @@ stab_FNConc <- rf_stability_selection_parallel(
 
 feats_FNConc <- stab_FNConc$features
 
-save stability outputs
+# save stability outputs
 save(stab_FNConc, feats_FNConc, imp_thr_FNConc, freq_thr_FNConc,
-     file = file.path(output_dir, "FNConc_stability_selection.RData"))
+     file = file.path(output_dir, "FNConc_stability_selection_split.RData"))
 write.csv(
   tibble(variable = names(stab_FNConc$frequencies),
          frequency = stab_FNConc$frequencies),
-  file      = file.path(output_dir, "FNConc_stability_frequencies.csv"),
+  file      = file.path(output_dir, "FNConc_stability_frequencies_split.csv"),
   row.names = FALSE
 )
 
@@ -256,10 +256,10 @@ rf2_FNConc   <- randomForest(
 )
 
 save(rf2_FNConc, nt2_FNConc, mtry2_FNConc, feats_FNConc,
-     file = file.path(output_dir, "FNConc_RF2_model_and_settings.RData"))
+     file = file.path(output_dir, "FNConc_RF2_model_and_settings_split.RData"))
 
 save(rf2_FNConc,
-     file = file.path(output_dir, "FNConc_Yearly_rf_model2.RData"))
+     file = file.path(output_dir, "FNConc_Yearly_rf_model2_split.RData"))
 
 # #############################################################################
 # d) Export kept_drivers for SHAP
@@ -269,7 +269,7 @@ kept_drivers_FNConc <- df_recent30 %>%
   select(all_of(feats_FNConc))
 
 save(kept_drivers_FNConc,
-     file = file.path(output_dir, "FNConc_Yearly_kept_drivers.RData"))
+     file = file.path(output_dir, "FNConc_Yearly_kept_drivers_split.RData"))
 
 # #############################################################################
 # e) Diagnostics & plots
@@ -296,7 +296,7 @@ pred_list_FNConc <- list(
 pred_df_FNConc <- bind_rows(pred_list_FNConc)
 
 write.csv(pred_df_FNConc,
-          file      = file.path(output_dir, "Predictions_FNConc.csv"),
+          file      = file.path(output_dir, "Predictions_FNConc_split.csv"),
           row.names = FALSE)
 
 save_rf2_all_subsets_plot(pred_df_FNConc, "FNConc", output_dir)
@@ -311,7 +311,7 @@ stab_df <- tibble(
   selected  = names(stab_FNConc$frequencies) %in% feats_FNConc
 )
 
-stab_out <- file.path(output_dir, "FNConc_08_Feature_Stability_and_medianImportance.csv")
+stab_out <- file.path(output_dir, "FNConc_08_Feature_Stability_and_medianImportance_split.csv")
 writeLines(
   sprintf("# Importance threshold (median %%IncMSE from RF1) = %.5f", imp_thr_FNConc),
   con = stab_out
