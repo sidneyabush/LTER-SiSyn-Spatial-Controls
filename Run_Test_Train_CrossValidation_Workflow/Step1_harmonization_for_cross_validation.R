@@ -582,9 +582,6 @@ filtered_streams_FNConc <- drivers_df %>%
   filter(n() < 5) %>%
   ungroup()
 
-# Display unique stream_IDs with less than 5 entries
-unique(filtered_streams_FNConc$Stream_ID)
-
 # ---- Remove Outliers for FNYield (5 SD Rule) ----
 FNYield_mean <- mean(drivers_df$FNYield, na.rm = TRUE)
 FNYield_sd <- sd(drivers_df$FNYield, na.rm = TRUE)
@@ -609,32 +606,7 @@ drivers_df <- drivers_df %>%
   filter(n_distinct(Year) >= 5) %>%
   ungroup() 
 
-# #############################################################################
-# Count N & P substitutions in the FINAL dataset (after ±50% + outliers + ≥5 yrs)
-# #############################################################################
-stopifnot(exists("combined_NP"))
-
-final_flags <- drivers_df %>%
-  dplyr::select(Stream_ID, Year) %>%
-  dplyr::left_join(
-    combined_NP %>% dplyr::select(Stream_ID, Year, P_source, NOx_source),
-    by = c("Stream_ID", "Year")
-  )
-
-n_final_obs  <- nrow(final_flags)
-NOx_sub_n    <- sum(final_flags$NOx_source == "raw", na.rm = TRUE)
-P_sub_n      <- sum(final_flags$P_source   == "raw", na.rm = TRUE)
-BOTH_sub_n   <- sum(final_flags$NOx_source == "raw" & final_flags$P_source == "raw", na.rm = TRUE)
-EITHER_sub_n <- sum(final_flags$NOx_source == "raw" | final_flags$P_source == "raw", na.rm = TRUE)
-
-cat(sprintf("[FINAL subs | site-years=%d] NOx=%d (%.1f%%) | P=%d (%.1f%%) | BOTH=%d (%.1f%%) | EITHER=%d (%.1f%%)\n",
-            n_final_obs,
-            NOx_sub_n, 100*NOx_sub_n/n_final_obs,
-            P_sub_n,   100*P_sub_n/n_final_obs,
-            BOTH_sub_n,100*BOTH_sub_n/n_final_obs,
-            EITHER_sub_n,100*EITHER_sub_n/n_final_obs))
-
-# write out tot_si
+# Write out tot_si. This is for the FULL dataset (not partitioned at all)
 write.csv(
   drivers_df,
   sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.csv", record_length),
@@ -642,8 +614,10 @@ write.csv(
 )
 
 # #############################################################################
-# 8. Stratified Split by final_cluster
+# 8. Create 70/30 temporal and 10% spatial partitions from full data (tot_si)
 # #############################################################################
+
+# Stratify the validation partition by final_cluster (consolidated rocktype)
 site_clusters <- drivers_df %>%
   distinct(Stream_ID,major_rock,rocks_volcanic,rocks_sedimentary,
            rocks_carbonate_evaporite,rocks_metamorphic,rocks_plutonic) %>%
@@ -691,107 +665,66 @@ older70 <- trainval_split %>% filter(split=="older")  %>%
 recent30 <- trainval_split %>% filter(split=="recent") %>% 
   dplyr::select(-tot_count,-n_recent,-idx,-split)
 
-# #############################################################################
-# 9. Compute 70/30 split–specific RBI & recession slope
-# #############################################################################
-# Create a Year column: 
-daily_kalman <- daily_kalman %>%
-  mutate(Year = year(Date))
 
-# --- a) older70 split ------------------
-daily_older70 <- daily_kalman %>%
-  inner_join(older70 %>% select(Stream_ID, Year),
-             by = c("Stream_ID","Year"))
+# Compute partition-specific RBI & RCS  
+daily_kalman <- daily_kalman %>% dplyr::mutate(Year = lubridate::year(Date))
 
-rbi_older70 <- daily_older70 %>%
-  group_by(Stream_ID) %>%
-  arrange(Date) %>%
-  mutate(
-    dQ     = Q - lag(Q),
-    abs_dQ = abs(dQ)
-  ) %>%
-  filter(!is.na(abs_dQ)) %>%
-  summarise(
-    RBI_older70 = sum(abs_dQ, na.rm=TRUE) / sum(Q, na.rm=TRUE),
-    .groups = "drop"
-  )
+# helper: per-split RBI (per site) and RCS (slope of log(-dQ/dt) ~ log(Q))
+compute_split_metrics <- function(daily_df, siteyear_df, rbi_name, rcs_name) {
+  d <- daily_df %>%
+    dplyr::inner_join(siteyear_df %>% dplyr::select(Stream_ID, Year),
+                      by = c("Stream_ID","Year"))
+  
+  rbi <- d %>%
+    dplyr::group_by(Stream_ID) %>%
+    dplyr::arrange(Date, .by_group = TRUE) %>%
+    dplyr::mutate(dQ = Q - dplyr::lag(Q), abs_dQ = abs(dQ)) %>%
+    dplyr::filter(!is.na(abs_dQ)) %>%
+    dplyr::summarise("{rbi_name}" := sum(abs_dQ, na.rm = TRUE) / sum(Q, na.rm = TRUE),
+                     .groups = "drop")
+  
+  rec <- d %>%
+    dplyr::group_by(Stream_ID) %>%
+    dplyr::arrange(Date, .by_group = TRUE) %>%
+    dplyr::mutate(
+      dQ   = Q - dplyr::lag(Q),
+      dt   = as.numeric(Date - dplyr::lag(Date)),
+      dQdt = dplyr::if_else(is.na(dt) | dt == 0, NA_real_, dQ / dt),
+      ratio = Q / dplyr::lag(Q),
+      rneg  = -dQdt
+    ) %>%
+    dplyr::filter(is.finite(dQdt), ratio >= 0.7, dQ < 0, rneg > 0, Q > 0) %>%
+    dplyr::summarise(
+      n_days = dplyr::n(),
+      .slope = {
+        ok <- is.finite(rneg) & is.finite(Q) & Q > 0
+        if (sum(ok, na.rm = TRUE) >= 50 && dplyr::n_distinct(Q[ok]) > 1) {
+          tryCatch(unname(coef(stats::lm(log(rneg[ok]) ~ log(Q[ok])))[2]),
+                   error = function(e) NA_real_)
+        } else NA_real_
+      },
+      .groups = "drop"
+    ) %>%
+    dplyr::transmute(Stream_ID, "{rcs_name}" := .slope)
+  
+  dplyr::full_join(rbi, rec, by = "Stream_ID")
+}
 
-rec_older70 <- daily_older70 %>%
-  group_by(Stream_ID) %>%
-  arrange(Date) %>%
-  mutate(
-    dQ              = Q - lag(Q),
-    dQdt            = dQ / as.numeric(Date - lag(Date)),
-    ratio           = Q / lag(Q),
-    recession_slope = -dQdt
-  ) %>%
-  filter(!is.na(dQdt), ratio >= 0.7, dQ < 0, recession_slope > 0, Q > 0) %>%
-  summarise(
-    n_days        = n(),
-    slope_older70 = ifelse(
-      n_days >= 50,
-      tryCatch(coef(lm(log(recession_slope) ~ log(Q), data = cur_data()))[2],
-               error = function(e) NA_real_),
-      NA_real_
-    ),
-    .groups = "drop"
-  )
+# metrics per partition
+unseen10_metrics <- compute_split_metrics(daily_kalman, unseen10_df, "RBI_unseen10", "slope_unseen10")
+older70_metrics  <- compute_split_metrics(daily_kalman, older70,      "RBI_older70",  "slope_older70")
+recent30_metrics <- compute_split_metrics(daily_kalman, recent30,     "RBI_recent30", "slope_recent30")
 
-older70 <- older70 %>%
-  left_join(rbi_older70, by = "Stream_ID") %>%
-  left_join(rec_older70, by = "Stream_ID")
+# attach metrics to split rows (NOx/P already present) and export
+unseen10_out <- unseen10_df %>% dplyr::left_join(unseen10_metrics, by = "Stream_ID")
+older70_out  <- older70     %>% dplyr::left_join(older70_metrics,  by = "Stream_ID")
+recent30_out <- recent30    %>% dplyr::left_join(recent30_metrics, by = "Stream_ID")
 
-
-# --- b) recent30 split ------------------
-daily_recent30 <- daily_kalman %>%
-  inner_join(recent30 %>% select(Stream_ID, Year),
-             by = c("Stream_ID","Year"))
-
-rbi_recent30 <- daily_recent30 %>%
-  group_by(Stream_ID) %>%
-  arrange(Date) %>%
-  mutate(
-    dQ     = Q - lag(Q),
-    abs_dQ = abs(dQ)
-  ) %>%
-  filter(!is.na(abs_dQ)) %>%
-  summarise(
-    RBI_recent30 = sum(abs_dQ, na.rm=TRUE) / sum(Q, na.rm=TRUE),
-    .groups = "drop"
-  )
-
-rec_recent30 <- daily_recent30 %>%
-  group_by(Stream_ID) %>%
-  arrange(Date) %>%
-  mutate(
-    dQ              = Q - lag(Q),
-    dQdt            = dQ / as.numeric(Date - lag(Date)),
-    ratio           = Q / lag(Q),
-    recession_slope = -dQdt
-  ) %>%
-  filter(!is.na(dQdt), ratio >= 0.7, dQ < 0, recession_slope > 0, Q > 0) %>%
-  summarise(
-    n_days         = n(),
-    slope_recent30 = ifelse(
-      n_days >= 50,
-      tryCatch(coef(lm(log(recession_slope) ~ log(Q), data = cur_data()))[2],
-               error = function(e) NA_real_),
-      NA_real_
-    ),
-    .groups = "drop"
-  )
-
-recent30 <- recent30 %>%
-  left_join(rbi_recent30, by = "Stream_ID") %>%
-  left_join(rec_recent30, by = "Stream_ID")
-
-# #############################################################################
-# 10. Recalculate median NOx & P per 70/30 training/testing split
-# #############################################################################
+# Partition NOx/P medians 
 recalc_medians <- function(df) {
   df %>%
-    group_by(Stream_ID) %>%
-    summarise(
+    dplyr::group_by(Stream_ID) %>%
+    dplyr::summarise(
       NOx_med = median(NOx, na.rm=TRUE),
       P_med   = median(P,   na.rm=TRUE),
       .groups = "drop"
@@ -803,47 +736,40 @@ med_unseen10 <- recalc_medians(unseen10_df)
 med_older70  <- recalc_medians(older70)
 med_recent30 <- recalc_medians(recent30)
 
-# #############################################################################
-# Final sanity checks
-# #############################################################################
-# 1. Collapse discharge metrics to one row per site for each split
-rbi_older_summary <- older70 %>%
-  distinct(Stream_ID, RBI_older70)
 
-rbi_recent_summary <- recent30 %>%
-  distinct(Stream_ID, RBI_recent30)
-
-rec_older_summary <- older70 %>%
-  distinct(Stream_ID, slope_older70)
-
-rec_recent_summary <- recent30 %>%
-  distinct(Stream_ID, slope_recent30)
-
-# 2. Combine everything into a single dataframe
-time_split_checks <- med_older70 %>%
-  rename(NOx_med_older70 = NOx_med, P_med_older70 = P_med) %>%
-  full_join(
-    med_recent30 %>% rename(NOx_med_recent30 = NOx_med, P_med_recent30 = P_med),
+# Combine all subsets for each partition
+# Attach partition-specific NOx/P medians to each split output
+unseen10_out <- unseen10_out %>%
+  dplyr::left_join(
+    med_unseen10 %>% dplyr::rename(NOx_med_unseen10 = NOx_med,
+                                   P_med_unseen10   = P_med),
     by = "Stream_ID"
-  ) %>%
-  left_join(rbi_older_summary, by = "Stream_ID") %>%
-  left_join(rbi_recent_summary, by = "Stream_ID") %>%
-  left_join(rec_older_summary, by = "Stream_ID") %>%
-  left_join(rec_recent_summary, by = "Stream_ID") %>%
-  distinct(Stream_ID, .keep_all = TRUE)
-
-# 3. Preview the clean one-row-per-site summary
-print(time_split_checks)
-
-# 4. Count number of sites per subset
-counts_df <- tibble(
-  Subset    = c("Full", "Unseen10", "Older70", "Recent30"),
-  n_streams = c(
-    n_distinct(drivers_df$Stream_ID),
-    n_distinct(unseen10_df$Stream_ID),
-    n_distinct(older70$Stream_ID),
-    n_distinct(recent30$Stream_ID)
   )
-)
 
-# End of Script ----
+older70_out <- older70_out %>%
+  dplyr::left_join(
+    med_older70 %>% dplyr::rename(NOx_med_older70 = NOx_med,
+                                  P_med_older70   = P_med),
+    by = "Stream_ID"
+  )
+
+recent30_out <- recent30_out %>%
+  dplyr::left_join(
+    med_recent30 %>% dplyr::rename(NOx_med_recent30 = NOx_med,
+                                   P_med_recent30   = P_med),
+    by = "Stream_ID"
+  )
+
+# Now export with RBI/slope + split medians included
+write.csv(unseen10_out, "AllDrivers_cc_unseen10.csv", row.names = FALSE)
+write.csv(older70_out,  "AllDrivers_cc_older70.csv",  row.names = FALSE)
+write.csv(recent30_out, "AllDrivers_cc_recent30.csv", row.names = FALSE)
+
+
+# #############################################################################
+# 9. Export all partitions
+# #############################################################################
+
+write.csv(unseen10_out, "AllDrivers_unseen10.csv", row.names = FALSE)
+write.csv(older70_out,  "AllDrivers_older70.csv",  row.names = FALSE)
+write.csv(recent30_out, "AllDrivers_recent30.csv", row.names = FALSE)
