@@ -760,16 +760,9 @@ recent30_out <- recent30_out %>%
     by = "Stream_ID"
   )
 
-# Now export with RBI/slope + split medians included
-write.csv(unseen10_out, "AllDrivers_cc_unseen10.csv", row.names = FALSE)
-write.csv(older70_out,  "AllDrivers_cc_older70.csv",  row.names = FALSE)
-write.csv(recent30_out, "AllDrivers_cc_recent30.csv", row.names = FALSE)
-
-
 # #############################################################################
 # 9. Export all partitions
 # #############################################################################
-
 write.csv(unseen10_out, "AllDrivers_unseen10.csv", row.names = FALSE)
-write.csv(older70_out,  "AllDrivers_older70.csv",  row.names = FALSE)
-write.csv(recent30_out, "AllDrivers_recent30.csv", row.names = FALSE)
+write.csv(older70_out,  "AllDrivers_older70_split.csv",  row.names = FALSE)
+write.csv(recent30_out, "AllDrivers_recent30_split.csv", row.names = FALSE)
