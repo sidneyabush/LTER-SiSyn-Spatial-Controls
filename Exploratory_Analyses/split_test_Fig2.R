@@ -57,8 +57,8 @@ pred_FNConc  <- read.csv(file.path(fm, "Predictions_FNConc_split.csv"))
 pred_FNYield <- read.csv(file.path(fm, "Predictions_FNYield_split.csv"))
 load(file.path(fm, "FNConc_Yearly_shap_values_recent30_split.RData"));  SV_FN  <- shap_values_FNConc
 load(file.path(fm, "FNYield_Yearly_shap_values_recent30_split.RData")); SV_FY  <- shap_values_FNYield
-load(file.path(fm, "FNConc_Yearly_kept_drivers.RData_split"));  KD_FN  <- kept_drivers_FNConc
-load(file.path(fm, "FNYield_Yearly_kept_drivers.RData_split")); KD_FY  <- kept_drivers_FNYield
+load(file.path(fm, "FNConc_Yearly_kept_drivers_split.RData"));  KD_FN  <- kept_drivers_FNConc
+load(file.path(fm, "FNYield_Yearly_kept_drivers_split.RData")); KD_FY  <- kept_drivers_FNYield
 
 # 5. Recode & scale setup
 recode_map <- setNames(
