@@ -13,8 +13,19 @@
 #  8. basin_stream_id_conversions.csv
 #  9. DSi_LULC_filled_interpolated_Simple.csv
 # 10. converted_raw_NP.csv
-
-# Outputs produced by this code: 
+#
+# Outputs produced by this script:
+#  A) AllDrivers_Harmonized_Yearly_filtered_<record_length>_years.csv
+#     - Full per-year dataset after harmonization and QC (global RBI/RCS attached).
+#  B) AllDrivers_unseen10_not_split.csv
+#     - Spatial-only 10% holdout (unseen10), per-year rows.
+#     - Keeps global RBI/recession_slope and adds RBI_unseen10 / slope_unseen10.
+#  C) AllDrivers_older70_split.csv
+#     - Time-split training portion (older70), per-year rows.
+#     - Contains RBI/recession_slope RBI_older70 / recession_slope_older70
+#  D) AllDrivers_recent30_split.csv
+#     - Time-split test portion (recent30), per-year rows.
+#     - Contains RBI/recession_slope RBI_older30 / recession_slope_older30
 
 rm(list = ls())
 librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr, stringr, readr, corrplot)

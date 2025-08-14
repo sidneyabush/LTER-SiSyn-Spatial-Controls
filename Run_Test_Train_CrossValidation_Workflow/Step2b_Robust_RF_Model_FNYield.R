@@ -1,6 +1,6 @@
-# =============================================================================
-# Train RF for FNYield: older70 (training) → RF1 → stability → RF2 → predict on recent30 & unseen10
-# =============================================================================
+# #############################################################################
+# Train RF for FNYield: older70 (training),  RF1, stability, RF2, predict on recent30 & unseen10
+# #############################################################################
 
 # 0) Load packages & clear
 librarian::shelf(
@@ -143,14 +143,14 @@ df_train    <- load_split("AllDrivers_cc_older70.csv")
 df_recent30 <- load_split("AllDrivers_cc_recent30.csv")
 df_unseen10 <- load_split("AllDrivers_cc_unseen10.csv")
 
-# ──────────────────────────────────────────────────────────────────────────────
+
 # Define tree grid for RF1 & RF2
 tree_grid <- seq(100, 2000, by = 100)
-# ──────────────────────────────────────────────────────────────────────────────
 
-# =============================================================================
+
+# #############################################################################
 # a) RF1 tuning for FNYield
-# =============================================================================
+# #############################################################################
 df_tr_full <- df_train %>%
   drop_na(all_of(c("FNYield", predictors)))
 x1 <- df_tr_full[predictors]
@@ -180,9 +180,9 @@ imps_FNYield <- randomForest::importance(rf1)[, "%IncMSE"]
 save(rf1_FNYield, imps_FNYield,
      file = file.path(output_dir, "FNYield_RF1.RData"))
 
-# =============================================================================
+# #############################################################################
 # b) Stability selection
-# =============================================================================
+# #############################################################################
 imp_thr_FNYield  <- quantile(imps_FNYield, 0.50)
 freq_thr_FNYield <- 0.80
 
@@ -207,9 +207,9 @@ write.csv(
   row.names = FALSE
 )
 
-# =============================================================================
+# #############################################################################
 # c) RF2 tuning on selected features
-# =============================================================================
+# #############################################################################
 df2_FNYield <- df_train %>%
   drop_na(all_of(c("FNYield", feats_FNYield))) %>%
   select(FNYield, all_of(feats_FNYield))
@@ -241,9 +241,9 @@ save(rf2_FNYield, nt2_FNYield, mtry2_FNYield, feats_FNYield,
 save(rf2_FNYield, 
      file = file.path(output_dir, "FNYield_Yearly_rf_model2.RData"))
 
-# =============================================================================
+# #############################################################################
 # d) Export kept_drivers for SHAP
-# =============================================================================
+# #############################################################################
 kept_drivers_FNYield <- df_recent30 %>%
   drop_na(all_of(c("FNYield", feats_FNYield))) %>%
   select(all_of(feats_FNYield))
@@ -251,9 +251,9 @@ kept_drivers_FNYield <- df_recent30 %>%
 save(kept_drivers_FNYield,
      file = file.path(output_dir, "FNYield_Yearly_kept_drivers.RData"))
 
-# =============================================================================
+# #############################################################################
 # e) Diagnostics & plots
-# =============================================================================
+# #############################################################################
 save_correlation_plot(cor(df_train[predictors]), output_dir, "FNYield")
 save_rf_importance_plot(rf2_FNYield, output_dir, "FNYield")
 save_lm_plot(rf2_FNYield, df2_FNYield$FNYield, output_dir, "FNYield")
@@ -281,9 +281,9 @@ write.csv(pred_df_FNYield,
 
 save_rf2_all_subsets_plot(pred_df_FNYield, "FNYield", output_dir)
 
-# =============================================================================
+# #############################################################################
 # f) Save stability + importance summary (with header comment)
-# =============================================================================
+# #############################################################################
 stab_df <- tibble(
   variable  = names(stab_FNYield$frequencies),
   frequency = stab_FNYield$frequencies,
@@ -304,7 +304,7 @@ write.table(
   append    = TRUE
 )
 
-# =============================================================================
+# #############################################################################
 # g) Stop parallel backend
-# =============================================================================
+# #############################################################################
 parallel::stopCluster(cl)
