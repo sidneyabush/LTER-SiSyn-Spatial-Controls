@@ -1,34 +1,41 @@
 # #############################################################################
-# SHAP × LOESS Grids – recent30 Only – Figures 3, 4, and remaining in SI
+# Figures 3, 4, S4 and S5: SHAP and LOESS for Testing data (recent30) Only
 # #############################################################################
 
 rm(list = ls())
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
-# 1) Libraries
 librarian::shelf(
-  cowplot, ggplot2, dplyr, tibble, purrr, scales, readr, patchwork, tools
-)
+  cowplot, ggplot2, dplyr, tibble, purrr, scales, readr, patchwork, tools)
 
-# 2) Read recent30 split
+
+# #############################################################################
+# 1. Read recent30 split
+# #############################################################################
 recent30_df <- read_csv(
   "harmonization_files/AllDrivers_cc_recent30.csv",
   show_col_types = FALSE
 )
 
-# 3) Load recent30 SHAP values
+# #############################################################################
+# 2. Load recent30 SHAP values
+# #############################################################################
 load("Final_Models/FNConc_Yearly_shap_values_recent30.RData")    
 shap_FNConc  <- shap_values_FNConc
 load("Final_Models/FNYield_Yearly_shap_values_recent30.RData")  
 shap_FNYield <- shap_values_FNYield
 
-# 4) Extract responses & matching predictors
+# #############################################################################
+# 3. Extract responses & matching predictors
+# #############################################################################
 response_FNConc  <- recent30_df$FNConc
 response_FNYield <- recent30_df$FNYield
 X_FNConc  <- recent30_df[, colnames(shap_FNConc)]
 X_FNYield <- recent30_df[, colnames(shap_FNYield)]
 
-# 5) Recode map
+# #############################################################################
+# 4. Recode map
+# #############################################################################
 recode_map <- setNames(
   c("Log(N)","Log(P)","NPP","ET","Green-up day","Precip","Temp","Snow cover","Permafrost probability",
     "Elevation","Basin slope","RBI","RCS",
@@ -46,7 +53,7 @@ recode_map <- setNames(
     "rocks_metamorphic","rocks_plutonic")
 )
 
-# helper to build one panel 
+# helper function to build one panel 
 build_one_panel <- function(feat, shap_matrix, drivers_data, response, lims, recode_map) {
   df <- tibble(
     driver_value = drivers_data[[feat]],
@@ -104,7 +111,9 @@ build_one_panel <- function(feat, shap_matrix, drivers_data, response, lims, rec
   p
 }
 
-# 6) SI features grid function 
+# #############################################################################
+# 5. SI features grid function 
+# #############################################################################
 make_shap_loess_grid <- function(shap_matrix, drivers_data, response,
                                  units_expr, recode_map,
                                  verbose = FALSE) {
@@ -236,7 +245,7 @@ make_shap_loess_grid <- function(shap_matrix, drivers_data, response,
 }
 
 # #############################################################################
-# 11) Fig3: Concentration SHAP–LOESS grid (6 panels)
+# 6. Create Fig3: Concentration SHAP–LOESS grid (6 panels)
 # #############################################################################
 conc_feats3 <- c(
   "basin_slope", "recession_slope", "land_Water",
@@ -373,7 +382,7 @@ fig3_recent30 <- plot_grid(grid3, shared_leg3, ncol = 1, rel_heights = c(1, 0.1)
 
 
 # #############################################################################
-# 12) Fig4: Yield SHAP–LOESS grid 
+# 7. Create Fig4: Yield SHAP–LOESS grid 
 # #############################################################################
 yield_feats4 <- c("evapotrans","temp","recession_slope","land_Wetland_Marsh","npp","NOx")
 present4   <- intersect(yield_feats4, colnames(shap_FNYield))
@@ -502,7 +511,7 @@ grid4   <- plot_grid(
 fig4_recent30 <- plot_grid(grid4, shared_leg4, ncol = 1, rel_heights = c(1, 0.1))
 
 # #############################################################################
-# 13) SI Figs: remaining features
+# 8. Create SI Figs: remaining predictors not manually selected in Figs 3 & 4
 # #############################################################################
 other_conc <- setdiff(colnames(shap_FNConc), conc_feats3)
 figS_conc  <- make_shap_loess_grid(

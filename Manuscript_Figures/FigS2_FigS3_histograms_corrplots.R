@@ -1,10 +1,10 @@
 # #############################################################################
-# Prepare histogram input from split subsets
+# Fig S2: Create histograms for all data partitions
 # #############################################################################
 rm(list = ls())
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files")
 
-# Load libraries
+# Load libraries & theme
 librarian::shelf(dplyr, readr, tidyr, stringr, ggplot2, corrplot)
 
 theme_set(
@@ -19,7 +19,9 @@ theme_set(
     )
 )
 
-# Read split datasets
+# #############################################################################
+# 1. Read in and clean data
+# #############################################################################
 older70     <- read_csv("AllDrivers_cc_older70.csv", show_col_types = FALSE)     %>% mutate(subset = "Training")
 recent30    <- read_csv("AllDrivers_cc_recent30.csv", show_col_types = FALSE)    %>% mutate(subset = "Testing")
 unseen10_df <- read_csv("AllDrivers_cc_unseen10.csv", show_col_types = FALSE)    %>% mutate(subset = "Validation")
@@ -37,9 +39,7 @@ hist_long <- hist_input_df %>%
                names_to = "driver", values_to = "value") %>%
   mutate(value = if_else(driver %in% c("NOx", "P"), log10(value), value))
 
-# 5) Updated recode map
 recode_map <- setNames(
-  # pretty labels
   c(
     "Log(N)", "Log(P)", "NPP", "ET", "Green-up day", "Precip", "Temp",
     "Snow cover", "Permafrost probability", "Elevation", "Basin slope",
@@ -50,7 +50,6 @@ recode_map <- setNames(
     "Volcanic rock", "Sedimentary rock", "Carbonate-evaporite rock",
     "Metamorphic rock", "Plutonic rock"
   ),
-  # original variable names
   c(
     "NOx", "P", "npp", "evapotrans", "greenup_day", "precip", "temp",
     "snow_cover", "permafrost", "elevation", "basin_slope",
@@ -63,7 +62,7 @@ recode_map <- setNames(
   )
 )
 
-# 6) Driver ordering for facets
+# Driver ordering for facets
 driver_order <- unname(recode_map)
 
 
@@ -73,7 +72,9 @@ hist_long <- hist_long %>%
     driver = factor(driver, levels = driver_order)
   )
 
-# Create the plot object
+# #############################################################################
+# Histogram plotting
+# #############################################################################
 p <- ggplot(hist_long, aes(x = value, fill = subset)) +
   geom_histogram(position = "identity", alpha = 0.8, bins = 30) +
   facet_wrap(~ driver, scales = "free", ncol = 4) +
@@ -104,7 +105,7 @@ ggsave(
 )
 
 # #############################################################################
-# Save correlation plots for each subset 
+# FigS3: Correlation plots for each data partition (only training in final fig)
 # #############################################################################
 
 # Define variable subset to match the histogram drivers

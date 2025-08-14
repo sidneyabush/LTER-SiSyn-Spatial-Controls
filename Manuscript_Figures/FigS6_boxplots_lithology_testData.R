@@ -1,16 +1,16 @@
-# ----- Fig S6: Faceted 3x2 Boxplots with shared Y-axis -----
+# #############################################################################
+# Fig S6: Faceted 3x2 Boxplots showing driver distribution
+# #############################################################################
 
 rm(list = ls())
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 
-# 0. Load libraries
-library(ggplot2)
-library(dplyr)
-library(tidyr)
-library(scales)
-library(colorspace)
+librarian::shelf(ggplot2, dplyr, tidyr, scales, colorspace, quiet = TRUE)
 
+# #############################################################################
 # 1. Load & prep data
+# #############################################################################
+
 recent30 <- read.csv(
   "harmonization_files/AllDrivers_cc_recent30.csv",
   stringsAsFactors = FALSE
@@ -56,7 +56,9 @@ df <- recent30 %>%
   ) %>%
   mutate(across(where(is.numeric), ~ rescale(.x, to = c(0,1))))
 
+# #############################################################################
 # 2. Shared recode map (all features)
+# #############################################################################
 recode_map <- setNames(
   c(
     "Log(N)", "Log(P)", "NPP", "ET", "Green-up day", "Precip", "Temp",
@@ -76,12 +78,15 @@ recode_map <- setNames(
     "rocks_metamorphic", "rocks_plutonic"
   )
 )
-
+# #############################################################################
 # 3. Select only non-rock features for panels 1–23
+# #############################################################################
 feature_vars   <- names(recode_map)[1:23]
 feature_labels <- unname(recode_map)[1:23]
 
+# #############################################################################
 # 4. Melt to long & recode (drop rock columns)
+# #############################################################################
 df_long <- df %>%
   select(final_cluster, all_of(feature_vars)) %>%
   pivot_longer(
@@ -101,7 +106,9 @@ df_long <- df %>%
     )
   )
 
+# #############################################################################
 # 5. Precompute shading spans
+# #############################################################################
 span       <- function(lbl) which(feature_labels == lbl)
 prod_range <- c(span("Log(N)") - .5, span("Green-up day") + .5)
 clim_range <- c(span("Precip") - .5, span("Permafrost probability") + .5)
@@ -109,7 +116,9 @@ topo_range <- c(span("Elevation") - .5, span("Basin slope") + .5)
 disc_range <- c(span("RBI") - .5, span("RCS") + .5)
 lulc_range <- c(span("Bare land cover") - .5, span("Wetland cover") + .5)
 
+# #############################################################################
 # 6. Build the plot
+# #############################################################################
 p <- ggplot(df_long, aes(x = feature, y = scaled_value)) +
   # shaded background regions
   annotate("rect", xmin = prod_range[1], xmax = prod_range[2],
@@ -156,7 +165,9 @@ p <- ggplot(df_long, aes(x = feature, y = scaled_value)) +
   ) +
   facet_wrap(~ final_cluster, ncol = 3)
 
+# #############################################################################
 # 7. Save the figure
+# #############################################################################
 ggsave(
   filename = "Final_Figures/FigS6_Boxplots_lithology_testData.png",
   plot     = p,

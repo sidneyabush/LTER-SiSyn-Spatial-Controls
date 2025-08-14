@@ -2,17 +2,14 @@
 # Fig 5: weighted lithology SHAP bars 
 # #############################################################################
 
-library(ggplot2)
-library(dplyr)
-library(tidyr)
-library(patchwork)
-library(colorspace)
-library(scales) 
+rm(list = ls())
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
+
+librarian::shelf(ggplot2, dplyr, tidyr, patchwork, colorspace, scales, quiet = TRUE)
 
 # #############################################################################
 # 1. Paths & output
 # #############################################################################
-setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 fm <- "Final_Models"
 recent30_path <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files/AllDrivers_cc_recent30.csv"
 output_dir <- "Final_Figures"
@@ -30,7 +27,7 @@ load(file.path(fm, "FNYield_Yearly_shap_values_recent30.RData"))
 recent30 <- read.csv(recent30_path, stringsAsFactors = FALSE)
 
 # #############################################################################
-# 4. Recreate final_cluster (same logic as original)
+# 4. Recreate final_cluster 
 # #############################################################################
 site_clusters <- recent30 %>%
   distinct(Stream_ID, major_rock, rocks_volcanic, rocks_sedimentary,
@@ -60,7 +57,7 @@ recent30 <- recent30 %>%
 
 # 5. Sanity check: row counts
 if (nrow(recent30) != nrow(shap_values_FNConc) || nrow(recent30) != nrow(shap_values_FNYield)) {
-  warning("Row count mismatch between recent30 and SHAP objects. Ensure the SHAP values were computed on this exact recent30 split. If possible, align via an ID vector used during SHAP extraction.")
+  warning("Row count mismatch between recent30 and SHAP objects.")
 }
 
 # #############################################################################

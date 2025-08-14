@@ -1,8 +1,9 @@
 # #############################################################################
-# Load libraries and clear environment
+# Harmonize  drivers for use in downstream analyses (modeling, SHAP, plotting)
 # #############################################################################
-librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr, stringr, readr, corrplot)
+
 rm(list = ls())
+librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr, stringr, readr, corrplot)
 
 # Define record length
 record_length <- 5
@@ -10,17 +11,30 @@ record_length <- 5
 # Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files")
 
+# Required CSV inputs:
+#  1. Full_Results_WRTDS_kalman_annual_filtered.csv
+#  2. wrtds_kalman_annual_CatalinaJemez.csv
+#  3. Full_Results_WRTDS_kalman_daily_filtered.csv
+#  4. WRTDS-input_discharge.csv
+#  5. Koeppen_Geiger_2.csv
+#  6. all-data_si-extract_2_20250325.csv
+#  7. Krycklan_basin_slopes.csv
+#  8. DSi_Basin_Slope_missing_sites.csv
+#  9. basin_stream_id_conversions.csv
+# 10. DSi_LULC_filled_interpolated_Simple.csv
+# 11. converted_raw_NP.csv
+
 # helper to clean up Stream_ID formatting
 standardize_stream_id <- function(df) {
   df %>%
     mutate(
-      Stream_ID = str_trim(Stream_ID),               # remove leading/trailing spaces
-      Stream_ID = str_replace_all(Stream_ID, "\\s+", " ")  # collapse multiple spaces
+      Stream_ID = str_trim(Stream_ID),               
+      Stream_ID = str_replace_all(Stream_ID, "\\s+", " ")  
     )
 }
 
 # #############################################################################
-# 1) Read in & tidy WRTDS DSi results
+# 1. Read in & tidy WRTDS DSi results
 # #############################################################################
 wrtds_df <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv", stringsAsFactors = FALSE) %>%
   rename(LTER = LTER.x) %>%
@@ -69,7 +83,7 @@ wrtds_df <- wrtds_df %>%
   filter(Stream_ID %in% site_year_counts$Stream_ID)
 
 # #############################################################################
-# 2) Calculate Yields
+# 2. Calculate Yields
 # #############################################################################
 yields <- wrtds_df %>%
   mutate(
@@ -85,7 +99,7 @@ tot <- wrtds_df %>%
   rename_with(~str_remove(., "\\.x$"))
 
 # #############################################################################
-# 3) Discharge Metrics: Calculate Flashiness (RBI) and Recession Curve Slope
+# 3. Discharge Metrics: Calculate Flashiness (RBI) and Recession-curve Slope
 # #############################################################################
 cols_needed <- c("LTER.x", "Stream_Name", "Date", "Q")
 daily_kalman <- read_csv("Full_Results_WRTDS_kalman_daily_filtered.csv", 
@@ -126,9 +140,7 @@ daily_kalman <- bind_rows(
 ) %>%
   arrange(Stream_ID, Date)  
 
-# #############################################################################
-# 2. Calculate Daily Differences and Identify Recession Days
-# #############################################################################
+# Calculate Daily Differences and Identify Recession Days
 Q_diff <- daily_kalman %>%
   dplyr::arrange(Stream_ID, Date) %>%
   dplyr::group_by(Stream_ID) %>%
@@ -144,9 +156,7 @@ recession_data <- Q_diff %>%
   dplyr::filter(dQ < 0) %>%  # Keep only recession periods
   dplyr::mutate(recession_slope = -dQ_dt)  # Make it positive for the slope
 
-# #############################################################################
 # 3. Compute Aggregate Recession Slope per Stream
-# #############################################################################
 # For each stream, if there are at least 50 recession days, fit a linear model (recession_slope ~ Q)
 # and extract the slope coefficient.
 recession_slopes <- recession_data %>%
@@ -189,7 +199,7 @@ tot <- tot %>%
   )
 
 # #############################################################################
-# 4) Merge Köppen–Geiger Classification
+# 4. Merge Köppen–Geiger Classification
 # #############################################################################
 KG <- read.csv("Koeppen_Geiger_2.csv") %>%
   mutate(
@@ -208,10 +218,10 @@ tot <- left_join(tot, KG, by="Stream_ID") %>%
   rename_with(~str_remove(., "\\.y$"))
 
 # #############################################################################
-# 5) Spatial Drivers + Basin Slope Gap-Fill
+# 5. Spatial Drivers + Basin Slope Gap-Fill
 # #############################################################################
 
-# a) read & tidy raw spatial‐drivers sheet
+# a) read & tidy raw spatial‐drivers - from Lyon et al., spatial drivers output
 si_drivers <- read.csv("all-data_si-extract_2_20250325.csv",
                        stringsAsFactors = FALSE) %>%
   dplyr::select(-contains("soil"), -contains("cycle1")) %>%
@@ -229,7 +239,7 @@ si_drivers <- read.csv("all-data_si-extract_2_20250325.csv",
 # clean up Stream_ID text
 si_drivers <- standardize_stream_id(si_drivers)
 
-# b) convert any greenup_ dates → day-of-year
+# b) convert any green-up dates to day-of-year
 gcols <- grep("greenup_", names(si_drivers), value = TRUE)
 si_drivers[gcols] <- lapply(si_drivers[gcols], function(x) {
   as.numeric(format(as.Date(x, "%Y-%m-%d"), "%j"))
@@ -378,10 +388,11 @@ tot <- tot[!is.na(major_rock) &
              major_rock != "0"]
 
 # #############################################################################
-# 9) Land Cover + N/P gap-fill
+# 6. Land Cover + N/P gap-fill
 # #############################################################################
 # — First, land cover as before:
-# (remove any existing land_*, major_land columns)
+# remove any existing land_*, major_land columns from old spatial extractions
+# we now have annual data which will tell us if % land cover of watersheds is changing through time
 tot <- tot %>% select(-starts_with("land_"), -any_of("major_land"))
 
 lulc <- read.csv("DSi_LULC_filled_interpolated_Simple.csv", stringsAsFactors = FALSE) %>%
@@ -425,7 +436,7 @@ tot <- tot %>% left_join(lulc_wide, by = c("Stream_Name","Year")) %>%
   mutate(across(where(is.list), ~ sapply(., paste, collapse = ",")))
 
 
-# — Now the unified N/P gap-fill:
+# Now N/P gap-fill:
 
 # 1) Read & bind WRTDS (filtered) + CJ NP
 wrtds_NP <- read.csv("Full_Results_WRTDS_kalman_annual_filtered.csv",
@@ -513,7 +524,7 @@ tot <- tot %>% left_join(combined_NP, by = c("Stream_ID","Year"))
 stopifnot(all(c("P","NOx") %in% names(tot)))
 
 # #############################################################################
-# 10) Final Export tot_si 
+# 7) Export tot_si 
 # #############################################################################
 # Tidy data for export: 
 tot_si <- tot %>%
@@ -535,13 +546,6 @@ tot_si <- tot %>%
     snow_cover = replace_na(snow_cover, 0)
   )
 
-# Verify the number of unique Stream_IDs
-num_unique_stream_ids <- tot_si %>%
-  pull(Stream_ID) %>%
-  n_distinct()
-
-print(num_unique_stream_ids)
-
 # Convert numeric columns to numeric
 tot_annual <- tot_si %>%
   distinct(Stream_ID, Year, .keep_all = TRUE)  %>% 
@@ -550,13 +554,6 @@ tot_annual <- tot_si %>%
                   greenup_day, permafrost, elevation, basin_slope, 
                   FNConc, FNYield, GenConc, GenYield), 
                 as.numeric))
-
-# Count the number of unique Stream_IDs
-num_unique_stream_ids <- tot_annual %>%
-  pull(Stream_ID) %>%
-  n_distinct()
-
-print(num_unique_stream_ids)
 
 drivers_df <- tot_annual %>%
   # Convert blank strings to NA in all character columns
@@ -567,136 +564,8 @@ drivers_df <- tot_annual %>%
   filter(FNConc >= 0.5 * GenConc & FNConc <= 1.5 * GenConc) %>%
   filter(complete.cases(.))
 
-# Count the number of unique Stream_IDs
-num_unique_stream_ids <- drivers_df %>%
-  pull(Stream_ID) %>%
-  n_distinct()
-
-print(num_unique_stream_ids)
-
 # #############################################################################
-# FINAL-CONTEXT DIAGNOSTICS (percent of ALL obs removed by ±50% rule,
-# and how many FINAL true sites removed by that rule)
-# #############################################################################
-stopifnot(exists("tot_annual"))
-
-# helper: apply outlier screens WITHOUT the 50% rule
-apply_outliers_only <- function(df, sd_val = 5) {
-  FN_m <- mean(df$FNConc, na.rm=TRUE); FN_sd <- sd(df$FNConc, na.rm=TRUE)
-  df <- df %>% dplyr::filter(dplyr::between(FNConc, FN_m - sd_val*FN_sd, FN_m + sd_val*FN_sd))
-  FY_m <- mean(df$FNYield, na.rm=TRUE); FY_sd <- sd(df$FNYield, na.rm=TRUE)
-  df %>% dplyr::filter(dplyr::between(FNYield, FY_m - sd_val*FY_sd, FY_m + sd_val*FY_sd))
-}
-
-# build denominator AFTER outliers ONLY, BEFORE the ±50% rule
-pre50_base <- tot_annual %>%
-  dplyr::distinct(Stream_ID, Year, .keep_all = TRUE) %>%
-  dplyr::mutate(across(where(is.character), ~ na_if(., ""))) %>%
-  dplyr::select(FNConc, everything()) %>%
-  dplyr::mutate_at(vars(24:38), ~ replace(., is.na(.), 0)) %>%
-  dplyr::filter(complete.cases(.)) %>%
-  dplyr::mutate(FNConc = as.numeric(FNConc),
-                GenConc = as.numeric(GenConc),
-                FNYield = as.numeric(FNYield)) %>%
-  dplyr::filter(is.finite(FNConc), is.finite(GenConc), is.finite(FNYield),
-                FNConc > 0, GenConc > 0) %>%
-  apply_outliers_only()
-
-# 1) Percent of ALL observations removed by ±50% rule (final context = after OUTLIERS only)
-total_obs_final_context <- nrow(pre50_base)
-fail_mask_50 <- !(pre50_base$FNConc >= 0.5*pre50_base$GenConc &
-                    pre50_base$FNConc <= 1.5*pre50_base$GenConc)
-removed_obs_final_context <- sum(fail_mask_50)
-pct_removed_50_final_context <- 100 * removed_obs_final_context / total_obs_final_context
-
-cat(sprintf("[50%% rule | ALL obs AFTER OUTLIERS ONLY] total=%d | removed=%d | pct_removed=%.1f%%\n",
-            total_obs_final_context, removed_obs_final_context, pct_removed_50_final_context))
-
-# 2) Number of FINAL true sites removed by the ±50% rule
-final_sites_no50 <- pre50_base %>%
-  dplyr::group_by(Stream_ID) %>%
-  dplyr::filter(dplyr::n_distinct(Year) >= 5) %>%
-  dplyr::ungroup()
-
-final_sites_with50 <- pre50_base %>%
-  dplyr::filter(FNConc >= 0.5*GenConc, FNConc <= 1.5*GenConc) %>%
-  dplyr::group_by(Stream_ID) %>%
-  dplyr::filter(dplyr::n_distinct(Year) >= 5) %>%
-  dplyr::ungroup()
-
-sites_removed_by_50 <- setdiff(unique(final_sites_no50$Stream_ID),
-                               unique(final_sites_with50$Stream_ID))
-
-cat(sprintf("[50%% rule | FINAL true sites] without_50=%d | with_50=%d | removed_by_50=%d\n",
-            dplyr::n_distinct(final_sites_no50$Stream_ID),
-            dplyr::n_distinct(final_sites_with50$Stream_ID),
-            length(sites_removed_by_50)))
-
-# --- DIAGNOSTIC: How many observations are dropped by the outlier removal step? ---
-# Context: drivers_df has already passed the ±50% FNConc:GenConc rule and complete.cases()
-
-stopifnot(exists("drivers_df"))
-
-sd_val <- if (exists("SD_val")) SD_val else 5  # default to 5 if not defined
-
-drivers_pre_outlier <- drivers_df           # snapshot before outlier screens
-n0 <- nrow(drivers_pre_outlier)
-
-## Step 1: FNConc outlier screen (± sd_val * SD), thresholds computed on pre-outlier pool
-FNConc_mean0 <- mean(drivers_pre_outlier$FNConc, na.rm = TRUE)
-FNConc_sd0   <- sd(  drivers_pre_outlier$FNConc, na.rm = TRUE)
-
-if (is.finite(FNConc_sd0) && FNConc_sd0 > 0) {
-  FNConc_lower <- FNConc_mean0 - sd_val * FNConc_sd0
-  FNConc_upper <- FNConc_mean0 + sd_val * FNConc_sd0
-  fn_out_mask  <- !(drivers_pre_outlier$FNConc >= FNConc_lower &
-                      drivers_pre_outlier$FNConc <= FNConc_upper)
-  drop_FN <- sum(fn_out_mask, na.rm = TRUE)
-  drivers_after_FN <- drivers_pre_outlier[!fn_out_mask, , drop = FALSE]
-} else {
-  # degenerate SD (all equal or NA) -> nothing to drop
-  FNConc_lower <- NA; FNConc_upper <- NA
-  drop_FN <- 0
-  drivers_after_FN <- drivers_pre_outlier
-}
-n1 <- nrow(drivers_after_FN)
-
-## Step 2: FNYield outlier screen (± sd_val * SD), thresholds computed AFTER FNConc removal
-FNYield_mean1 <- mean(drivers_after_FN$FNYield, na.rm = TRUE)
-FNYield_sd1   <- sd(  drivers_after_FN$FNYield, na.rm = TRUE)
-
-if (is.finite(FNYield_sd1) && FNYield_sd1 > 0) {
-  FNYield_lower <- FNYield_mean1 - sd_val * FNYield_sd1
-  FNYield_upper <- FNYield_mean1 + sd_val * FNYield_sd1
-  fy_out_mask   <- !(drivers_after_FN$FNYield >= FNYield_lower &
-                       drivers_after_FN$FNYield <= FNYield_upper)
-  drop_FY <- sum(fy_out_mask, na.rm = TRUE)
-  drivers_after_outliers <- drivers_after_FN[!fy_out_mask, , drop = FALSE]
-} else {
-  FNYield_lower <- NA; FNYield_upper <- NA
-  drop_FY <- 0
-  drivers_after_outliers <- drivers_after_FN
-}
-n2 <- nrow(drivers_after_outliers)
-
-## Prints
-cat(sprintf("[Outliers | FNConc] mean=%.3f sd=%.3f lo=%.3f hi=%.3f | dropped=%d (%.2f%% of %d) | kept=%d\n",
-            FNConc_mean0, FNConc_sd0, FNConc_lower, FNConc_upper, drop_FN, 100*drop_FN/n0, n0, n1))
-cat(sprintf("[Outliers | FNYield] mean=%.3f sd=%.3f lo=%.3f hi=%.3f | dropped=%d (%.2f%% of %d) | kept=%d\n",
-            FNYield_mean1, FNYield_sd1, FNYield_lower, FNYield_upper, drop_FY, 100*drop_FY/n1, n1, n2))
-cat(sprintf("[Outliers | TOTAL] dropped=%d (%.2f%% of %d) | remain=%d\n",
-            n0 - n2, 100*(n0 - n2)/n0, n0, n2))
-
-# Sites lost by outliers alone (before ≥5-year rule)
-sites_pre  <- dplyr::n_distinct(drivers_pre_outlier$Stream_ID)
-sites_post <- dplyr::n_distinct(drivers_after_outliers$Stream_ID)
-cat(sprintf("[Outliers | SITES] pre=%d | post=%d | lost_by_outliers=%d\n",
-            sites_pre, sites_post, sites_pre - sites_post))
-
-
-
-# #############################################################################
-# ---- Remove Outliers for FNConc (5 SD Rule) ----
+# Remove Outliers for FNConc (5 SD Rule)
 # #############################################################################
 FNConc_mean <- mean(drivers_df$FNConc, na.rm = TRUE)
 SD_val <- 5
@@ -734,28 +603,14 @@ unique(filtered_streams_FNYield$Stream_ID)
 drivers_df <- drivers_df %>%
   filter(FNYield >= FNYield_lower & FNYield <= FNYield_upper)
 
-# Count the number of unique Stream_IDs before removing it
-unique_stream_id_count <- drivers_df %>%
-  summarise(unique_count = n_distinct(Stream_ID)) %>%
-  pull(unique_count)
-
-print(unique_stream_id_count)
-
 # Remove sites (Stream_IDs) that have fewer than 5 unique years of data
 drivers_df <- drivers_df %>%
   group_by(Stream_ID) %>%
   filter(n_distinct(Year) >= 5) %>%
   ungroup() 
 
-# Count the number of unique Stream_IDs after filtering
-unique_stream_id_count <- drivers_df %>%
-  summarise(unique_count = n_distinct(Stream_ID)) %>%
-  pull(unique_count)
-
-print(unique_stream_id_count)
-
 # #############################################################################
-# N & P substitutions in the FINAL dataset (after ±50% + outliers + ≥5 yrs)
+# Count N & P substitutions in the FINAL dataset (after ±50% + outliers + ≥5 yrs)
 # #############################################################################
 stopifnot(exists("combined_NP"))
 
@@ -787,7 +642,7 @@ write.csv(
 )
 
 # #############################################################################
-# 11) Stratified Split by final_cluster
+# 8. Stratified Split by final_cluster
 # #############################################################################
 site_clusters <- drivers_df %>%
   distinct(Stream_ID,major_rock,rocks_volcanic,rocks_sedimentary,
@@ -836,12 +691,8 @@ older70 <- trainval_split %>% filter(split=="older")  %>%
 recent30 <- trainval_split %>% filter(split=="recent") %>% 
   dplyr::select(-tot_count,-n_recent,-idx,-split)
 
-write.csv(unseen10_df,"AllDrivers_cc_unseen10.csv",row.names=FALSE)
-write.csv(older70,     "AllDrivers_cc_older70.csv", row.names=FALSE)
-write.csv(recent30,    "AllDrivers_cc_recent30.csv",row.names=FALSE)
-
 # #############################################################################
-# 11) Compute 70/30 split–specific RBI & recession slope
+# 9. Compute 70/30 split–specific RBI & recession slope
 # #############################################################################
 # Create a Year column: 
 daily_kalman <- daily_kalman %>%
@@ -935,7 +786,7 @@ recent30 <- recent30 %>%
   left_join(rec_recent30, by = "Stream_ID")
 
 # #############################################################################
-# 12) Recalculate median NOx & P per 70/30 training/testing split
+# 10. Recalculate median NOx & P per 70/30 training/testing split
 # #############################################################################
 recalc_medians <- function(df) {
   df %>%
@@ -953,9 +804,8 @@ med_older70  <- recalc_medians(older70)
 med_recent30 <- recalc_medians(recent30)
 
 # #############################################################################
-# Quick sanity checks
+# Final sanity checks
 # #############################################################################
-
 # 1. Collapse discharge metrics to one row per site for each split
 rbi_older_summary <- older70 %>%
   distinct(Stream_ID, RBI_older70)
@@ -996,68 +846,4 @@ counts_df <- tibble(
   )
 )
 
-print(counts_df)
-print(unique(drivers_df$Stream_ID))
-
-# #############################################################################
-# Quick summary stats: FNConc & FNYield (Full + Unseen10/Older70/Recent30)
-# #############################################################################
-summarize_FN_FY <- function(df, label) {
-  df %>%
-    summarise(
-      n_obs     = sum(is.finite(FNConc) & is.finite(FNYield)),
-      n_streams = n_distinct(Stream_ID),
-      across(
-        c(FNConc, FNYield),
-        list(
-          mean   = ~ mean(., na.rm = TRUE),
-          sd     = ~ sd(., na.rm = TRUE),
-          median = ~ median(., na.rm = TRUE),
-          p05    = ~ quantile(., 0.05, na.rm = TRUE),
-          p25    = ~ quantile(., 0.25, na.rm = TRUE),
-          p75    = ~ quantile(., 0.75, na.rm = TRUE),
-          p95    = ~ quantile(., 0.95, na.rm = TRUE),
-          min    = ~ min(., na.rm = TRUE),
-          max    = ~ max(., na.rm = TRUE)
-        ),
-        .names = "{.col}_{.fn}"
-      )
-    ) %>%
-    mutate(Subset = label, .before = 1)
-}
-
-summary_FN_FY <- bind_rows(
-  summarize_FN_FY(drivers_df, "Full (final)"),
-  summarize_FN_FY(unseen10_df, "Unseen10"),
-  summarize_FN_FY(older70,     "Older70"),
-  summarize_FN_FY(recent30,    "Recent30")
-) %>%
-  relocate(Subset, n_obs, n_streams)
-
-print(summary_FN_FY)
-
-write.csv(summary_FN_FY, "Summary_FNConc_FNYield_by_subset.csv", row.names = FALSE)
-
-# --- Sites per lithology (final_cluster) ---
-rock_counts_sites <- drivers_df %>%
-  distinct(Stream_ID) %>%
-  left_join(site_clusters, by = "Stream_ID") %>%
-  count(final_cluster, name = "n_sites") %>%
-  mutate(pct_sites = round(100 * n_sites / sum(n_sites), 1)) %>%
-  arrange(desc(n_sites))
-
-print(rock_counts_sites)
-
-# --- Site-years per lithology ---
-rock_counts_siteyears <- drivers_df %>%
-  left_join(site_clusters, by = "Stream_ID") %>%
-  count(final_cluster, name = "n_siteyears") %>%
-  mutate(pct_siteyears = round(100 * n_siteyears / sum(n_siteyears), 1)) %>%
-  arrange(desc(n_siteyears))
-
-print(rock_counts_siteyears)
-
-write.csv(rock_counts_sites,      "Counts_sites_by_lithology.csv", row.names = FALSE)
-write.csv(rock_counts_siteyears,  "Counts_siteyears_by_lithology.csv", row.names = FALSE)
-
-
+# End of Script ----
