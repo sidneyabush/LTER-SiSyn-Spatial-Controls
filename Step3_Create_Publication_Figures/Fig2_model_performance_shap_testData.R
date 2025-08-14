@@ -218,9 +218,9 @@ A <- ggplot(pred_FNConc, aes(predicted, observed)) +
     y = expression(paste("Observed (", mg~L^{-1}, ")")),
     title = "Concentration", tag = "A"
   ) +
-  scale_y_continuous(limits = c(0, 20), expand = expansion(mult = c(0.03, 0.2))) +
-  # scale_x_continuous(expand = expansion(mult = c(0.03, 0.2))) +
+  scale_x_continuous(expand = expansion(mult = c(0.03, 0.2))) +
   scale_y_continuous(expand = expansion(mult = c(0.02, 0.02))) +
+  coord_cartesian(ylim = c(0, 20)) +
   theme(plot.margin = unit(c(5, 5, 5, 0), "pt"))
 
 ## B: Yield
