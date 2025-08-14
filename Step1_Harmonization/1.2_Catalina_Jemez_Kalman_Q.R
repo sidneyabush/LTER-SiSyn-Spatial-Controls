@@ -1,8 +1,28 @@
+# #############################################################################
+# Catalina–Jemez WRTDS-Kalman assembly + daily Q subset
+# #############################################################################
+# Required inputs:
+#   1) Catalina Jemez annual CSV files in working directory
+#      - Filename pattern: ^Catalina Jemez.*\\.csv$
+#      - Filenames encode analyte (NO3, DSi, P) and stream (e.g., OR_low, MG_WEIR)
+#      - Expected columns: DecYear, Q, FNConc, FNFlux, GenConc, GenFlux
+#   2) WRTDS-input_discharge.csv
+#      - Expected columns: Date (YYYY-MM-DD), Stream_ID, Q; optional 'indicate'
+#
+# Outputs:
+#   A) wrtds_kalman_annual_CatalinaJemez.csv
+#      - Columns: LTER, Stream_Name, chemical, DecYear, Q, FNConc, FNFlux,
+#                 GenConc, GenFlux, drainSqKm, Stream_ID, Year
+#   B) daily_Q_CatalinaJemez.csv
+#      - Daily discharge subset for Stream_ID {"Catalina Jemez__OR_low",
+#                                             "Catalina Jemez__OR_WEIR"}
+# #############################################################################
+
 library(data.table)
 library(stringr)
 
 # 1. set your wd
-setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files")
 
 # 2. list only the Catalina Jemez CSVs
 files <- list.files(
@@ -58,6 +78,3 @@ daily_Q <- read.csv("WRTDS-input_discharge.csv", stringsAsFactors = FALSE) %>%
   dplyr::select(-indicate)
 
 write_csv(daily_Q, "daily_Q_CatalinaJemez.csv")
-
-
-    

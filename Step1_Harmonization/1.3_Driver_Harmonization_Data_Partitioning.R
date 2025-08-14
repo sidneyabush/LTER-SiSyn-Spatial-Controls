@@ -36,7 +36,6 @@ record_length <- 5
 # Set working directory
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files")
 
-
 # helper to clean up Stream_ID formatting
 standardize_stream_id <- function(df) {
   df %>%

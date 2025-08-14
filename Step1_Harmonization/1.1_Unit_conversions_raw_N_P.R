@@ -1,12 +1,30 @@
+# #############################################################################
+# Unit conversion from raw N and P data to mg/L to match non-flow-normalized data
+# #############################################################################
+# Required CSV inputs:
+#   1) 20241003_masterdata_chem.csv
+#      - Expected columns: LTER, Stream_Name, variable, value, date (YYYY-MM-DD)
+#      - Variables used: NOx, NO3, SRP, PO4
+#
+# Outputs produced by this script:
+#   A) converted_raw_NP.csv
+#      - Tidy N and P concentrations with value_converted in mg/L
+#      - Includes: LTER, Stream_Name, Stream_ID, variable, date, value, conversion factors
+#      - Filtered to dates 2001-01-01 through 2023-12-31
+#      - Only includes LTER's listed in the conversion lookup
+# #############################################################################
+
 # Load needed libraries
 librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr, stringr, readr, tibble)
 
 # Clear environment
 rm(list = ls())
 
-# -----------------------------------------------------------
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files")
+
+# #############################################################################
 # Read in and Tidy Data
-# -----------------------------------------------------------
+# #############################################################################
 raw_NP <- read.csv("20241003_masterdata_chem.csv") %>%
   filter(variable %in% c("NOx", "NO3", "SRP", "PO4")) %>%
   mutate(date = as.Date(date, format = "%Y-%m-%d")) %>%
@@ -45,12 +63,11 @@ conversion_lookup <- tribble(
   "NIVA",                         62,              31
 )
 
-
 # Filter raw_NP to only include the listed LTER's
 raw_NP <- raw_NP %>%
   filter(LTER %in% c("AND", "Australia", "MD", "Krycklan", "UMR", "UK",
-                               "USGS", "NWT", "LUQ", "GRO", "HBR", "KRR",
-                               "Finnish Environmental Institute", "NIVA"))
+                     "USGS", "NWT", "LUQ", "GRO", "HBR", "KRR",
+                     "Finnish Environmental Institute", "NIVA"))
 
 # Join the raw data with the conversion lookup table based on LTER
 raw_NP <- raw_NP %>%
