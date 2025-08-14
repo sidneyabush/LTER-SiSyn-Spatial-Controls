@@ -273,55 +273,55 @@ kept_drivers_FNConc <- df_recent30 %>%
 # #############################################################################
 # e) Diagnostics & plots
 # #############################################################################
-save_correlation_plot(cor(df_train[predictors]), output_dir, "FNConc")
-save_rf_importance_plot(rf2_FNConc, output_dir, "FNConc")
-save_lm_plot(rf2_FNConc, df2_FNConc$FNConc, output_dir, "FNConc")
-
-pred_list_FNConc <- list(
-  older70 = tibble(subset   = "older70",
-                   observed = df2_FNConc$FNConc,
-                   predicted= predict(rf2_FNConc, df2_FNConc)),
-  recent30 = tibble(subset   = "recent30",
-                    observed = df_recent30$FNConc,
-                    predicted= predict(rf2_FNConc,
-                                       df_recent30 %>%
-                                         drop_na(all_of(c("FNConc", feats_FNConc))))),
-  unseen10 = tibble(subset   = "unseen10",
-                    observed = df_unseen10$FNConc,
-                    predicted= predict(rf2_FNConc,
-                                       df_unseen10 %>%
-                                         drop_na(all_of(c("FNConc", feats_FNConc)))))
-)
-pred_df_FNConc <- bind_rows(pred_list_FNConc)
-
-write.csv(pred_df_FNConc,
-          file      = file.path(output_dir, "Predictions_FNConc.csv"),
-          row.names = FALSE)
-
-save_rf2_all_subsets_plot(pred_df_FNConc, "FNConc", output_dir)
-
-# #############################################################################
-# f) Save stability + importance summary (with header comment)
-# #############################################################################
-stab_df <- tibble(
-  variable  = names(stab_FNConc$frequencies),
-  frequency = stab_FNConc$frequencies,
-  incMSE    = imps_FNConc[names(stab_FNConc$frequencies)],
-  selected  = names(stab_FNConc$frequencies) %in% feats_FNConc
-)
-
-stab_out <- file.path(output_dir, "FNConc_08_Feature_Stability_and_medianImportance.csv")
-writeLines(
-  sprintf("# Importance threshold (median %%IncMSE from RF1) = %.5f", imp_thr_FNConc),
-  con = stab_out
-)
-write.table(
-  stab_df,
-  file      = stab_out,
-  sep       = ",",
-  row.names = FALSE,
-  append    = TRUE
-)
+# save_correlation_plot(cor(df_train[predictors]), output_dir, "FNConc")
+# save_rf_importance_plot(rf2_FNConc, output_dir, "FNConc")
+# save_lm_plot(rf2_FNConc, df2_FNConc$FNConc, output_dir, "FNConc")
+# 
+# pred_list_FNConc <- list(
+#   older70 = tibble(subset   = "older70",
+#                    observed = df2_FNConc$FNConc,
+#                    predicted= predict(rf2_FNConc, df2_FNConc)),
+#   recent30 = tibble(subset   = "recent30",
+#                     observed = df_recent30$FNConc,
+#                     predicted= predict(rf2_FNConc,
+#                                        df_recent30 %>%
+#                                          drop_na(all_of(c("FNConc", feats_FNConc))))),
+#   unseen10 = tibble(subset   = "unseen10",
+#                     observed = df_unseen10$FNConc,
+#                     predicted= predict(rf2_FNConc,
+#                                        df_unseen10 %>%
+#                                          drop_na(all_of(c("FNConc", feats_FNConc)))))
+# )
+# pred_df_FNConc <- bind_rows(pred_list_FNConc)
+# 
+# write.csv(pred_df_FNConc,
+#           file      = file.path(output_dir, "Predictions_FNConc.csv"),
+#           row.names = FALSE)
+# 
+# save_rf2_all_subsets_plot(pred_df_FNConc, "FNConc", output_dir)
+# 
+# # #############################################################################
+# # f) Save stability + importance summary (with header comment)
+# # #############################################################################
+# stab_df <- tibble(
+#   variable  = names(stab_FNConc$frequencies),
+#   frequency = stab_FNConc$frequencies,
+#   incMSE    = imps_FNConc[names(stab_FNConc$frequencies)],
+#   selected  = names(stab_FNConc$frequencies) %in% feats_FNConc
+# )
+# 
+# stab_out <- file.path(output_dir, "FNConc_08_Feature_Stability_and_medianImportance.csv")
+# writeLines(
+#   sprintf("# Importance threshold (median %%IncMSE from RF1) = %.5f", imp_thr_FNConc),
+#   con = stab_out
+# )
+# write.table(
+#   stab_df,
+#   file      = stab_out,
+#   sep       = ",",
+#   row.names = FALSE,
+#   append    = TRUE
+# )
 
 # #############################################################################
 # g) Stop parallel backend
