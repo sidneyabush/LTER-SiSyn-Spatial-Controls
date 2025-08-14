@@ -1,16 +1,15 @@
-# #########################################################
-# Create final map plot using the testing data only
-# #########################################################
+# #############################################################################
+# Create final map plot 
+# #############################################################################
+rm(list = ls())
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files")
 
 librarian::shelf(dplyr, stringr, ggplot2, maps, patchwork, scales, colorspace, ggrepel, 
                  ggspatial, sf, ggpubr, cowplot)
 
-
-# --------------------------------------------------
-# 1) Data Preparation  
-# --------------------------------------------------
-setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files")
-rm(list = ls())
+# #############################################################################
+# 1. Data Preparation  
+# #############################################################################
 
 # 1a) Final site-years 
 drivers_df_final_sites <- read.csv("AllDrivers_Harmonized_Yearly_filtered_5_years.csv", stringsAsFactors = FALSE) %>%
@@ -33,10 +32,9 @@ drivers_df_filtered <- drivers_df_final_sites %>%
   dplyr::left_join(site_ref, by = "Stream_ID") %>%
   dplyr::filter(!is.na(Latitude), !is.na(Longitude))
 
-# --------------------------------------------------
-# 2) Add lithology clusters (replaces loading from RData)
-#    Uses your logic: consolidated_rock + final_cluster
-# --------------------------------------------------
+# #############################################################################
+# 2. Add lithology clusters 
+# #############################################################################
 site_clusters <- drivers_df_filtered %>%
   dplyr::distinct(Stream_ID,
                   major_rock,
@@ -104,9 +102,9 @@ sites_with_clusters <- sites_with_clusters %>%
     legend_lith = factor(final_cluster, levels = names(my_cluster_colors))
   )
 
-# --------------------------------------------------
-# 3) Global Map (Panel A)
-# --------------------------------------------------
+# #############################################################################
+# 3. Global Map (Panel A)
+# #############################################################################
 world <- map_data("world")
 
 global_base <- ggplot() +
@@ -149,9 +147,9 @@ global_map <- global_base +
     fill = guide_legend(override.aes = list(color = "gray20", size = 4, alpha = 1, stroke = 0.1))
   )
 
-# --------------------------------------------------
+# #############################################################################
 # 4) Regional Insets
-# --------------------------------------------------
+# #############################################################################
 # create_regional_map <- function(xlim, ylim, data_df) {
 #   ggplot() +
 #     geom_polygon(data = world, aes(x = long, y = lat, group = group),
@@ -215,9 +213,9 @@ p_map_labeled <- final_map +
   theme(plot.tag = element_text(size = 16, hjust = 0, vjust = 1, face = "plain"),
         plot.tag.position = c(0.02, 0.98))
 
-# --------------------------------------------------
+# #############################################################################
 # 5) Boxplots (Panels B & C) plotting average by site (FNConc / FNYield)
-# --------------------------------------------------
+# #############################################################################
 site_summary <- sites_with_clusters %>%
   dplyr::group_by(Stream_ID, final_cluster, consolidated_rock) %>%  # keep lithology for shapes
   dplyr::summarise(

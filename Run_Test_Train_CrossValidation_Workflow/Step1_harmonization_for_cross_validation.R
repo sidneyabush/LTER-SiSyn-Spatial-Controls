@@ -728,10 +728,10 @@ unseen10_metrics <- compute_split_metrics(daily_kalman, unseen10_df, "RBI_unseen
 older70_metrics  <- compute_split_metrics(daily_kalman, older70,      "RBI_older70",  "slope_older70")
 recent30_metrics <- compute_split_metrics(daily_kalman, recent30,     "RBI_recent30", "slope_recent30")
 
-# Keep GLOBAL RBI/recession_slope in unseen10 (spatial-only split)
-unseen10_out <- unseen10_df
+# Create partition outputs
+unseen10_out <- unseen10_df %>%
+  dplyr::left_join(unseen10_metrics, by = "Stream_ID")
 
-# For time-splits, drop global metrics and attach split-specific ones
 older70_out <- older70 %>%
   dplyr::select(-any_of(c("RBI","recession_slope"))) %>%
   dplyr::left_join(older70_metrics,  by = "Stream_ID")
@@ -740,16 +740,20 @@ recent30_out <- recent30 %>%
   dplyr::select(-any_of(c("RBI","recession_slope"))) %>%
   dplyr::left_join(recent30_metrics, by = "Stream_ID")
 
+# sanity check: global values are gone from time-splits
+stopifnot(!any(c("RBI","recession_slope") %in% names(older70_out)))
+stopifnot(!any(c("RBI","recession_slope") %in% names(recent30_out)))
+
+
 # #############################################################################
 # 9. Combine and export all partitions
 # #############################################################################
+stopifnot(all(c("RBI_unseen10","slope_unseen10") %in% names(unseen10_out)))
+stopifnot(all(c("RBI_older70","slope_older70")   %in% names(older70_out)))
+stopifnot(all(c("RBI_recent30","slope_recent30") %in% names(recent30_out)))
 
-unseen10_out <- unseen10_df %>% left_join(unseen10_metrics, by = "Stream_ID")
-older70_out  <- older70     %>% left_join(older70_metrics,  by = "Stream_ID")
-recent30_out <- recent30    %>% left_join(recent30_metrics, by = "Stream_ID")
-
-# Export the full partitions (not just metrics)
 write.csv(unseen10_out, "AllDrivers_unseen10_not_split.csv", row.names = FALSE)
-write.csv(older70_out,  "AllDrivers_older70_split.csv",  row.names = FALSE)
-write.csv(recent30_out, "AllDrivers_recent30_split.csv", row.names = FALSE)
+write.csv(older70_out,  "AllDrivers_older70_split.csv",      row.names = FALSE)
+write.csv(recent30_out, "AllDrivers_recent30_split.csv",     row.names = FALSE)
+
 

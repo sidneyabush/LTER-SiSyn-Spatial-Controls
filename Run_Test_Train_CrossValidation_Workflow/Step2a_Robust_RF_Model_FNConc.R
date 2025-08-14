@@ -139,9 +139,9 @@ load_split <- function(path) {
     select(-contains("Gen"), -contains("major"), -Q, -drainage_area) %>%
     mutate(greenup_day = as.numeric(greenup_day))
 }
-df_train    <- load_split("AllDrivers_cc_older70.csv")
-df_recent30 <- load_split("AllDrivers_cc_recent30.csv")
-df_unseen10 <- load_split("AllDrivers_cc_unseen10.csv")
+df_train    <- load_split("AllDrivers_older70_split.csv")
+df_recent30 <- load_split("AllDrivers_recent30_split.csv")
+df_unseen10 <- load_split("AllDrivers_unseen10_not_split.csv")
 
 # Define tree grid for RF1 & RF2
 tree_grid <- seq(100, 2000, by = 100)
@@ -175,8 +175,9 @@ rf1 <- randomForest(x = x1, y = y1,
 # cache RF1 & importances, rename for stability
 rf1_FNConc  <- rf1
 imps_FNConc <- randomForest::importance(rf1)[, "%IncMSE"]
-save(rf1_FNConc, imps_FNConc,
-     file = file.path(output_dir, "FNConc_RF1.RData"))
+
+# save(rf1_FNConc, imps_FNConc,
+#      file = file.path(output_dir, "FNConc_RF1.RData"))
 
 # #############################################################################
 # b) Stability selection
@@ -196,14 +197,14 @@ stab_FNConc <- rf_stability_selection_parallel(
 feats_FNConc <- stab_FNConc$features
 
 # save stability outputs
-save(stab_FNConc, feats_FNConc, imp_thr_FNConc, freq_thr_FNConc,
-     file = file.path(output_dir, "FNConc_stability_selection.RData"))
-write.csv(
-  tibble(variable = names(stab_FNConc$frequencies),
-         frequency = stab_FNConc$frequencies),
-  file      = file.path(output_dir, "FNConc_stability_frequencies.csv"),
-  row.names = FALSE
-)
+# save(stab_FNConc, feats_FNConc, imp_thr_FNConc, freq_thr_FNConc,
+#      file = file.path(output_dir, "FNConc_stability_selection.RData"))
+# write.csv(
+#   tibble(variable = names(stab_FNConc$frequencies),
+#          frequency = stab_FNConc$frequencies),
+#   file      = file.path(output_dir, "FNConc_stability_frequencies.csv"),
+#   row.names = FALSE
+# )
 
 # #############################################################################
 # c) RF2 tuning on selected features
@@ -233,11 +234,11 @@ rf2_FNConc   <- randomForest(
   importance = TRUE
 )
 
-save(rf2_FNConc, nt2_FNConc, mtry2_FNConc, feats_FNConc,
-     file = file.path(output_dir, "FNConc_RF2_model_and_settings.RData"))
-
-save(rf2_FNConc, 
-     file = file.path(output_dir, "FNConc_Yearly_rf_model2.RData"))
+# save(rf2_FNConc, nt2_FNConc, mtry2_FNConc, feats_FNConc,
+#      file = file.path(output_dir, "FNConc_RF2_model_and_settings.RData"))
+# 
+# save(rf2_FNConc, 
+#      file = file.path(output_dir, "FNConc_Yearly_rf_model2.RData"))
 
 # #############################################################################
 # d) Export kept_drivers for SHAP
@@ -246,8 +247,8 @@ kept_drivers_FNConc <- df_recent30 %>%
   drop_na(all_of(c("FNConc", feats_FNConc))) %>%
   select(all_of(feats_FNConc))
 
-save(kept_drivers_FNConc,
-     file = file.path(output_dir, "FNConc_Yearly_kept_drivers.RData"))
+# save(kept_drivers_FNConc,
+#      file = file.path(output_dir, "FNConc_Yearly_kept_drivers.RData"))
 
 # #############################################################################
 # e) Diagnostics & plots

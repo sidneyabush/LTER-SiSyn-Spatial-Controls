@@ -1,6 +1,6 @@
-# =============================================================================
+# #############################################################################
 # Compute SHAP values for recent30 data using RF2 models for FNConc and FNYield
-# =============================================================================
+# #############################################################################
 
 ## 1. Load needed packages
 librarian::shelf(
@@ -24,9 +24,9 @@ load(file.path(final_models_dir, "FNConc_Yearly_kept_drivers.RData"))
 load(file.path(final_models_dir, "FNYield_Yearly_rf_model2.RData"))
 load(file.path(final_models_dir, "FNYield_Yearly_kept_drivers.RData"))
 
-# =============================================================================
+# #############################################################################
 # 5. Helper to generate SHAP with a sanity‐check
-# =============================================================================
+# #############################################################################
 generate_shap_values <- function(model, kept_drivers, sample_size = 30) {
   # 1) which predictors did RF actually use?
   model_vars <- names(model$forest$xlevels)
@@ -58,9 +58,9 @@ generate_shap_values <- function(model, kept_drivers, sample_size = 30) {
   )
 }
 
-# =============================================================================
+# #############################################################################
 # 6. Generate & save SHAP for FNConc
-# =============================================================================
+# #############################################################################
 shap_values_FNConc <- generate_shap_values(
   model        = rf2_FNConc,
   kept_drivers = kept_drivers_FNConc,
@@ -71,9 +71,9 @@ save(
   file = file.path(final_models_dir, "FNConc_Yearly_shap_values_recent30.RData")
 )
 
-# =============================================================================
+# #############################################################################
 # 7. Generate & save SHAP for FNYield
-# =============================================================================
+# #############################################################################
 shap_values_FNYield <- generate_shap_values(
   model        = rf2_FNYield,
   kept_drivers = kept_drivers_FNYield,
