@@ -208,12 +208,13 @@ freq_thr_FNConc <- 0.80
 stab_FNConc <- rf_stability_selection_parallel(
   x                     = df_train[predictors],
   y                     = df_train$FNConc,
-  n_bootstrap           = 500,
+  n_bootstrap           = 10, # change to 500 for robust run
   threshold             = freq_thr_FNConc,
   ntree                 = rf1_FNConc$ntree,
   mtry                  = rf1_FNConc$mtry,
   importance_threshold  = imp_thr_FNConc
 )
+
 feats_FNConc <- stab_FNConc$features
 
 # save stability outputs
