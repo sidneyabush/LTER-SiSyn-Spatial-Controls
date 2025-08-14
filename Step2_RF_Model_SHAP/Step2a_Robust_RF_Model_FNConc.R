@@ -1,5 +1,25 @@
 # #############################################################################
-# Train RF for FNConc: older70 (training) RF1, stability, RF2,  predict on recent30 & unseen10
+# Train RF for FNConc: older70 (training) RF1, stability, RF2, predict on recent30 & unseen10
+# #############################################################################
+# Required inputs (expected in `drv_dir`):
+#   1) AllDrivers_Harmonized_Yearly_filtered_5_years.csv
+#      - Must include: FNConc and predictor columns used below:
+#        NOx, P, npp, evapotrans, greenup_day, precip, temp, snow_cover,
+#        permafrost, elevation, basin_slope, RBI, recession_slope, land_*, rocks_*
+#      - Columns like Gen*, Q, drainage_area may be present (dropped in script)
+#   2) AllDrivers_older70_split.csv
+#   3) AllDrivers_recent30_split.csv
+#   4) AllDrivers_unseen10_not_split.csv
+#
+# Outputs (written to `output_dir`):
+#   A) FNConc_Yearly_5yrs_corrplot.png
+#   B) RF_variable_importance_FNConc_Yearly_5_years.png
+#   C) RF2_lm_plot_FNConc_Yearly_5_years.png
+#   D) RF2_all_subsets_FNConc_pred_vs_obs.png
+#   E) Predictions_FNConc.csv                          # per-subset predicted vs observed
+#   F) FNConc_08_Feature_Stability_and_medianImportance.csv
+#      - First line: comment with importance threshold
+#      - Then CSV with columns: variable, frequency, incMSE, selected
 # #############################################################################
 
 # 0) Load packages & clear
@@ -63,7 +83,7 @@ save_rf2_all_subsets_plot <- function(pred_df, name, output_dir) {
   pred_df <- pred_df %>%
     mutate(subset = factor(subset,
                            levels = c("older70","recent30","unseen10"),
-                           labels = c("Train","Test","Cross‑Val")))
+                           labels = c("Train","Test","Cross-Val")))
   x_min   <- min(pred_df$predicted, na.rm = TRUE)
   x_range <- diff(range(pred_df$predicted, na.rm = TRUE))
   y_max   <- max(pred_df$observed,  na.rm = TRUE)
@@ -87,7 +107,7 @@ save_rf2_all_subsets_plot <- function(pred_df, name, output_dir) {
     geom_text(data = metrics_df,
               aes(x = x, y = y, label = label, color = subset),
               inherit.aes = FALSE, hjust = 0, vjust = 1, size = 3.5, show.legend = FALSE) +
-    scale_color_manual(values = c("Train"="#1b9e77","Test"="#d95f02","Cross‑Val"="#7570b3")) +
+    scale_color_manual(values = c("Train"="#1b9e77","Test"="#d95f02","Cross-Val"="#7570b3")) +
     theme_bw() +
     labs(title = paste("RF Model 2 Predictions for", name),
          x = "Predicted", y = "Observed", color = "Subset")
