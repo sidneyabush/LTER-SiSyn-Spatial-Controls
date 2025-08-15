@@ -231,7 +231,7 @@ A <- ggplot(pred_FNConc, aes(predicted, observed)) +
   labs(
     x = expression(paste("Predicted (", mg~L^{-1}, ")")),
     y = expression(paste("Observed (", mg~L^{-1}, ")")),
-    title = "Concentration", tag = "A"
+    title = "Concentration", tag = "a)"
   ) +
   scale_x_continuous(expand = expansion(mult = c(0.03, 0.2))) +
   scale_y_continuous(expand = expansion(mult = c(0.02, 0.02))) +
@@ -299,7 +299,7 @@ B <- ggplot(pred_FNYield, aes(predicted, observed)) +
   labs(
     x = expression(paste("Predicted (", kg~km^{-2}~yr^{-1}, ")")),
     y = expression(paste("Observed (", kg~km^{-2}~yr^{-1}, ")")),
-    title = "Yield", tag = "B"
+    title = "Yield", tag = "b)"
   ) +
   scale_x_continuous(expand = expansion(mult = c(0.03, 0.2))) +
   scale_y_continuous(expand = expansion(mult = c(0.02, 0.02))) +
@@ -323,14 +323,14 @@ leg1 <- get_legend(
 )
 
 row2 <- plot_grid(
-  bar_plot(SV_FN) + labs(tag = "C"),
-  bar_plot(SV_FY) + labs(tag = "D"),
+  bar_plot(SV_FN) + labs(tag = "c)"),
+  bar_plot(SV_FY) + labs(tag = "d)"),
   ncol = 2, align = "h", axis = "tblr", rel_widths = c(1, 1)
 )
 
 row3 <- plot_grid(
-  dot_plot(SV_FN, kept_FNConc_scaled) + labs(tag = "E") + theme(legend.position="none"),
-  dot_plot(SV_FY, kept_FNYield_scaled) + labs(tag = "F") + theme(legend.position="none"),
+  dot_plot(SV_FN, kept_FNConc_scaled) + labs(tag = "e)") + theme(legend.position="none"),
+  dot_plot(SV_FY, kept_FNYield_scaled) + labs(tag = "f)") + theme(legend.position="none"),
   ncol = 2, align = "h", axis = "tblr", rel_widths = c(1, 1)
 )
 

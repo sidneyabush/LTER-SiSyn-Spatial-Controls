@@ -216,7 +216,7 @@ final_map <- ggdraw(global_map) +
   draw_line(x = c(0.788,0.85), y = c(0.26,0.32), color = "black", size = 0.7)
 
 p_map_labeled <- final_map +
-  labs(tag = "A") +
+  labs(tag = "a)") +
   theme(plot.tag = element_text(size = 16, hjust = 0, vjust = 1, face = "plain"),
         plot.tag.position = c(0.02, 0.98))
 
@@ -249,11 +249,11 @@ p1 <- ggplot(site_summary, aes(x = FNConc, y = final_cluster)) +
 
 p2 <- ggplot(site_summary, aes(x = FNYield, y = final_cluster)) +
   geom_boxplot(aes(fill = final_cluster), outlier.shape = NA, alpha = 0.7) +
-  geom_jitter(aes(fill = final_cluster, color = final_cluster, shape = consolidated_rock),  # <-- map shape
+  geom_jitter(aes(fill = final_cluster, color = final_cluster, shape = consolidated_rock),  
               width = 0.1, size = 2.2, stroke = 0.1, alpha = 0.6) +
   scale_fill_manual(values = my_cluster_colors) +
   scale_color_manual(values = my_cluster_colors) +
-  scale_shape_manual(values = shape_map, drop = FALSE) +  # <-- add shape scale
+  scale_shape_manual(values = shape_map, drop = FALSE) +  
   labs(x = expression("Yield (kg km"^-2*" year"^-1*")"), y = NULL) +
   theme_classic(base_size = 14) +
   scale_y_discrete(limits = rev(levels(site_summary$final_cluster))) +
@@ -262,8 +262,8 @@ p2 <- ggplot(site_summary, aes(x = FNYield, y = final_cluster)) +
         axis.text.y = element_blank(),
         axis.text.x = element_text(angle = 45, hjust = 1))
 
-p1_labeled <- p1 + labs(tag = "B") + theme(plot.tag = element_text(size = 16, hjust = 0))
-p2_labeled <- p2 + labs(tag = "C") + theme(plot.tag = element_text(size = 16, hjust = 0))
+p1_labeled <- p1 + labs(tag = "b)") + theme(plot.tag = element_text(size = 16, hjust = 0))
+p2_labeled <- p2 + labs(tag = "c)") + theme(plot.tag = element_text(size = 16, hjust = 0))
 final_boxplots <- p1_labeled + p2_labeled
 
 combined_figure <- ggarrange(
@@ -282,4 +282,4 @@ combined_figure <- ggarrange(
 output_dir <- file.path("..", "Final_Figures")
 
 ggsave(file.path(output_dir, "Fig1_map_and_boxplots.png"), combined_figure,
-       width=8, height=8.5, dpi=300)
+       width = 8, height = 8.5, dpi = 300, bg = "white")
