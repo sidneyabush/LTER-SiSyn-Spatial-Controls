@@ -172,8 +172,9 @@ fn_x <- range(pred_FNConc$predicted, na.rm = TRUE)
 
 # Put annotations near the top of the capped axis (0–20)
 yr        <- c(0, 20)
-a_y_base  <- yr[2] - 0.02 * diff(yr)   # ~19.6
-line_gap  <- 0.06 * diff(yr)           # ~1.2 between lines
+a_y_upper <- yr[2] + 0.02 * diff(yr)   # top + 2% headroom
+a_y_base  <- a_y_upper - 0.05 * diff(yr)  # first line 5% below top
+line_gap  <- 0.08 * diff(yr)              # 8% spacing between lines
 
 A <- ggplot(pred_FNConc, aes(predicted, observed)) +
   geom_point(aes(color = subset, fill = subset, shape = subset, size = subset),

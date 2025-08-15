@@ -248,8 +248,7 @@ make_shap_loess_grid <- function(shap_matrix, drivers_data, response,
 # 6. Create Fig3: Concentration SHAP–LOESS grid (6 panels)
 # #############################################################################
 conc_feats3 <- c(
-  "basin_slope", "recession_slope", "land_Water",
-  "land_Grassland_Shrubland", "precip", "P"
+  "basin_slope", "recession_slope", "land_Water", "NOx", "P"
 )
 present3   <- intersect(conc_feats3, colnames(shap_FNConc))
 global_fn_min <- min(response_FNConc, na.rm = TRUE)
@@ -372,14 +371,22 @@ legend_plot3 <- ggplot(all_trimmed3, aes(x = 1, y = 1, fill = response)) +
 shared_leg3 <- get_legend(legend_plot3)
 
 
+# build the 4 real panels
+# build the 4 real panels
 panels3 <- map2(present3, seq_along(present3), build_panel3)
-grid3   <- plot_grid(
-  plotlist = panels3, ncol = 2,
-  labels        = LETTERS[1:length(panels3)],
-  label_size    = 16, label_fontface = "plain", align = "hv"
-)
-fig3_recent30 <- plot_grid(grid3, shared_leg3, ncol = 1, rel_heights = c(1, 0.1))
 
+# assemble grid 
+grid3 <- plot_grid(
+  plotlist = panels3,
+  ncol = 2,
+  labels = LETTERS[1:length(panels3)],
+  label_size = 16,
+  label_fontface = "plain",
+  align = "hv"
+)
+
+# add legend
+fig3_recent30 <- plot_grid(grid3, shared_leg3, ncol = 1, rel_heights = c(1, 0.1))
 
 # #############################################################################
 # 7. Create Fig4: Yield SHAP–LOESS grid 
@@ -538,7 +545,7 @@ figS_yield  <- make_shap_loess_grid(
   recode_map
 )
 
-# Fig 3: 
+# Fig 3:
 ggsave("Final_Figures/Fig3_recent30_Concentration_SHAP_grid_split.png",
        fig3_recent30, width = 12, height = 15, dpi = 300, bg = "white")
 
