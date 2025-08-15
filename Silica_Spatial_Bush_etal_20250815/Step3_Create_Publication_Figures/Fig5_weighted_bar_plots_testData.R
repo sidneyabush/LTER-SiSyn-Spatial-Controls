@@ -1,6 +1,13 @@
 # #############################################################################
 # Fig 5: weighted lithology SHAP bars 
 # #############################################################################
+# Required inputs:
+#   1) <fm>/FNConc_Yearly_shap_values_recent30_split.RData
+#   2) <fm>/FNYield_Yearly_shap_values_recent30_split.RData
+#   3) <drv_dir>/AllDrivers_recent30_split.csv
+#
+# Outputs created:
+#   A) <output_dir>/Fig5_Lithology_Stacked_SHAP_WeightedValues_split.png
 
 rm(list = ls())
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")

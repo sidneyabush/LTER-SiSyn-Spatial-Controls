@@ -1,6 +1,14 @@
 # #############################################################################
-# Create final map plot 
+# Figure1: Create final map plot 
 # #############################################################################
+# Required inputs:
+#   1) <drv_dir>/AllDrivers_Harmonized_Yearly_filtered_5_years.csv
+#   2) <drv_dir>/Site_Reference_Table - WRTDS_Reference_Table_LTER_V2.csv
+#
+# Outputs created:
+#   A) <output_dir>/Fig1_map_and_boxplots.png
+# #############################################################################
+
 rm(list = ls())
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files")
 
@@ -15,10 +23,9 @@ librarian::shelf(dplyr, stringr, ggplot2, maps, patchwork, scales, colorspace, g
 drivers_df_final_sites <- read.csv("AllDrivers_Harmonized_Yearly_filtered_5_years.csv", stringsAsFactors = FALSE) %>%
   dplyr::distinct(Stream_ID, .keep_all = TRUE)
 
-# 1b) Site reference table -> build Stream_ID exactly as requested, then keep lat/long
+# 1b) Site reference table -> build Stream_ID, then keep lat/long
 site_ref <- read.csv("Site_Reference_Table - WRTDS_Reference_Table_LTER_V2.csv",
                      check.names = FALSE, stringsAsFactors = FALSE) %>%
-  # if your table may have duplicate stream names, keep first occurrence
   dplyr::distinct(Stream_Name, .keep_all = TRUE) %>%
   dplyr::mutate(
     Stream_ID = paste0(LTER, "__", Stream_Name),
@@ -269,9 +276,9 @@ combined_figure <- ggarrange(
   labels  = NULL
 )
 
-# --------------------------------------------------
+# #############################################################################
 # 6) Export Figures
-# --------------------------------------------------
+# #############################################################################
 output_dir <- file.path("..", "Final_Figures")
 
 ggsave(file.path(output_dir, "Fig1_map_and_boxplots.png"), combined_figure,

@@ -1,6 +1,13 @@
 # ############################################################
 # Figure S1 — Gen vs FN (A,B) + OLS Predicted vs Observed (C,D)
 # ############################################################
+# Required inputs:
+#   1) <harmonization_dir>/AllDrivers_Harmonized_Yearly_filtered_<record_length>_years.csv
+#   2) <fm>/Predictions_GenConc.csv
+#   3) <fm>/Predictions_GenYield.csv
+#
+# Outputs created:
+#   A) <od>/FigS1_GenFN_and_OLS.png
 
 librarian::shelf(dplyr, ggplot2, readr, patchwork, cowplot)
 

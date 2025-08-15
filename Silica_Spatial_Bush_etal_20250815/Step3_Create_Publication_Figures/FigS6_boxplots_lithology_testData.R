@@ -1,7 +1,11 @@
 # #############################################################################
 # Fig S6: Faceted 3x2 Boxplots showing driver distribution
 # #############################################################################
-
+# Required inputs:
+#   1) <drv_dir>/AllDrivers_recent30_split.csv
+#
+# Outputs created:
+#   A) <out_dir>/FigS6_Boxplots_lithology_split.png
 rm(list = ls())
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 

@@ -1,14 +1,11 @@
 # #############################################################################
 # Unit conversion from raw N and P data to mg/L to match non-flow-normalized data
 # #############################################################################
-# Required CSV inputs:
-#   1) 20241003_masterdata_chem.csv
-# Outputs produced by this script:
-#   A) converted_raw_NP.csv
-#      - Tidy N and P concentrations with value_converted in mg/L
-#      - Includes: LTER, Stream_Name, Stream_ID, variable, date, value, conversion factors
-#      - Filtered to dates 2001-01-01 through 2023-12-31
-#      - Only includes LTER's listed in the conversion lookup
+# Required inputs:
+#   1) <drv_dir>/20241003_masterdata_chem.csv
+#
+# Outputs created:
+#   A) <drv_dir>/converted_raw_NP.csv
 # #############################################################################
 
 # Load needed libraries

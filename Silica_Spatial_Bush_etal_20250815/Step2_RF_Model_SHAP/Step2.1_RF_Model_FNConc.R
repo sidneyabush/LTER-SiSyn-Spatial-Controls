@@ -1,20 +1,27 @@
 # #############################################################################
 # Train RF for FNConc: older70 (training) RF1, stability, RF2, predict on recent30 & unseen10
 # #############################################################################
-# Required inputs
-#   1) AllDrivers_Harmonized_Yearly_filtered_5_years.csv
-#   2) AllDrivers_older70_split.csv
-#   3) AllDrivers_recent30_split.csv
-#   4) AllDrivers_unseen10_not_split.csv
+# Required inputs:
+#   1) <drv_dir>/AllDrivers_Harmonized_Yearly_filtered_<rec_len>_years.csv
+#   2) <drv_dir>/AllDrivers_older70_split.csv
+#   3) <drv_dir>/AllDrivers_recent30_split.csv
+#   4) <drv_dir>/AllDrivers_unseen10_not_split.csv
 #
-# Outputs
-#   A) FNConc_Yearly_5yrs_corrplot.png
-#   B) RF_variable_importance_FNConc_Yearly_5_years.png
-#   C) RF2_lm_plot_FNConc_Yearly_5_years.png
-#   D) RF2_all_subsets_FNConc_pred_vs_obs.png
-#   E) Predictions_FNConc.csv                          
-#   F) FNConc_08_Feature_Stability_and_medianImportance.csv
+# Outputs created:
+#   A) <out_dir>/FNConc_Yearly_<rec_len>yrs_corrplot_split.png
+#   B) <out_dir>/RF_variable_importance_FNConc_Yearly_<rec_len>_years_split.png
+#   C) <out_dir>/RF2_lm_plot_FNConc_Yearly_<rec_len>_years_split.png
+#   D) <out_dir>/RF2_all_subsets_FNConc_pred_vs_obs_split.png
+#   E) <out_dir>/Predictions_FNConc_split.csv
+#   F) <out_dir>/FNConc_08_Feature_Stability_and_medianImportance_split.csv
+#   G) <out_dir>/FNConc_stability_frequencies_split.csv
+#   H) <out_dir>/FNConc_RF1_split.RData
+#   I) <out_dir>/FNConc_stability_selection_split.RData
+#   J) <out_dir>/FNConc_RF2_model_and_settings_split.RData
+#   K) <out_dir>/FNConc_Yearly_rf_model2_split.RData
+#   L) <out_dir>/FNConc_Yearly_kept_drivers_split.RData
 # #############################################################################
+
 
 # 0) Load packages & clear
 librarian::shelf(

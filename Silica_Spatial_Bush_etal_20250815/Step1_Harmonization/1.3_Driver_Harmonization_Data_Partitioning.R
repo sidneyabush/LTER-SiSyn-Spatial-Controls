@@ -1,31 +1,26 @@
 # #############################################################################
-# Harmonize  drivers for use in downstream analyses (modeling, SHAP, plotting)
+# Harmonize drivers for downstream analyses (modeling, SHAP, plotting)
+# #############################################################################
+# Required inputs:
+#   1) <drv_dir>/Full_Results_WRTDS_kalman_annual_filtered.csv
+#   2) <drv_dir>/wrtds_kalman_annual_CatalinaJemez.csv
+#   3) <drv_dir>/Full_Results_WRTDS_kalman_daily_filtered.csv
+#   4) <drv_dir>/WRTDS-input_discharge.csv
+#   5) <drv_dir>/all-data_si-extract_2_20250325.csv
+#   6) <drv_dir>/Krycklan_basin_slopes.csv
+#   7) <drv_dir>/DSi_Basin_Slope_missing_sites.csv
+#   8) <drv_dir>/basin_stream_id_conversions.csv
+#   9) <drv_dir>/DSi_LULC_filled_interpolated_Simple.csv
+#  10) <drv_dir>/converted_raw_NP.csv
+#  11) <drv_dir>/Koeppen_Geiger_2.csv
+#
+# Outputs created:
+#   A) <drv_dir>/AllDrivers_Harmonized_Yearly_filtered_<record_length>_years.csv
+#   B) <drv_dir>/AllDrivers_unseen10_not_split.csv
+#   C) <drv_dir>/AllDrivers_older70_split.csv
+#   D) <drv_dir>/AllDrivers_recent30_split.csv
 # #############################################################################
 
-# Required CSV inputs:
-#  1. Full_Results_WRTDS_kalman_annual_filtered.csv
-#  2. wrtds_kalman_annual_CatalinaJemez.csv
-#  3. Full_Results_WRTDS_kalman_daily_filtered.csv
-#  4. WRTDS-input_discharge.csv
-#  5. all-data_si-extract_2_20250325.csv
-#  6. Krycklan_basin_slopes.csv
-#  7. DSi_Basin_Slope_missing_sites.csv
-#  8. basin_stream_id_conversions.csv
-#  9. DSi_LULC_filled_interpolated_Simple.csv
-# 10. converted_raw_NP.csv
-#
-# Outputs produced by this script:
-#  A) AllDrivers_Harmonized_Yearly_filtered_<record_length>_years.csv
-#     - Full per-year dataset after harmonization and QC (global RBI/RCS attached).
-#  B) AllDrivers_unseen10_not_split.csv
-#     - Spatial-only 10% holdout (unseen10), per-year rows.
-#     - Keeps global RBI/recession_slope and adds RBI_unseen10 / slope_unseen10.
-#  C) AllDrivers_older70_split.csv
-#     - Time-split training portion (older70), per-year rows.
-#     - Contains RBI/recession_slope RBI_older70 / recession_slope_older70
-#  D) AllDrivers_recent30_split.csv
-#     - Time-split test portion (recent30), per-year rows.
-#     - Contains RBI/recession_slope RBI_older30 / recession_slope_older30
 
 rm(list = ls())
 librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr, stringr, readr, corrplot)

@@ -1,25 +1,25 @@
 # #############################################################################
 # Train RF for FNYield: older70 (training) RF1, stability, RF2, predict on recent30 & unseen10
 # #############################################################################
-# Required inputs (expected in `drv_dir`):
-#   1) AllDrivers_Harmonized_Yearly_filtered_5_years.csv
-#      - Must include: FNYield and predictor columns used below:
-#        NOx, P, npp, evapotrans, greenup_day, precip, temp, snow_cover,
-#        permafrost, elevation, basin_slope, RBI, recession_slope, land_*, rocks_*
-#      - Columns like Gen*, Q, drainage_area may be present (dropped in script)
-#   2) AllDrivers_older70_split.csv
-#   3) AllDrivers_recent30_split.csv
-#   4) AllDrivers_unseen10_not_split.csv
+# Required inputs:
+#   1) <drv_dir>/AllDrivers_Harmonized_Yearly_filtered_<rec_len>_years.csv
+#   2) <drv_dir>/AllDrivers_older70_split.csv
+#   3) <drv_dir>/AllDrivers_recent30_split.csv
+#   4) <drv_dir>/AllDrivers_unseen10_not_split.csv
 #
-# Outputs (written to `output_dir`):
-#   A) FNYield_Yearly_5yrs_corrplot.png
-#   B) RF_variable_importance_FNYield_Yearly_5_years.png
-#   C) RF2_lm_plot_FNYield_Yearly_5_years.png
-#   D) RF2_all_subsets_FNYield_pred_vs_obs.png
-#   E) Predictions_FNYield.csv                          # per-subset predicted vs observed
-#   F) FNYield_08_Feature_Stability_and_medianImportance.csv
-#      - First line: comment with importance threshold
-#      - Then CSV with columns: variable, frequency, incMSE, selected
+# Outputs created:
+#   A) <out_dir>/FNYield_Yearly_<rec_len>yrs_corrplot_split.png
+#   B) <out_dir>/RF_variable_importance_FNYield_Yearly_<rec_len>_years_split.png
+#   C) <out_dir>/RF2_lm_plot_FNYield_Yearly_<rec_len>_years_split.png
+#   D) <out_dir>/RF2_all_subsets_FNYield_pred_vs_obs_split.png
+#   E) <out_dir>/Predictions_FNYield_split.csv
+#   F) <out_dir>/FNYield_08_Feature_Stability_and_medianImportance_split.csv
+#   G) <out_dir>/FNYield_stability_frequencies_split.csv
+#   H) <out_dir>/FNYield_RF1_split.RData
+#   I) <out_dir>/FNYield_stability_selection_split.RData
+#   J) <out_dir>/FNYield_RF2_model_and_settings_split.RData
+#   K) <out_dir>/FNYield_Yearly_rf_model2_split.RData
+#   L) <out_dir>/FNYield_Yearly_kept_drivers_split.RData
 # #############################################################################
 
 # 0) Load packages & clear

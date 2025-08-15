@@ -1,6 +1,15 @@
 # #############################################################################
 # Fig S2: Create histograms for all data partitions
 # #############################################################################
+# Required inputs:
+#   1) <drv_dir>/AllDrivers_older70_split.csv
+#   2) <drv_dir>/AllDrivers_recent30_split.csv
+#   3) <drv_dir>/AllDrivers_unseen10_not_split.csv
+#
+# Outputs created:
+#   A) <out_dir>/FigS2_histograms_split.png
+#   B) <out_dir>/FigS3_corrplot_testing_split.png
+
 rm(list = ls())
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files")
 

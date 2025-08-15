@@ -1,6 +1,16 @@
 # #############################################################################
 # Figures 3, 4, S4 and S5: SHAP and LOESS for Testing data (recent30) Only
 # #############################################################################
+# Required inputs:
+#   1) <drv_dir>/AllDrivers_recent30_split.csv
+#   2) <fm>/FNConc_Yearly_shap_values_recent30_split.RData
+#   3) <fm>/FNYield_Yearly_shap_values_recent30_split.RData
+#
+# Outputs created:
+#   A) <od>/Fig3_recent30_Concentration_SHAP_grid_split.png
+#   B) <od>/Fig4_recent30_Yield_SHAP_grid_linear_split.png
+#   C) <od>/FigS4_recent30_Conc_SHAP_Grid_split.png
+#   D) <od>/FigS5_recent30_Yield_SHAP_Grid_split.png
 
 rm(list = ls())
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")

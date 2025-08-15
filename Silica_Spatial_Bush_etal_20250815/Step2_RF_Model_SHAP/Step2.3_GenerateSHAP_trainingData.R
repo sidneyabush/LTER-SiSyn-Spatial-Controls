@@ -1,5 +1,15 @@
 # #############################################################################
-# Compute SHAP values for recent30 data using RF2 models for FNConc and FNYield
+# Compute SHAP values for recent30 using RF2 models for FNConc & FNYield
+# #############################################################################
+# Required inputs:
+#   1) <drv_dir>/FNConc_Yearly_rf_model2_split.RData
+#   2) <drv_dir>/FNConc_Yearly_kept_drivers_split.RData
+#   3) <drv_dir>/FNYield_Yearly_rf_model2_split.RData
+#   4) <drv_dir>/FNYield_Yearly_kept_drivers_split.RData
+#
+# Outputs created:
+#   A) <output_dir>/FNConc_Yearly_shap_values_recent30_split.RData
+#   B) <output_dir>/FNYield_Yearly_shap_values_recent30_split.RData
 # #############################################################################
 
 ## 1. Load needed packages

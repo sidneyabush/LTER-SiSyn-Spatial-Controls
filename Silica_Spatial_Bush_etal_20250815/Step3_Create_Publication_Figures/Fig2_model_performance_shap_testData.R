@@ -1,6 +1,17 @@
 ###############################################################################
-# Figure 2 with Test-Train-Cross-Validation Performance (Panels A & B)
+# Figure 2: Test-Train-Cross-Validation Performance & SHAP
 ###############################################################################
+# Required inputs:
+#   1) <fm>/Predictions_FNConc_split.csv
+#   2) <fm>/Predictions_FNYield_split.csv
+#   3) <fm>/FNConc_Yearly_shap_values_recent30_split.RData
+#   4) <fm>/FNYield_Yearly_shap_values_recent30_split.RData
+#   5) <fm>/FNConc_Yearly_kept_drivers_split.RData
+#   6) <fm>/FNYield_Yearly_kept_drivers_split.RData
+#
+# Outputs created:
+#   A) <od>/Fig2_Global_FNConc_FNYield_multi_split.png
+
 
 # 1. Packages & theme
 librarian::shelf(iml, ggplot2, dplyr, tidyr, randomForest, tibble, scales, cowplot)

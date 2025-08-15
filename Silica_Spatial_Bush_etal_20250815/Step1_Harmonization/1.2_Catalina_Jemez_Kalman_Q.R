@@ -2,15 +2,14 @@
 # Catalina–Jemez WRTDS-Kalman assembly + daily Q subset
 # #############################################################################
 # Required inputs:
-#   1) Catalina Jemez annual CSV files in working directory
-#   2) WRTDS-input_discharge.csv
+#   1) <drv_dir>/Catalina Jemez*.csv
+#   2) <drv_dir>/WRTDS-input_discharge.csv
 #
-# Outputs:
-#   A) wrtds_kalman_annual_CatalinaJemez.csv
-#   B) daily_Q_CatalinaJemez.csv
-#      - Daily discharge subset for Stream_ID {"Catalina Jemez__OR_low",
-#                                             "Catalina Jemez__OR_WEIR"}
+# Outputs created:
+#   A) <drv_dir>/wrtds_kalman_annual_CatalinaJemez.csv
+#   B) <drv_dir>/daily_Q_CatalinaJemez.csv
 # #############################################################################
+
 
 library(data.table)
 library(stringr)
