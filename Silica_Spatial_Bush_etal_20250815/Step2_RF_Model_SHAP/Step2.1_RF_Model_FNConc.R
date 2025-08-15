@@ -1,25 +1,19 @@
 # #############################################################################
 # Train RF for FNConc: older70 (training) RF1, stability, RF2, predict on recent30 & unseen10
 # #############################################################################
-# Required inputs (expected in `drv_dir`):
+# Required inputs
 #   1) AllDrivers_Harmonized_Yearly_filtered_5_years.csv
-#      - Must include: FNConc and predictor columns used below:
-#        NOx, P, npp, evapotrans, greenup_day, precip, temp, snow_cover,
-#        permafrost, elevation, basin_slope, RBI, recession_slope, land_*, rocks_*
-#      - Columns like Gen*, Q, drainage_area may be present (dropped in script)
 #   2) AllDrivers_older70_split.csv
 #   3) AllDrivers_recent30_split.csv
 #   4) AllDrivers_unseen10_not_split.csv
 #
-# Outputs (written to `output_dir`):
+# Outputs
 #   A) FNConc_Yearly_5yrs_corrplot.png
 #   B) RF_variable_importance_FNConc_Yearly_5_years.png
 #   C) RF2_lm_plot_FNConc_Yearly_5_years.png
 #   D) RF2_all_subsets_FNConc_pred_vs_obs.png
-#   E) Predictions_FNConc.csv                          # per-subset predicted vs observed
+#   E) Predictions_FNConc.csv                          
 #   F) FNConc_08_Feature_Stability_and_medianImportance.csv
-#      - First line: comment with importance threshold
-#      - Then CSV with columns: variable, frequency, incMSE, selected
 # #############################################################################
 
 # 0) Load packages & clear
