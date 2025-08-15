@@ -54,7 +54,7 @@ panel_genfn <- function(data, x, y, xlab, ylab, r2, pval) {
     labs(x = xlab, y = ylab) +
     annotate("text", x = -Inf, y = Inf,
              label = sprintf("R² = %.2f\np %s", r2, p_fmt(pval)),
-             hjust = -0.1, vjust = 1.3) +
+             hjust = -0.1, vjust = 1.3, size = 5) +
     # IMPORTANT: no titles/ticks/labels on top/right
     scale_x_continuous(sec.axis = dup_axis(name = NULL, breaks = NULL, labels = NULL)) +
     scale_y_continuous(sec.axis = dup_axis(name = NULL, breaks = NULL, labels = NULL)) +
@@ -77,14 +77,14 @@ S1A <- panel_genfn(
   xlab = expression("GenConc (mg Si L"^-1*")"),
   ylab = expression("FNConc (mg Si L"^-1*")"),
   r2 = conc_stats$r2, pval = conc_stats$p
-) + labs(tag = "A")
+) + labs(tag = "a)")
 
 S1B <- panel_genfn(
   df, GenYield, FNYield,
   xlab = expression("GenYield (kg Si km"^-2*" yr"^-1*")"),
   ylab = expression("FNYield (kg Si km"^-2*" yr"^-1*")"),
   r2 = yield_stats$r2, pval = yield_stats$p
-) + labs(tag = "B")
+) + labs(tag = "b)")
 
 ###### S1C/S1D — OLS Predicted vs Observed (import like Fig 2) ######
 pred_GenConc  <- read.csv(file.path(fm, "Predictions_GenConc.csv"))
@@ -106,7 +106,7 @@ panel_ols <- function(df, xlab, ylab) {
     labs(x = xlab, y = ylab) +
     annotate("text", x = -Inf, y = Inf,
              label = sprintf("R² = %.2f\np = %s", r2, ptxt),
-             hjust = -0.1, vjust = 1.3) +
+             hjust = -0.1, vjust = 1.3, size = 5) +
     scale_x_continuous(sec.axis = dup_axis(name = NULL, breaks = NULL, labels = NULL)) +
     scale_y_continuous(sec.axis = dup_axis(name = NULL, breaks = NULL, labels = NULL)) +
     theme_classic(base_size = 11) +
@@ -122,13 +122,13 @@ S1C <- panel_ols(
   pred_GenConc,
   xlab = expression("Predicted (mg Si L"^-1*")"),
   ylab = expression("Observed (mg Si L"^-1*")")
-) + labs(tag = "C")
+) + labs(tag = "c)")
 
 S1D <- panel_ols(
   pred_GenYield,
   xlab = expression("Predicted (kg Si km"^-2*" yr"^-1*")"),
   ylab = expression("Observed (kg Si km"^-2*" yr"^-1*")")
-) + labs(tag = "D")
+) + labs(tag = "d)")
 
 ###### Assemble & Save Figure S1 (Option A: responsive + strict hv align) ######
 library(cowplot)
