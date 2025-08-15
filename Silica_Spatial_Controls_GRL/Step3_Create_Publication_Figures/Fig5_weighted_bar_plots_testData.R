@@ -213,12 +213,12 @@ conc_litho_bar <- ggplot(conc_shap_litho,
     x     = "Weighted Mean Absolute SHAP Value",
     y     = NULL,
     title = "Concentration",
-    tag   = "A"
+    tag   = "a)"
   ) +
   theme_classic(base_size = 22) +
   theme(
     plot.title       = element_text(hjust = 0.5, size = 24),
-    plot.tag         = element_text(size = 24, hjust = 0, vjust = 1),
+    plot.tag         = element_text(size = 30, hjust = 0, vjust = 1),
     axis.text        = element_text(size = 22),
     axis.title.x     = element_text(size = 22),
     legend.position  = "bottom",
@@ -241,12 +241,12 @@ yield_litho_bar <- ggplot(yield_shap_litho,
     x     = "Weighted Mean Absolute SHAP Value",
     y     = NULL,
     title = "Yield",
-    tag   = "B"
+    tag   = "b)"
   ) +
   theme_classic(base_size = 22) +
   theme(
     plot.title       = element_text(hjust = 0.5, size = 24),
-    plot.tag         = element_text(size = 24, hjust = 0, vjust = 1),
+    plot.tag         = element_text(size = 30, hjust = 0, vjust = 1),
     axis.text        = element_text(size = 22),
     axis.title.x     = element_text(size = 22),
     legend.position  = "bottom",

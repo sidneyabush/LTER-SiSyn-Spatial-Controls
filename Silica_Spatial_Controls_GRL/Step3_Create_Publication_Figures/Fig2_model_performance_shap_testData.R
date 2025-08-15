@@ -23,7 +23,7 @@ theme_set(
       plot.background   = element_rect(fill = "white", colour = NA),
       legend.background = element_rect(fill = "white", colour = NA),
       legend.key        = element_rect(fill = "white", colour = NA),
-      plot.tag          = element_text(size = 22),
+      plot.tag          = element_text(size = 26, face = "plain"),  
       plot.title        = element_text(size = 24, vjust = 4)
     )
 )

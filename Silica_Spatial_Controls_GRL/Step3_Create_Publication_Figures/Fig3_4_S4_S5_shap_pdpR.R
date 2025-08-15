@@ -246,10 +246,10 @@ make_shap_loess_grid <- function(shap_matrix, drivers_data, response,
   
   shared_leg <- get_legend(legend_plot)
   
-  grid <- plot_grid(
-    plotlist       = panels, ncol = 2,
-    labels         = LETTERS[1:length(panels)],
-    label_size     = 16, label_fontface = "plain", align = "hv"
+  grid <- cowplot::plot_grid(
+    plotlist = panels, ncol = 2,
+    labels = paste0(letters[seq_along(panels)], ")"),
+    label_size = 20, label_fontface = "plain", align = "hv"
   )
   plot_grid(grid, shared_leg, ncol = 1, rel_heights = c(1, 0.1))
 }
@@ -386,14 +386,13 @@ shared_leg3 <- get_legend(legend_plot3)
 panels3 <- map2(present3, seq_along(present3), build_panel3)
 
 # assemble grid 
-grid3 <- plot_grid(
-  plotlist = panels3,
-  ncol = 2,
-  labels = LETTERS[1:length(panels3)],
-  label_size = 16,
-  label_fontface = "plain",
-  align = "hv"
+# Fig 3
+grid3 <- cowplot::plot_grid(
+  plotlist = panels3, ncol = 2,
+  labels = paste0(letters[seq_along(panels3)], ")"),
+  label_size = 20, label_fontface = "plain", align = "hv"
 )
+
 
 # add legend
 fig3_recent30 <- plot_grid(grid3, shared_leg3, ncol = 1, rel_heights = c(1, 0.1))
@@ -519,11 +518,13 @@ legend_plot4 <- ggplot(all_trimmed4, aes(x = 1, y = 1, fill = response)) +
 shared_leg4 <- get_legend(legend_plot4)
 
 panels4 <- map2(present4, seq_along(present4), build_panel4)
-grid4   <- plot_grid(
-  plotlist   = panels4, ncol = 2,
-  labels     = LETTERS[1:length(panels4)],
-  label_size = 16, label_fontface = "plain", align = "hv"
+# Fig 4
+grid4 <- cowplot::plot_grid(
+  plotlist = panels4, ncol = 2,
+  labels = paste0(letters[seq_along(panels4)], ")"),
+  label_size = 20, label_fontface = "plain", align = "hv"
 )
+
 
 fig4_recent30 <- plot_grid(grid4, shared_leg4, ncol = 1, rel_heights = c(1, 0.1))
 
@@ -565,7 +566,7 @@ ggsave("Final_Figures/Fig4_recent30_Yield_SHAP_grid_linear_split.png",
 
 # Fig S4: 
 ggsave("Final_Figures/FigS4_recent30_Conc_SHAP_Grid_split.png",
-       figS_conc, width = 12, height = 15, dpi = 300, bg = "white")
+       figS_conc, width = 12, height = 12, dpi = 300, bg = "white")
 
 # Fig S5: 
 ggsave("Final_Figures/FigS5_recent30_Yield_SHAP_Grid_split.png",
