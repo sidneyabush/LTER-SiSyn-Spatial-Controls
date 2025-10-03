@@ -29,7 +29,7 @@ librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr, stri
 record_length <- 5
 
 # Set working directory
-setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files")
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files/inputs")
 
 # helper to clean up Stream_ID formatting
 standardize_stream_id <- function(df) {
@@ -622,17 +622,24 @@ write.csv(
 
 # #############################################################################
 # 8. Create 70/30 temporal and 10% spatial partitions from full data (tot_si)
+#     — Revision 1 update to Cross-Val dataset
+#     — Validation stratified by lithology × DSi range (FNConc & log10(FNYield))
 # #############################################################################
 
-# Stratify the validation partition by final_cluster (consolidated rocktype)
+# ---- controls for number of quantile bins ----
+N_CONC  <- 3  # number of bins for concentration (e.g., 2/3/4)
+N_YIELD <- 3  # number of bins for yield (e.g., 2/3/4)
+set.seed(42)
+
+# Lithology grouping
 site_clusters <- drivers_df %>%
-  distinct(Stream_ID,major_rock,rocks_volcanic,rocks_sedimentary,
-           rocks_carbonate_evaporite,rocks_metamorphic,rocks_plutonic) %>%
-  mutate(
-    consolidated_rock = case_when(
+  dplyr::distinct(Stream_ID, major_rock, rocks_volcanic, rocks_sedimentary,
+                  rocks_carbonate_evaporite, rocks_metamorphic, rocks_plutonic) %>%
+  dplyr::mutate(
+    consolidated_rock = dplyr::case_when(
       major_rock %in% c("volcanic","volcanic; plutonic") ~ "Volcanic",
-      major_rock %in% c("sedimentary", "sedimentary; metamorphic", 
-                        "sedimentary; carbonate_evaporite", 
+      major_rock %in% c("sedimentary","sedimentary; metamorphic",
+                        "sedimentary; carbonate_evaporite",
                         "volcanic; sedimentary; carbonate_evaporite",
                         "sedimentary; plutonic; carbonate_evaporite; metamorphic") ~ "Sedimentary",
       major_rock %in% c("plutonic","plutonic; metamorphic","volcanic; plutonic; metamorphic") ~ "Plutonic",
@@ -640,55 +647,119 @@ site_clusters <- drivers_df %>%
       major_rock %in% c("carbonate_evaporite","volcanic; carbonate_evaporite") ~ "Carbonate Evaporite",
       TRUE ~ NA_character_
     ),
-    final_cluster = case_when(
-      consolidated_rock=="Sedimentary" & rocks_sedimentary>=70 ~ "Sedimentary",
-      consolidated_rock=="Sedimentary" & rocks_sedimentary<70  ~ "Mixed Sedimentary",
+    final_cluster = dplyr::case_when(
+      consolidated_rock == "Sedimentary" & rocks_sedimentary >= 70 ~ "Sedimentary",
+      consolidated_rock == "Sedimentary" & rocks_sedimentary <  70 ~ "Mixed Sedimentary",
       TRUE ~ consolidated_rock
     )
   ) %>%
-  dplyr::select(Stream_ID,final_cluster)
+  dplyr::select(Stream_ID, final_cluster)
 
-set.seed(42)
-unseen10 <- site_clusters %>% group_by(final_cluster) %>% slice_sample(prop=0.10) %>% pull(Stream_ID)
-trainval  <- setdiff(site_clusters$Stream_ID, unseen10)
-
-unseen10_df <- drivers_df %>% filter(Stream_ID %in% unseen10)
-trainval_df <- drivers_df %>% filter(Stream_ID %in% trainval)
-
-trainval_split <- trainval_df %>%
-  group_by(Stream_ID) %>%
-  arrange(Year) %>%
-  mutate(
-    tot_count = n(),
-    n_recent  = ceiling(0.30*tot_count),
-    idx       = row_number(),
-    split     = if_else(idx>tot_count-n_recent,"recent","older")
+# Site-level medians & quantile bins (within lithology)
+site_summary <- drivers_df %>%
+  dplyr::select(Stream_ID, FNConc, FNYield) %>%
+  dplyr::group_by(Stream_ID) %>%
+  dplyr::summarise(
+    med_conc  = median(FNConc,  na.rm = TRUE),
+    med_yield = median(FNYield, na.rm = TRUE),
+    .groups   = "drop"
   ) %>%
-  ungroup()
+  dplyr::mutate(log_med_yield = log10(pmax(med_yield, .Machine$double.eps))) %>%
+  dplyr::inner_join(site_clusters, by = "Stream_ID") %>%
+  dplyr::group_by(final_cluster) %>%
+  dplyr::mutate(
+    conc_bin  = dplyr::ntile(med_conc,      N_CONC),
+    yield_bin = dplyr::ntile(log_med_yield, N_YIELD)
+  ) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(stratum = paste(final_cluster, conc_bin, yield_bin, sep = "__"))
 
-older70 <- trainval_split %>% filter(split=="older")  %>% 
-  dplyr::select(-tot_count,-n_recent,-idx,-split)
+# Proportional allocation of ~10% per lithology across its strata
+stratum_counts <- site_summary %>%
+  dplyr::count(final_cluster, stratum, name = "n_cell")
 
-recent30 <- trainval_split %>% filter(split=="recent") %>% 
-  dplyr::select(-tot_count,-n_recent,-idx,-split)
+alloc_counts <- function(df) {
+  n_L <- sum(df$n_cell)
+  m_L <- round(0.10 * n_L)
+  if (m_L < nrow(df)) m_L <- nrow(df)  # at least 1 per non-empty stratum
+  
+  prop <- m_L * df$n_cell / n_L
+  base <- pmax(1L, pmin(df$n_cell, floor(prop)))
+  rem  <- prop - floor(prop)
+  diff <- m_L - sum(base)
+  
+  if (diff > 0) {
+    idx <- order(rem, decreasing = TRUE)
+    for (k in idx) {
+      if (diff == 0) break
+      if (base[k] < df$n_cell[k]) { base[k] <- base[k] + 1L; diff <- diff - 1L }
+    }
+  } else if (diff < 0) {
+    idx <- order(rem, decreasing = FALSE)
+    for (k in idx) {
+      if (diff == 0) break
+      if (base[k] > 1L) { base[k] <- base[k] - 1L; diff <- diff + 1L }
+    }
+  }
+  df$n_take <- base
+  df
+}
 
+alloc_tbl <- stratum_counts %>%
+  dplyr::group_by(final_cluster) %>%
+  dplyr::group_modify(~ alloc_counts(.x)) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(final_cluster, stratum, n_cell, n_take)
 
-# Compute partition-specific RBI & RCS  
+# Sample CV (unseen10) per stratum
+unseen10_tbl <- site_summary %>%
+  dplyr::inner_join(alloc_tbl, by = c("final_cluster","stratum")) %>%
+  dplyr::group_by(final_cluster, stratum) %>%
+  dplyr::group_modify(~ dplyr::slice_sample(.x, n = .x$n_take[1], replace = FALSE)) %>%
+  dplyr::ungroup()
+
+unseen10 <- unseen10_tbl$Stream_ID
+
+# For diagnostics only: "pre-stratification" CV (random 10% within lithology)
+unseen10_random <- site_clusters %>%
+  dplyr::group_by(final_cluster) %>%
+  dplyr::slice_sample(prop = 0.10) %>%
+  dplyr::ungroup() %>%
+  dplyr::pull(Stream_ID)
+
+# Create partition data frames (unchanged downstream names)
+trainval    <- setdiff(site_clusters$Stream_ID, unseen10)
+unseen10_df <- drivers_df %>% dplyr::filter(Stream_ID %in% unseen10)
+trainval_df <- drivers_df %>% dplyr::filter(Stream_ID %in% trainval)
+
+# Temporal split for remaining sites: 70/30
+trainval_split <- trainval_df %>%
+  dplyr::group_by(Stream_ID) %>%
+  dplyr::arrange(Year) %>%
+  dplyr::mutate(
+    tot_count = dplyr::n(),
+    n_recent  = ceiling(0.30 * tot_count),
+    idx       = dplyr::row_number(),
+    split     = dplyr::if_else(idx > tot_count - n_recent, "recent", "older")
+  ) %>%
+  dplyr::ungroup()
+
+older70  <- trainval_split %>% dplyr::filter(split == "older")  %>% dplyr::select(-tot_count,-n_recent,-idx,-split)
+recent30 <- trainval_split %>% dplyr::filter(split == "recent") %>% dplyr::select(-tot_count,-n_recent,-idx,-split)
+
+# Compute partition-specific RBI & RCS
 daily_kalman <- daily_kalman %>% dplyr::mutate(Year = lubridate::year(Date))
 
-# helper: per-split RBI (per site) and RCS (slope of log(-dQ/dt) ~ log(Q))
 compute_split_metrics <- function(daily_df, siteyear_df, rbi_name, rcs_name) {
   d <- daily_df %>%
-    dplyr::inner_join(siteyear_df %>% dplyr::select(Stream_ID, Year),
-                      by = c("Stream_ID","Year"))
+    dplyr::inner_join(siteyear_df %>% dplyr::select(Stream_ID, Year), by = c("Stream_ID","Year"))
   
   rbi <- d %>%
     dplyr::group_by(Stream_ID) %>%
     dplyr::arrange(Date, .by_group = TRUE) %>%
     dplyr::mutate(dQ = Q - dplyr::lag(Q), abs_dQ = abs(dQ)) %>%
     dplyr::filter(!is.na(abs_dQ)) %>%
-    dplyr::summarise("{rbi_name}" := sum(abs_dQ, na.rm = TRUE) / sum(Q, na.rm = TRUE),
-                     .groups = "drop")
+    dplyr::summarise("{rbi_name}" := sum(abs_dQ, na.rm = TRUE) / sum(Q, na.rm = TRUE), .groups = "drop")
   
   rec <- d %>%
     dplyr::group_by(Stream_ID) %>%
@@ -706,8 +777,7 @@ compute_split_metrics <- function(daily_df, siteyear_df, rbi_name, rcs_name) {
       .slope = {
         ok <- is.finite(rneg) & is.finite(Q) & Q > 0
         if (sum(ok, na.rm = TRUE) >= 50 && dplyr::n_distinct(Q[ok]) > 1) {
-          tryCatch(unname(coef(stats::lm(log(rneg[ok]) ~ log(Q[ok])))[2]),
-                   error = function(e) NA_real_)
+          tryCatch(unname(coef(stats::lm(log(rneg[ok]) ~ log(Q[ok])))[2]), error = function(e) NA_real_)
         } else NA_real_
       },
       .groups = "drop"
@@ -717,27 +787,160 @@ compute_split_metrics <- function(daily_df, siteyear_df, rbi_name, rcs_name) {
   dplyr::full_join(rbi, rec, by = "Stream_ID")
 }
 
-# metrics per partition
-older70_metrics  <- compute_split_metrics(daily_kalman, older70,      "RBI",  "recession_slope")
-recent30_metrics <- compute_split_metrics(daily_kalman, recent30,     "RBI", "recession_slope")
+older70_metrics  <- compute_split_metrics(daily_kalman, older70,  "RBI", "recession_slope")
+recent30_metrics <- compute_split_metrics(daily_kalman, recent30, "RBI", "recession_slope")
 
-older70_out <- older70 %>%
-  dplyr::select(-any_of(c("RBI","recession_slope"))) %>%
-  dplyr::left_join(older70_metrics, by = "Stream_ID") %>%
-  dplyr::filter(recession_slope >= 0) %>%
-  dplyr::filter(complete.cases(.))
-
-recent30_out <- recent30 %>%
-  dplyr::select(-any_of(c("RBI","recession_slope"))) %>%
-  dplyr::left_join(recent30_metrics, by = "Stream_ID") %>%
-  dplyr::filter(recession_slope >= 0) %>%
-  dplyr::filter(complete.cases(.))
+older70_out <- older70  %>% dplyr::select(-any_of(c("RBI","recession_slope"))) %>% dplyr::left_join(older70_metrics,  by = "Stream_ID") %>% dplyr::filter(recession_slope >= 0) %>% dplyr::filter(complete.cases(.))
+recent30_out <- recent30 %>% dplyr::select(-any_of(c("RBI","recession_slope"))) %>% dplyr::left_join(recent30_metrics, by = "Stream_ID") %>% dplyr::filter(recession_slope >= 0) %>% dplyr::filter(complete.cases(.))
 
 # #############################################################################
-# 9. Combine and export all partitions
+# 9. Exports
 # #############################################################################
 write.csv(unseen10_df, "AllDrivers_unseen10_not_split.csv", row.names = FALSE)
-write.csv(older70_out,  "AllDrivers_older70_split.csv",      row.names = FALSE)
-write.csv(recent30_out, "AllDrivers_recent30_split.csv",     row.names = FALSE)
+write.csv(older70_out, "AllDrivers_older70_split.csv",      row.names = FALSE)
+write.csv(recent30_out,"AllDrivers_recent30_split.csv",     row.names = FALSE)
+
+# #############################################################################
+# 10. Diagnostics (CV vs Test) + comparison to pre-stratified CV
+# #############################################################################
+library(ggplot2)
+library(dplyr)
+library(readr)
+
+# Helper: nice label for bins
+bin_label <- if (N_CONC == 2) "halves" else if (N_CONC == 3) "terciles" else "quartiles"
+
+# Membership (exclude training from plots)
+cv_sites     <- unseen10_df %>% dplyr::distinct(Stream_ID) %>% dplyr::mutate(dataset = "Cross-Validation")
+test_sites   <- recent30   %>% dplyr::distinct(Stream_ID) %>% dplyr::mutate(dataset = "Test")
+part_sites   <- dplyr::bind_rows(cv_sites, test_sites)
+
+# Attach partition to site_summary (has med_conc, conc_bin, final_cluster)
+ss_part <- site_summary %>%
+  dplyr::inner_join(part_sites, by = "Stream_ID") %>%
+  dplyr::mutate(dataset = factor(dataset, levels = c("Test","Cross-Validation")))
+
+# ---- (A) Proportions by conc bin ----
+conc_props <- ss_part %>%
+  dplyr::count(final_cluster, dataset, conc_bin, name = "n_sites") %>%
+  dplyr::group_by(final_cluster, dataset) %>%
+  dplyr::mutate(prop = n_sites / sum(n_sites)) %>%
+  dplyr::ungroup()
+
+p_conc_prop <- ggplot(conc_props,
+                      aes(x = factor(conc_bin), y = prop, fill = dataset)) +
+  geom_col(position = position_dodge(width = 0.8)) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_fill_manual(values = c("Test" = "#6ea8d3", "Cross-Validation" = "#525693")) +
+  labs(
+    x = sprintf("DSi concentration %s (within lithology)", bin_label),
+    y = "Proportion of sites",
+    fill = "",
+    title = "Distribution of sites across DSi concentration bins (CV vs Test)"
+  ) +
+  facet_wrap(~ final_cluster, ncol = 3) +
+  theme_minimal(base_size = 12)
+ggsave(sprintf("dsiconc_props_CV_vs_Test_q%d.png", N_CONC), p_conc_prop, width = 11, height = 6, dpi = 300)
+print(p_conc_prop)
+
+# ---- (B) ECDF of site-level median DSi (CV vs Test) ----
+p_ecdf <- ggplot(ss_part, aes(x = med_conc, color = dataset)) +
+  stat_ecdf() +
+  scale_color_manual(values = c("Test" = "#6ea8d3", "Cross-Validation" = "#525693")) +
+  facet_wrap(~ final_cluster, scales = "free_x", ncol = 3) +
+  labs(
+    x = "Site-level median DSi concentration (flow-normalized)",
+    y = "ECDF", color = "",
+    title = "ECDF of DSi concentration by partition (CV vs Test)"
+  ) +
+  theme_minimal(base_size = 12)
+ggsave(sprintf("dsiconc_ECDF_CV_vs_Test_q%d.png", N_CONC), p_ecdf, width = 11, height = 6, dpi = 300)
+print(p_ecdf)
+
+# ---- (C) Boxplot of DSi by conc_bin (CV vs Test) ----
+p_box <- ggplot(ss_part, aes(x = factor(conc_bin), y = med_conc, fill = dataset)) +
+  geom_boxplot(position = position_dodge(width = 0.8), outlier.shape = NA) +
+  geom_jitter(position = position_jitterdodge(jitter.width = 0.15, dodge.width = 0.8),
+              alpha = 0.35, size = 0.9) +
+  scale_fill_manual(values = c("Test" = "#6ea8d3", "Cross-Validation" = "#525693")) +
+  facet_wrap(~ final_cluster, scales = "free_y") +
+  labs(
+    x = sprintf("DSi concentration %s (within lithology)", bin_label),
+    y = "Site-level median DSi concentration (flow-normalized)",
+    fill = "",
+    title = "DSi concentration distribution by stratified group (CV vs Test)"
+  ) +
+  theme_minimal(base_size = 12)
+ggsave(sprintf("dsiconc_box_CV_vs_Test_q%d.png", N_CONC), p_box, width = 11, height = 6, dpi = 300)
+print(p_box)
+
+# ---- (D) Optional: compare CV BEFORE vs AFTER stratification (plus Test for context) ----
+cv_random_sites <- tibble::tibble(Stream_ID = unseen10_random, dataset = "Cross-Validation (random)")
+cv_strat_sites  <- tibble::tibble(Stream_ID = unseen10,        dataset = "Cross-Validation (stratified)")
+test_only       <- tibble::tibble(Stream_ID = unique(recent30$Stream_ID), dataset = "Test")
+
+prepost_sites <- dplyr::bind_rows(cv_random_sites, cv_strat_sites, test_only)
+
+ss_prepost <- site_summary %>%
+  dplyr::inner_join(prepost_sites, by = "Stream_ID") %>%
+  dplyr::mutate(dataset = factor(dataset,
+                                 levels = c("Test","Cross-Validation (random)","Cross-Validation (stratified)")))
+
+# ECDF (pre vs post vs test)
+p_ecdf_prepost <- ggplot(ss_prepost, aes(x = med_conc, color = dataset)) +
+  stat_ecdf() +
+  scale_color_manual(values = c("Test" = "#6ea8d3",
+                                "Cross-Validation (random)"      = "#9e9e9e",
+                                "Cross-Validation (stratified)"  = "#525693")) +
+  facet_wrap(~ final_cluster, scales = "free_x", ncol = 3) +
+  labs(
+    x = "Site-level median DSi concentration (flow-normalized)",
+    y = "ECDF", color = "",
+    title = "ECDF: CV before vs after stratification (with Test)"
+  ) +
+  theme_minimal(base_size = 12)
+ggsave(sprintf("dsiconc_ECDF_pre_vs_post_CV_q%d.png", N_CONC), p_ecdf_prepost, width = 11, height = 6, dpi = 300)
+print(p_ecdf_prepost)
+
+# Proportions by conc_bin (pre vs post vs test)
+conc_props_prepost <- ss_prepost %>%
+  dplyr::count(final_cluster, dataset, conc_bin, name = "n_sites") %>%
+  dplyr::group_by(final_cluster, dataset) %>%
+  dplyr::mutate(prop = n_sites / sum(n_sites)) %>%
+  dplyr::ungroup()
+
+p_prop_prepost <- ggplot(conc_props_prepost,
+                         aes(x = factor(conc_bin), y = prop, fill = dataset)) +
+  geom_col(position = position_dodge(width = 0.8)) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_fill_manual(values = c("Test" = "#6ea8d3",
+                               "Cross-Validation (random)"     = "#9e9e9e",
+                               "Cross-Validation (stratified)" = "#525693")) +
+  labs(
+    x = sprintf("DSi concentration %s (within lithology)", bin_label),
+    y = "Proportion of sites", fill = "",
+    title = "DSi concentration bins: CV before vs after stratification (with Test)"
+  ) +
+  facet_wrap(~ final_cluster, ncol = 3) +
+  theme_minimal(base_size = 12)
+ggsave(sprintf("dsiconc_props_pre_vs_post_CV_q%d.png", N_CONC), p_prop_prepost, width = 11, height = 6, dpi = 300)
+print(p_prop_prepost)
+
+# ---- (E) Summary quantiles (CV vs Test) ----
+quant_tbl <- ss_part %>%
+  dplyr::group_by(final_cluster, dataset) %>%
+  dplyr::summarise(
+    n   = dplyr::n(),
+    q05 = stats::quantile(med_conc, 0.05, na.rm = TRUE),
+    q25 = stats::quantile(med_conc, 0.25, na.rm = TRUE),
+    q50 = stats::quantile(med_conc, 0.50, na.rm = TRUE),
+    q75 = stats::quantile(med_conc, 0.75, na.rm = TRUE),
+    q95 = stats::quantile(med_conc, 0.95, na.rm = TRUE),
+    min = min(med_conc, na.rm = TRUE),
+    max = max(med_conc, na.rm = TRUE),
+    .groups = "drop"
+  )
+readr::write_csv(quant_tbl, sprintf("dsiconc_summary_quantiles_CV_vs_Test_q%d.csv", N_CONC))
+print(quant_tbl)
 
 #---- End of Script ----
