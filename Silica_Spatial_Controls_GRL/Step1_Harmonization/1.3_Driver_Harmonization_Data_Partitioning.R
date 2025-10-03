@@ -655,6 +655,14 @@ site_clusters <- drivers_df %>%
   ) %>%
   dplyr::select(Stream_ID, final_cluster)
 
+# --- OLD (baseline) CV split for diagnostics: EXACT replica of original ---
+set.seed(42)
+unseen10_random <- site_clusters %>%
+  dplyr::group_by(final_cluster) %>%
+  dplyr::slice_sample(prop = 0.10) %>%
+  dplyr::ungroup() %>%
+  dplyr::pull(Stream_ID)
+
 # Site-level medians & quantile bins (within lithology)
 site_summary <- drivers_df %>%
   dplyr::select(Stream_ID, FNConc, FNYield) %>%
@@ -712,6 +720,7 @@ alloc_tbl <- stratum_counts %>%
   dplyr::select(final_cluster, stratum, n_cell, n_take)
 
 # Sample CV (unseen10) per stratum
+set.seed(42)
 unseen10_tbl <- site_summary %>%
   dplyr::inner_join(alloc_tbl, by = c("final_cluster","stratum")) %>%
   dplyr::group_by(final_cluster, stratum) %>%
@@ -719,13 +728,6 @@ unseen10_tbl <- site_summary %>%
   dplyr::ungroup()
 
 unseen10 <- unseen10_tbl$Stream_ID
-
-# For diagnostics only: "pre-stratification" CV (random 10% within lithology)
-unseen10_random <- site_clusters %>%
-  dplyr::group_by(final_cluster) %>%
-  dplyr::slice_sample(prop = 0.10) %>%
-  dplyr::ungroup() %>%
-  dplyr::pull(Stream_ID)
 
 # Create partition data frames (unchanged downstream names)
 trainval    <- setdiff(site_clusters$Stream_ID, unseen10)
@@ -790,7 +792,7 @@ compute_split_metrics <- function(daily_df, siteyear_df, rbi_name, rcs_name) {
 older70_metrics  <- compute_split_metrics(daily_kalman, older70,  "RBI", "recession_slope")
 recent30_metrics <- compute_split_metrics(daily_kalman, recent30, "RBI", "recession_slope")
 
-older70_out <- older70  %>% dplyr::select(-any_of(c("RBI","recession_slope"))) %>% dplyr::left_join(older70_metrics,  by = "Stream_ID") %>% dplyr::filter(recession_slope >= 0) %>% dplyr::filter(complete.cases(.))
+older70_out  <- older70  %>% dplyr::select(-any_of(c("RBI","recession_slope"))) %>% dplyr::left_join(older70_metrics,  by = "Stream_ID") %>% dplyr::filter(recession_slope >= 0) %>% dplyr::filter(complete.cases(.))
 recent30_out <- recent30 %>% dplyr::select(-any_of(c("RBI","recession_slope"))) %>% dplyr::left_join(recent30_metrics, by = "Stream_ID") %>% dplyr::filter(recession_slope >= 0) %>% dplyr::filter(complete.cases(.))
 
 # #############################################################################
@@ -801,146 +803,178 @@ write.csv(older70_out, "AllDrivers_older70_split.csv",      row.names = FALSE)
 write.csv(recent30_out,"AllDrivers_recent30_split.csv",     row.names = FALSE)
 
 # #############################################################################
-# 10. Diagnostics (CV vs Test) + comparison to pre-stratified CV
+# 10. Diagnostics (ALL plots show Test Data, CV random, CV stratified)
+#      - One export for Concentrations
+#      - One export for Yields (log10)
 # #############################################################################
 library(ggplot2)
 library(dplyr)
 library(readr)
+library(tibble)
+library(cowplot)     # for plot grids
 
-# Helper: nice label for bins
-bin_label <- if (N_CONC == 2) "halves" else if (N_CONC == 3) "terciles" else "quartiles"
+# ------------------- plot controls & colors -------------------
+HIST_BINS   <- 30
+DENS_ADJUST <- 1.0
 
-# Membership (exclude training from plots)
-cv_sites     <- unseen10_df %>% dplyr::distinct(Stream_ID) %>% dplyr::mutate(dataset = "Cross-Validation")
-test_sites   <- recent30   %>% dplyr::distinct(Stream_ID) %>% dplyr::mutate(dataset = "Test")
-part_sites   <- dplyr::bind_rows(cv_sites, test_sites)
+LVL_ORDER <- c("Test Data", "Cross-Val (random)", "Cross-Val (stratified)")
+COLORS    <- c("Test Data"             = "#6ea8d3",
+               "Cross-Val (random)"    = "#9aa0a6",
+               "Cross-Val (stratified)"= "#525693")
 
-# Attach partition to site_summary (has med_conc, conc_bin, final_cluster)
-ss_part <- site_summary %>%
-  dplyr::inner_join(part_sites, by = "Stream_ID") %>%
-  dplyr::mutate(dataset = factor(dataset, levels = c("Test","Cross-Validation")))
+# ------------------- membership (three groups; no training) -------------------
+cv_strat_sites <- unseen10_df %>% distinct(Stream_ID) %>% mutate(dataset = "Cross-Val (stratified)")
+cv_random_sites <- tibble(Stream_ID = unseen10_random, dataset = "Cross-Val (random)")
+test_sites <- recent30 %>% distinct(Stream_ID) %>% mutate(dataset = "Test Data")
 
-# ---- (A) Proportions by conc bin ----
-conc_props <- ss_part %>%
-  dplyr::count(final_cluster, dataset, conc_bin, name = "n_sites") %>%
-  dplyr::group_by(final_cluster, dataset) %>%
-  dplyr::mutate(prop = n_sites / sum(n_sites)) %>%
-  dplyr::ungroup()
+# helper: minimal theme tweaks
+themer <- theme_minimal(base_size = 12) +
+  theme(legend.title = element_blank(),
+        legend.position = "right")
 
-p_conc_prop <- ggplot(conc_props,
+# =========================
+# CONCENTRATIONS (med_conc)
+# =========================
+sites_all <- bind_rows(test_sites, cv_random_sites, cv_strat_sites)
+
+ss_conc_all <- site_summary %>%
+  inner_join(sites_all, by = "Stream_ID") %>%
+  mutate(dataset = factor(dataset, levels = LVL_ORDER))
+
+# --- A) bin proportions (within lithology; N_CONC bins) ---
+conc_bins_df <- ss_conc_all %>%
+  group_by(final_cluster) %>%
+  mutate(conc_bin = ntile(med_conc, N_CONC)) %>%
+  ungroup()
+
+conc_bin_props <- conc_bins_df %>%
+  count(final_cluster, dataset, conc_bin, name = "n_sites") %>%
+  group_by(final_cluster, dataset) %>%
+  mutate(prop = n_sites / sum(n_sites)) %>%
+  ungroup()
+
+p_conc_bins <- ggplot(conc_bin_props,
                       aes(x = factor(conc_bin), y = prop, fill = dataset)) +
   geom_col(position = position_dodge(width = 0.8)) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-  scale_fill_manual(values = c("Test" = "#6ea8d3", "Cross-Validation" = "#525693")) +
-  labs(
-    x = sprintf("DSi concentration %s (within lithology)", bin_label),
-    y = "Proportion of sites",
-    fill = "",
-    title = "Distribution of sites across DSi concentration bins (CV vs Test)"
-  ) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0,1)) +
+  scale_fill_manual(values = COLORS) +
   facet_wrap(~ final_cluster, ncol = 3) +
-  theme_minimal(base_size = 12)
-ggsave(sprintf("dsiconc_props_CV_vs_Test_q%d.png", N_CONC), p_conc_prop, width = 11, height = 6, dpi = 300)
-print(p_conc_prop)
+  labs(x = paste("DSi concentration", ifelse(N_CONC==3,"terciles","quantile bins"), "(within lithology)"),
+       y = "Proportion of sites") +
+  themer
 
-# ---- (B) ECDF of site-level median DSi (CV vs Test) ----
-p_ecdf <- ggplot(ss_part, aes(x = med_conc, color = dataset)) +
-  stat_ecdf() +
-  scale_color_manual(values = c("Test" = "#6ea8d3", "Cross-Validation" = "#525693")) +
+# --- B) density ---
+p_conc_density <- ggplot(ss_conc_all, aes(x = med_conc, fill = dataset, color = dataset)) +
+  geom_density(alpha = 0.25, adjust = DENS_ADJUST) +
+  scale_fill_manual(values = COLORS) + scale_color_manual(values = COLORS) +
   facet_wrap(~ final_cluster, scales = "free_x", ncol = 3) +
-  labs(
-    x = "Site-level median DSi concentration (flow-normalized)",
-    y = "ECDF", color = "",
-    title = "ECDF of DSi concentration by partition (CV vs Test)"
-  ) +
-  theme_minimal(base_size = 12)
-ggsave(sprintf("dsiconc_ECDF_CV_vs_Test_q%d.png", N_CONC), p_ecdf, width = 11, height = 6, dpi = 300)
-print(p_ecdf)
+  labs(x = "Site-level median DSi concentration (flow-normalized)", y = "Density") +
+  themer
 
-# ---- (C) Boxplot of DSi by conc_bin (CV vs Test) ----
-p_box <- ggplot(ss_part, aes(x = factor(conc_bin), y = med_conc, fill = dataset)) +
-  geom_boxplot(position = position_dodge(width = 0.8), outlier.shape = NA) +
-  geom_jitter(position = position_jitterdodge(jitter.width = 0.15, dodge.width = 0.8),
-              alpha = 0.35, size = 0.9) +
-  scale_fill_manual(values = c("Test" = "#6ea8d3", "Cross-Validation" = "#525693")) +
-  facet_wrap(~ final_cluster, scales = "free_y") +
-  labs(
-    x = sprintf("DSi concentration %s (within lithology)", bin_label),
-    y = "Site-level median DSi concentration (flow-normalized)",
-    fill = "",
-    title = "DSi concentration distribution by stratified group (CV vs Test)"
-  ) +
-  theme_minimal(base_size = 12)
-ggsave(sprintf("dsiconc_box_CV_vs_Test_q%d.png", N_CONC), p_box, width = 11, height = 6, dpi = 300)
-print(p_box)
-
-# ---- (D) Optional: compare CV BEFORE vs AFTER stratification (plus Test for context) ----
-cv_random_sites <- tibble::tibble(Stream_ID = unseen10_random, dataset = "Cross-Validation (random)")
-cv_strat_sites  <- tibble::tibble(Stream_ID = unseen10,        dataset = "Cross-Validation (stratified)")
-test_only       <- tibble::tibble(Stream_ID = unique(recent30$Stream_ID), dataset = "Test")
-
-prepost_sites <- dplyr::bind_rows(cv_random_sites, cv_strat_sites, test_only)
-
-ss_prepost <- site_summary %>%
-  dplyr::inner_join(prepost_sites, by = "Stream_ID") %>%
-  dplyr::mutate(dataset = factor(dataset,
-                                 levels = c("Test","Cross-Validation (random)","Cross-Validation (stratified)")))
-
-# ECDF (pre vs post vs test)
-p_ecdf_prepost <- ggplot(ss_prepost, aes(x = med_conc, color = dataset)) +
+# --- C) ECDF ---
+p_conc_ecdf <- ggplot(ss_conc_all, aes(x = med_conc, color = dataset)) +
   stat_ecdf() +
-  scale_color_manual(values = c("Test" = "#6ea8d3",
-                                "Cross-Validation (random)"      = "#9e9e9e",
-                                "Cross-Validation (stratified)"  = "#525693")) +
+  scale_color_manual(values = COLORS) +
   facet_wrap(~ final_cluster, scales = "free_x", ncol = 3) +
-  labs(
-    x = "Site-level median DSi concentration (flow-normalized)",
-    y = "ECDF", color = "",
-    title = "ECDF: CV before vs after stratification (with Test)"
-  ) +
-  theme_minimal(base_size = 12)
-ggsave(sprintf("dsiconc_ECDF_pre_vs_post_CV_q%d.png", N_CONC), p_ecdf_prepost, width = 11, height = 6, dpi = 300)
-print(p_ecdf_prepost)
+  labs(x = "Site-level median DSi concentration (flow-normalized)", y = "ECDF") +
+  themer + theme(legend.position = "none")
 
-# Proportions by conc_bin (pre vs post vs test)
-conc_props_prepost <- ss_prepost %>%
-  dplyr::count(final_cluster, dataset, conc_bin, name = "n_sites") %>%
-  dplyr::group_by(final_cluster, dataset) %>%
-  dplyr::mutate(prop = n_sites / sum(n_sites)) %>%
-  dplyr::ungroup()
+# --- D) horizontal boxplots ---
+p_conc_box <- ggplot(ss_conc_all, aes(y = dataset, x = med_conc, fill = dataset)) +
+  geom_boxplot(outlier.alpha = 0.35, width = 0.6) +
+  scale_fill_manual(values = COLORS) +
+  facet_wrap(~ final_cluster, scales = "free_x", ncol = 3) +
+  labs(x = "Site-level median DSi concentration (flow-normalized)", y = NULL) +
+  themer + theme(legend.position = "none")
 
-p_prop_prepost <- ggplot(conc_props_prepost,
-                         aes(x = factor(conc_bin), y = prop, fill = dataset)) +
+# --- Multi-panel export (Concentrations) ---
+conc_title <- ggdraw() + 
+  draw_label("Concentration diagnostics: Test Data vs Cross-Val (random) vs Cross-Val (stratified)",
+             fontface = "bold", x = 0, hjust = 0) +
+  theme(plot.margin = margin(4,4,4,4))
+
+conc_grid <- plot_grid(
+  p_conc_bins + theme(legend.position = "none"),
+  get_legend(p_conc_bins),
+  p_conc_density + theme(legend.position = "none"),
+  p_conc_ecdf,
+  p_conc_box,
+  ncol = 2,
+  rel_widths = c(1, 0.25)
+)
+
+conc_final <- plot_grid(conc_title, conc_grid, ncol = 1, rel_heights = c(0.08, 1))
+ggsave("Concentration_Multipanel.png", conc_final, width = 13, height = 9, dpi = 300, bg = "white")
+
+# =========
+# YIELDS
+# =========
+ss_yld_all <- ss_conc_all  # same membership; pull log_med_yield from site_summary
+
+# --- A) yield-bin proportions (within lithology; N_YIELD bins on log10) ---
+yld_bins_df <- ss_yld_all %>%
+  group_by(final_cluster) %>%
+  mutate(yield_bin = ntile(log_med_yield, N_YIELD)) %>%
+  ungroup()
+
+yld_bin_props <- yld_bins_df %>%
+  count(final_cluster, dataset, yield_bin, name = "n_sites") %>%
+  group_by(final_cluster, dataset) %>%
+  mutate(prop = n_sites / sum(n_sites)) %>%
+  ungroup()
+
+p_yld_bins <- ggplot(yld_bin_props,
+                     aes(x = factor(yield_bin), y = prop, fill = dataset)) +
   geom_col(position = position_dodge(width = 0.8)) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-  scale_fill_manual(values = c("Test" = "#6ea8d3",
-                               "Cross-Validation (random)"     = "#9e9e9e",
-                               "Cross-Validation (stratified)" = "#525693")) +
-  labs(
-    x = sprintf("DSi concentration %s (within lithology)", bin_label),
-    y = "Proportion of sites", fill = "",
-    title = "DSi concentration bins: CV before vs after stratification (with Test)"
-  ) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0,1)) +
+  scale_fill_manual(values = COLORS) +
   facet_wrap(~ final_cluster, ncol = 3) +
-  theme_minimal(base_size = 12)
-ggsave(sprintf("dsiconc_props_pre_vs_post_CV_q%d.png", N_CONC), p_prop_prepost, width = 11, height = 6, dpi = 300)
-print(p_prop_prepost)
+  labs(x = paste("DSi yield (log10) ", ifelse(N_YIELD==3,"terciles","quantile bins"), "(within lithology)"),
+       y = "Proportion of sites") +
+  themer
 
-# ---- (E) Summary quantiles (CV vs Test) ----
-quant_tbl <- ss_part %>%
-  dplyr::group_by(final_cluster, dataset) %>%
-  dplyr::summarise(
-    n   = dplyr::n(),
-    q05 = stats::quantile(med_conc, 0.05, na.rm = TRUE),
-    q25 = stats::quantile(med_conc, 0.25, na.rm = TRUE),
-    q50 = stats::quantile(med_conc, 0.50, na.rm = TRUE),
-    q75 = stats::quantile(med_conc, 0.75, na.rm = TRUE),
-    q95 = stats::quantile(med_conc, 0.95, na.rm = TRUE),
-    min = min(med_conc, na.rm = TRUE),
-    max = max(med_conc, na.rm = TRUE),
-    .groups = "drop"
-  )
-readr::write_csv(quant_tbl, sprintf("dsiconc_summary_quantiles_CV_vs_Test_q%d.csv", N_CONC))
-print(quant_tbl)
+# --- B) density (log10 yields) ---
+p_yld_density <- ggplot(ss_yld_all, aes(x = log_med_yield, fill = dataset, color = dataset)) +
+  geom_density(alpha = 0.25, adjust = DENS_ADJUST) +
+  scale_fill_manual(values = COLORS) + scale_color_manual(values = COLORS) +
+  facet_wrap(~ final_cluster, scales = "free_x", ncol = 3) +
+  labs(x = "log10(site-level median DSi yield)", y = "Density") +
+  themer
+
+# --- C) ECDF (log10 yields) ---
+p_yld_ecdf <- ggplot(ss_yld_all, aes(x = log_med_yield, color = dataset)) +
+  stat_ecdf() +
+  scale_color_manual(values = COLORS) +
+  facet_wrap(~ final_cluster, scales = "free_x", ncol = 3) +
+  labs(x = "log10(site-level median DSi yield)", y = "ECDF") +
+  themer + theme(legend.position = "none")
+
+# --- D) horizontal boxplots (log10 yields) ---
+p_yld_box <- ggplot(ss_yld_all, aes(y = dataset, x = log_med_yield, fill = dataset)) +
+  geom_boxplot(outlier.alpha = 0.35, width = 0.6) +
+  scale_fill_manual(values = COLORS) +
+  facet_wrap(~ final_cluster, scales = "free_x", ncol = 3) +
+  labs(x = "log10(site-level median DSi yield)", y = NULL) +
+  themer + theme(legend.position = "none")
+
+# --- Multi-panel export (Yields) ---
+yld_title <- ggdraw() + 
+  draw_label("Yield diagnostics (log10): Test Data vs Cross-Val (random) vs Cross-Val (stratified)",
+             fontface = "bold", x = 0, hjust = 0) +
+  theme(plot.margin = margin(4,4,4,4))
+
+yld_grid <- plot_grid(
+  p_yld_bins + theme(legend.position = "none"),
+  get_legend(p_yld_bins),
+  p_yld_density + theme(legend.position = "none"),
+  p_yld_ecdf,
+  p_yld_box,
+  ncol = 2,
+  rel_widths = c(1, 0.25)
+)
+
+yld_final <- plot_grid(yld_title, yld_grid, ncol = 1, rel_heights = c(0.08, 1))
+ggsave("Yield_Multipanel.png", yld_final, width = 13, height = 9, dpi = 300, bg = "white")
+
 
 #---- End of Script ----
