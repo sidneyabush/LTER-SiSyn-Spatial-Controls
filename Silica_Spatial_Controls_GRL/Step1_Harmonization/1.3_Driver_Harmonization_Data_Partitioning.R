@@ -627,8 +627,8 @@ write.csv(
 # #############################################################################
 
 # ---- controls for number of quantile bins ----
-N_CONC  <- 3  # number of bins for concentration (e.g., 2/3/4)
-N_YIELD <- 3  # number of bins for yield (e.g., 2/3/4)
+N_CONC  <- 3  # number of bins for concentration 
+N_YIELD <- 3  # number of bins for yield
 set.seed(42)
 
 # Lithology grouping
@@ -804,8 +804,8 @@ write.csv(recent30_out,"AllDrivers_recent30_split.csv",     row.names = FALSE)
 
 # #############################################################################
 # 10. Diagnostics (ALL plots show Test Data, CV random, CV stratified)
-#      - One export for Concentrations
-#      - One export for Yields (log10)
+#      - One export for Concentrations (histogram + density)
+#      - One export for Yields (histogram + density, log10)
 # #############################################################################
 library(ggplot2)
 library(dplyr)
@@ -817,20 +817,23 @@ library(cowplot)     # for plot grids
 HIST_BINS   <- 30
 DENS_ADJUST <- 1.0
 
-LVL_ORDER <- c("Test Data", "Cross-Val (random)", "Cross-Val (stratified)")
-COLORS    <- c("Test Data"             = "#6ea8d3",
-               "Cross-Val (random)"    = "#9aa0a6",
-               "Cross-Val (stratified)"= "#525693")
+LVL_ORDER <- c("Testing/Training Data", "Cross-Val (stratified)", "Cross-Val (random)")
+COLORS    <- c("Testing/Training Data"             = "#6ea8d3",
+               "Cross-Val (stratified)"= "#525693",
+               "Cross-Val (random)"    = "#9aa0a6")
 
 # ------------------- membership (three groups; no training) -------------------
 cv_strat_sites <- unseen10_df %>% distinct(Stream_ID) %>% mutate(dataset = "Cross-Val (stratified)")
 cv_random_sites <- tibble(Stream_ID = unseen10_random, dataset = "Cross-Val (random)")
-test_sites <- recent30 %>% distinct(Stream_ID) %>% mutate(dataset = "Test Data")
+test_sites <- recent30 %>% distinct(Stream_ID) %>% mutate(dataset = "Testing/Training Data")
 
 # helper: minimal theme tweaks
 themer <- theme_minimal(base_size = 12) +
   theme(legend.title = element_blank(),
-        legend.position = "right")
+        legend.position = "right",
+        legend.direction = "horizontal",
+        panel.grid = element_blank(),
+        axis.line = element_line(color = "black"))
 
 # =========================
 # CONCENTRATIONS (med_conc)
@@ -841,140 +844,98 @@ ss_conc_all <- site_summary %>%
   inner_join(sites_all, by = "Stream_ID") %>%
   mutate(dataset = factor(dataset, levels = LVL_ORDER))
 
-# --- A) bin proportions (within lithology; N_CONC bins) ---
-conc_bins_df <- ss_conc_all %>%
-  group_by(final_cluster) %>%
-  mutate(conc_bin = ntile(med_conc, N_CONC)) %>%
-  ungroup()
-
-conc_bin_props <- conc_bins_df %>%
-  count(final_cluster, dataset, conc_bin, name = "n_sites") %>%
-  group_by(final_cluster, dataset) %>%
-  mutate(prop = n_sites / sum(n_sites)) %>%
-  ungroup()
-
-p_conc_bins <- ggplot(conc_bin_props,
-                      aes(x = factor(conc_bin), y = prop, fill = dataset)) +
-  geom_col(position = position_dodge(width = 0.8)) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0,1)) +
+# --- A) boxplots ---
+p_conc_box <- ggplot(ss_conc_all, aes(y = dataset, x = med_conc, fill = dataset, color = dataset)) +
+  geom_boxplot(outlier.shape = NA, width = 0.6, alpha = 0.5) +
+  geom_jitter(height = 0.2, alpha = 0.4, size = 1.5) +
   scale_fill_manual(values = COLORS) +
-  facet_wrap(~ final_cluster, ncol = 3) +
-  labs(x = paste("DSi concentration", ifelse(N_CONC==3,"terciles","quantile bins"), "(within lithology)"),
-       y = "Proportion of sites") +
-  themer
+  scale_color_manual(values = COLORS) +
+  facet_wrap(~ final_cluster, scales = "free_x", ncol = 3) +
+  labs(x = NULL, y = NULL) +
+  themer +
+  theme(panel.spacing = unit(0.5, "lines"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5))
 
 # --- B) density ---
 p_conc_density <- ggplot(ss_conc_all, aes(x = med_conc, fill = dataset, color = dataset)) +
   geom_density(alpha = 0.25, adjust = DENS_ADJUST) +
   scale_fill_manual(values = COLORS) + scale_color_manual(values = COLORS) +
   facet_wrap(~ final_cluster, scales = "free_x", ncol = 3) +
-  labs(x = "Site-level median DSi concentration (flow-normalized)", y = "Density") +
-  themer
-
-# --- C) ECDF ---
-p_conc_ecdf <- ggplot(ss_conc_all, aes(x = med_conc, color = dataset)) +
-  stat_ecdf() +
-  scale_color_manual(values = COLORS) +
-  facet_wrap(~ final_cluster, scales = "free_x", ncol = 3) +
-  labs(x = "Site-level median DSi concentration (flow-normalized)", y = "ECDF") +
-  themer + theme(legend.position = "none")
-
-# --- D) horizontal boxplots ---
-p_conc_box <- ggplot(ss_conc_all, aes(y = dataset, x = med_conc, fill = dataset)) +
-  geom_boxplot(outlier.alpha = 0.35, width = 0.6) +
-  scale_fill_manual(values = COLORS) +
-  facet_wrap(~ final_cluster, scales = "free_x", ncol = 3) +
-  labs(x = "Site-level median DSi concentration (flow-normalized)", y = NULL) +
-  themer + theme(legend.position = "none")
+  labs(x = "DSi Concentration", y = "Density") +
+  themer +
+  theme(panel.spacing = unit(0.5, "lines"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5))
 
 # --- Multi-panel export (Concentrations) ---
-conc_title <- ggdraw() + 
-  draw_label("Concentration diagnostics: Test Data vs Cross-Val (random) vs Cross-Val (stratified)",
-             fontface = "bold", x = 0, hjust = 0) +
-  theme(plot.margin = margin(4,4,4,4))
+conc_legend <- get_legend(p_conc_box + guides(color = guide_legend(override.aes = list(alpha = 1, size = 3))))
 
-conc_grid <- plot_grid(
-  p_conc_bins + theme(legend.position = "none"),
-  get_legend(p_conc_bins),
+conc_plots <- plot_grid(
+  p_conc_box + theme(legend.position = "none"),
   p_conc_density + theme(legend.position = "none"),
-  p_conc_ecdf,
-  p_conc_box,
-  ncol = 2,
-  rel_widths = c(1, 0.25)
+  ncol = 1,
+  align = "v",
+  axis = "lr"
 )
 
-conc_final <- plot_grid(conc_title, conc_grid, ncol = 1, rel_heights = c(0.08, 1))
-ggsave("Concentration_Multipanel.png", conc_final, width = 13, height = 9, dpi = 300, bg = "white")
+conc_grid <- plot_grid(
+  conc_plots,
+  conc_legend,
+  ncol = 1,
+  rel_heights = c(1, 0.1)
+)
+
+ggsave("Concentration_Multipanel.png", conc_grid, width = 8, height = 6, dpi = 300, bg = "white")
 
 # =========
 # YIELDS
 # =========
 ss_yld_all <- ss_conc_all  # same membership; pull log_med_yield from site_summary
 
-# --- A) yield-bin proportions (within lithology; N_YIELD bins on log10) ---
-yld_bins_df <- ss_yld_all %>%
-  group_by(final_cluster) %>%
-  mutate(yield_bin = ntile(log_med_yield, N_YIELD)) %>%
-  ungroup()
-
-yld_bin_props <- yld_bins_df %>%
-  count(final_cluster, dataset, yield_bin, name = "n_sites") %>%
-  group_by(final_cluster, dataset) %>%
-  mutate(prop = n_sites / sum(n_sites)) %>%
-  ungroup()
-
-p_yld_bins <- ggplot(yld_bin_props,
-                     aes(x = factor(yield_bin), y = prop, fill = dataset)) +
-  geom_col(position = position_dodge(width = 0.8)) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0,1)) +
+# --- A) boxplots (log10 yields) ---
+p_yld_box <- ggplot(ss_yld_all, aes(y = dataset, x = log_med_yield, fill = dataset, color = dataset)) +
+  geom_boxplot(outlier.shape = NA, width = 0.6, alpha = 0.5) +
+  geom_jitter(height = 0.2, alpha = 0.4, size = 1.5) +
   scale_fill_manual(values = COLORS) +
-  facet_wrap(~ final_cluster, ncol = 3) +
-  labs(x = paste("DSi yield (log10) ", ifelse(N_YIELD==3,"terciles","quantile bins"), "(within lithology)"),
-       y = "Proportion of sites") +
-  themer
+  scale_color_manual(values = COLORS) +
+  facet_wrap(~ final_cluster, scales = "free_x", ncol = 3) +
+  labs(x = NULL, y = NULL) +
+  themer +
+  theme(panel.spacing = unit(0.5, "lines"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5))
 
 # --- B) density (log10 yields) ---
 p_yld_density <- ggplot(ss_yld_all, aes(x = log_med_yield, fill = dataset, color = dataset)) +
   geom_density(alpha = 0.25, adjust = DENS_ADJUST) +
   scale_fill_manual(values = COLORS) + scale_color_manual(values = COLORS) +
   facet_wrap(~ final_cluster, scales = "free_x", ncol = 3) +
-  labs(x = "log10(site-level median DSi yield)", y = "Density") +
-  themer
-
-# --- C) ECDF (log10 yields) ---
-p_yld_ecdf <- ggplot(ss_yld_all, aes(x = log_med_yield, color = dataset)) +
-  stat_ecdf() +
-  scale_color_manual(values = COLORS) +
-  facet_wrap(~ final_cluster, scales = "free_x", ncol = 3) +
-  labs(x = "log10(site-level median DSi yield)", y = "ECDF") +
-  themer + theme(legend.position = "none")
-
-# --- D) horizontal boxplots (log10 yields) ---
-p_yld_box <- ggplot(ss_yld_all, aes(y = dataset, x = log_med_yield, fill = dataset)) +
-  geom_boxplot(outlier.alpha = 0.35, width = 0.6) +
-  scale_fill_manual(values = COLORS) +
-  facet_wrap(~ final_cluster, scales = "free_x", ncol = 3) +
-  labs(x = "log10(site-level median DSi yield)", y = NULL) +
-  themer + theme(legend.position = "none")
+  labs(x = "DSi Yield", y = "Density") +
+  themer +
+  theme(panel.spacing = unit(0.5, "lines"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5))
 
 # --- Multi-panel export (Yields) ---
-yld_title <- ggdraw() + 
-  draw_label("Yield diagnostics (log10): Test Data vs Cross-Val (random) vs Cross-Val (stratified)",
-             fontface = "bold", x = 0, hjust = 0) +
-  theme(plot.margin = margin(4,4,4,4))
+yld_legend <- get_legend(p_yld_box + guides(color = guide_legend(override.aes = list(alpha = 1, size = 3))))
 
-yld_grid <- plot_grid(
-  p_yld_bins + theme(legend.position = "none"),
-  get_legend(p_yld_bins),
+yld_plots <- plot_grid(
+  p_yld_box + theme(legend.position = "none"),
   p_yld_density + theme(legend.position = "none"),
-  p_yld_ecdf,
-  p_yld_box,
-  ncol = 2,
-  rel_widths = c(1, 0.25)
+  ncol = 1,
+  align = "v",
+  axis = "lr"
 )
 
-yld_final <- plot_grid(yld_title, yld_grid, ncol = 1, rel_heights = c(0.08, 1))
-ggsave("Yield_Multipanel.png", yld_final, width = 13, height = 9, dpi = 300, bg = "white")
+yld_grid <- plot_grid(
+  yld_plots,
+  yld_legend,
+  ncol = 1,
+  rel_heights = c(1, 0.1)
+)
+
+ggsave("Yield_Multipanel.png", yld_grid, width = 8, height = 6, dpi = 300, bg = "white")
 
 
 #---- End of Script ----
