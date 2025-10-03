@@ -19,21 +19,21 @@
 librarian::shelf(randomForest, dplyr, tidyr)
 
 # 1) Paths
-drv_dir    <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files"
+drv_dir    <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files/inputs"
 output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Models"
 
 # 2) Load existing RF2 model and feature list
 load(file.path(output_dir, "FNYield_RF2_model_and_settings_split.RData"))
 # This loads: rf2_FNYield, nt2_FNYield, mtry2_FNYield, feats_FNYield
 
-# 3) Load UPDATED unseen10 data
-rl_cols <- c("land_Bare", "land_Cropland", "land_Forest", "land_Grassland_Shrubland",
-             "land_Ice_Snow", "land_Impervious", "land_Salt_Water", "land_Tidal_Wetland",
-             "land_Water", "land_Wetland_Marsh", "rocks_volcanic", "rocks_sedimentary",
-             "rocks_carbonate_evaporite", "rocks_metamorphic", "rocks_plutonic")
+# 3) Load UPDATED unseen10 data (using same preprocessing as Step 2.2)
+# First read to get column names
+df_temp <- read.csv(file.path(drv_dir, "AllDrivers_unseen10_not_split.csv"),
+                    stringsAsFactors = FALSE)
+rl_cols <- grep("^(land_|rocks_)", names(df_temp), value = TRUE)
 
-df_unseen10 <- read.csv(file.path(drv_dir, "AllDrivers_unseen10_not_split.csv"),
-                        stringsAsFactors = FALSE) %>%
+# Apply same load_split function from original Step 2.2
+df_unseen10 <- df_temp %>%
   mutate(across(all_of(rl_cols), ~ replace_na(., 0))) %>%
   select(-contains("Gen"), -contains("major"), -Q, -drainage_area) %>%
   mutate(greenup_day = as.numeric(greenup_day))

@@ -329,8 +329,8 @@ row2 <- plot_grid(
 )
 
 row3 <- plot_grid(
-  dot_plot(SV_FN, kept_FNConc_scaled) + labs(tag = "e)") + theme(legend.position="none"),
-  dot_plot(SV_FY, kept_FNYield_scaled) + labs(tag = "f)") + theme(legend.position="none"),
+  dot_plot(SV_FN, kept_FNConc_scaled) + labs(tag = "e)", x = "SHAP Value") + theme(legend.position="none"),
+  dot_plot(SV_FY, kept_FNYield_scaled) + labs(tag = "f)", x = "SHAP Value") + theme(legend.position="none"),
   ncol = 2, align = "h", axis = "tblr", rel_widths = c(1, 1)
 )
 

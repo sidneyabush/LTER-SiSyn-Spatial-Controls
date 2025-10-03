@@ -663,7 +663,7 @@ unseen10_random <- site_clusters %>%
   dplyr::ungroup() %>%
   dplyr::pull(Stream_ID)
 
-# Site-level medians & quantile bins (within lithology)
+# Site-level medians & quantile bins (within each lithology's full range)
 site_summary <- drivers_df %>%
   dplyr::select(Stream_ID, FNConc, FNYield) %>%
   dplyr::group_by(Stream_ID) %>%
@@ -673,6 +673,7 @@ site_summary <- drivers_df %>%
     .groups   = "drop"
   ) %>%
   dplyr::mutate(log_med_yield = log10(pmax(med_yield, .Machine$double.eps))) %>%
+  # Join lithology FIRST, then create bins within each lithology
   dplyr::inner_join(site_clusters, by = "Stream_ID") %>%
   dplyr::group_by(final_cluster) %>%
   dplyr::mutate(
