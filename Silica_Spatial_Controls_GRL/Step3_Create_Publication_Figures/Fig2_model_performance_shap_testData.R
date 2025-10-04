@@ -558,5 +558,5 @@ reviewer_fig_box <- plot_grid(
 
 ggsave(
   file.path(od, "Fig2ef_REVIEWER_ONLY_boxplot.png"),
-  reviewer_fig_box, width = 18, height = 8, dpi = 300, bg = "white"
+  reviewer_fig_box, width = 16.1, height = 6.1, dpi = 300, bg = "white"
 )
