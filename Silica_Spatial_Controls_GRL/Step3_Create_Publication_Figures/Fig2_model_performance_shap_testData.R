@@ -196,7 +196,7 @@ dot_plot_reviewer_box <- function(SV, KD_s) {
     geom_text(data = mean_shap,
               aes(x = x_text_pos, y = pretty, label = sprintf("%.4f", mean_shap),
                   color = direction_factor),
-              hjust = 0, size = 7, inherit.aes = FALSE) +
+              hjust = 0, size = 5.5, inherit.aes = FALSE) +
     scale_color_manual(
       values = c("Positive" = "#4575b4", "Negative" = "#d73027"),
       guide = "none"
@@ -558,5 +558,5 @@ reviewer_fig_box <- plot_grid(
 
 ggsave(
   file.path(od, "Fig2ef_REVIEWER_ONLY_boxplot.png"),
-  reviewer_fig_box, width = 20, height = 8, dpi = 300, bg = "white"
+  reviewer_fig_box, width = 18, height = 8, dpi = 300, bg = "white"
 )
