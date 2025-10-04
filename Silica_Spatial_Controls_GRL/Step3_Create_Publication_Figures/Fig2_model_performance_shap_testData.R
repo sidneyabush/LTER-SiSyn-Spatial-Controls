@@ -23,7 +23,7 @@ theme_set(
       plot.background   = element_rect(fill = "white", colour = NA),
       legend.background = element_rect(fill = "white", colour = NA),
       legend.key        = element_rect(fill = "white", colour = NA),
-      plot.tag          = element_text(size = 26, face = "plain"),  
+      plot.tag          = element_text(size = 26, face = "plain"),
       plot.title        = element_text(size = 24, vjust = 4)
     )
 )
@@ -185,12 +185,13 @@ dot_plot_reviewer_box <- function(SV, KD_s) {
     geom_boxplot(alpha = 0.7, outlier.size = 0.8) +
     scale_fill_manual(
       values = c("Positive" = "#d73027", "Negative" = "#4575b4"),
-      name = "Mean SHAP\nDirection"
+      name = "Mean SHAP Direction",
+      guide = guide_legend(title.position = "right", title.hjust = 0, title.vjust = 0.5)
     ) +
     labs(x = "SHAP Value", y = NULL) +
     theme(
       legend.position = "right",
-      legend.direction = "vertical"
+      legend.direction = "horizontal"
     )
 }
 
@@ -214,7 +215,7 @@ dot_plot_reviewer_rain <- function(SV, KD_s) {
     arrange(desc(m)) %>%
     pull(pretty)
 
-  df$pretty <- factor(df$pretty, levels = ord)
+  df$pretty <- factor(df$pretty, levels = rev(ord))
 
   # Calculate mean SHAP with direction
   mean_shap <- df %>%
@@ -247,12 +248,13 @@ dot_plot_reviewer_rain <- function(SV, KD_s) {
       name = "Scaled Value",
       guide = guide_colourbar(
         direction      = "horizontal",
-        title.position = "top",
-        title.hjust    = 0.5,
+        title.position = "right",
+        title.hjust    = -0.5,
+        title.vjust    = 1,
         barwidth       = unit(15, "lines"),
         barheight      = unit(1.5, "lines"),
-        label.theme    = element_text(size = 16),
-        title.theme    = element_text(size = 14)
+        label.theme    = element_text(size = 20),
+        title.theme    = element_text(size = 20)
       )
     ) +
     new_scale_fill() +
@@ -261,16 +263,17 @@ dot_plot_reviewer_rain <- function(SV, KD_s) {
                  width = 0.35, alpha = 0.6, outlier.shape = NA, linewidth = 0.5) +
     scale_fill_manual(
       values = c("Positive" = "#d73027", "Negative" = "#4575b4"),
-      name = "Mean SHAP\nDirection"
+      name = "Mean SHAP Direction",
+      guide = guide_legend(title.position = "right", title.hjust = 0, title.vjust = 0.5)
     ) +
     scale_y_continuous(
-      breaks = unique(df_with_y$y_numeric),
+      breaks = seq_along(levels(df$pretty)),
       labels = levels(df$pretty)
     ) +
     labs(x = "SHAP Value", y = NULL) +
     theme(
       legend.position = "right",
-      legend.direction = "vertical"
+      legend.direction = "horizontal"
     )
 }
 
@@ -282,9 +285,9 @@ bar_plot <- function(SV) {
     summarize(m = mean(abs(shap), na.rm = TRUE), .groups="drop") %>%
     mutate(pretty = recode(feature, !!!recode_map)) %>%
     filter(!is.na(pretty)) %>%
-    arrange(m)  # ascending order so lowest is first
+    arrange(desc(m))
 
-  bs$pretty <- factor(bs$pretty, levels = bs$pretty)
+  bs$pretty <- factor(bs$pretty, levels = rev(bs$pretty))
 
   ggplot(bs, aes(x = pretty, y = m)) +
     geom_col() +
@@ -529,31 +532,41 @@ ggsave(
 
 # Create RAINCLOUD version
 row3_rain <- plot_grid(
-  dot_plot_reviewer_rain(SV_FN, kept_FNConc_scaled) + labs(tag = "e)") + theme(legend.position="none"),
-  dot_plot_reviewer_rain(SV_FY, kept_FNYield_scaled) + labs(tag = "f)") + theme(legend.position="none"),
+  dot_plot_reviewer_rain(SV_FN, kept_FNConc_scaled) + labs(tag = "e)") +
+    theme(legend.position="none",
+          axis.text = element_text(size = 24),
+          axis.title = element_text(size = 26),
+          plot.tag = element_text(size = 32)),
+  dot_plot_reviewer_rain(SV_FY, kept_FNYield_scaled) + labs(tag = "f)") +
+    theme(legend.position="none",
+          axis.text = element_text(size = 24),
+          axis.title = element_text(size = 26),
+          plot.tag = element_text(size = 32)),
   ncol = 2, align = "h", axis = "tblr", rel_widths = c(1, 1)
 )
-
+       
 # Get the combined legend with both scales
 leg2_rain_combined <- get_legend(
   dot_plot_reviewer_rain(SV_FN, kept_FNConc_scaled) +
     theme(
-      legend.position = "bottom",
+      legend.position = "right",
       legend.direction = "horizontal",
       legend.box = "horizontal",
       legend.spacing.x = unit(3, "cm"),
-      legend.box.spacing = unit(0.5, "cm")
+      legend.box.spacing = unit(0.5, "cm"),
+      legend.text = element_text(size = 24),
+      legend.title = element_text(size = 24)
     )
 )
 
 reviewer_fig_rain_full <- plot_grid(
   row1, leg1, row2, row3_rain, leg2_rain_combined,
   ncol        = 1,
-  rel_heights = c(1.15, 0.12, 1.15, 1.4, 0.35),
+  rel_heights = c(1, 0.08, 1, 1, 0.15),
   align       = "v"
 )
 
 ggsave(
   file.path(od, "Fig2_REVIEWER_ONLY_raincloud_full.png"),
-  reviewer_fig_rain_full, width = 20, height = 27, dpi = 300, bg = "white"
+  reviewer_fig_rain_full, width = 22, height = 26, dpi = 300, bg = "white"
 )
