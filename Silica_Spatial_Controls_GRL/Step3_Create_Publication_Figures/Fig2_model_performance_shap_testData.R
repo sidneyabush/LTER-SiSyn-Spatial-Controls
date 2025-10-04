@@ -196,7 +196,7 @@ dot_plot_reviewer_box <- function(SV, KD_s) {
     geom_text(data = mean_shap,
               aes(x = x_text_pos, y = pretty, label = sprintf("%.4f", mean_shap),
                   color = direction_factor),
-              hjust = 0, size = 5, inherit.aes = FALSE) +
+              hjust = 0, size = 7, inherit.aes = FALSE) +
     scale_color_manual(
       values = c("Positive" = "#4575b4", "Negative" = "#d73027"),
       guide = "none"
@@ -211,7 +211,8 @@ dot_plot_reviewer_box <- function(SV, KD_s) {
     theme(
       legend.position = "right",
       legend.direction = "horizontal",
-      legend.title = element_text(size = 10)
+      legend.title = element_text(size = 10),
+      axis.text.y = element_text(size = 14)
     )
 }
 
@@ -544,7 +545,8 @@ leg2_box <- get_legend(
   dot_plot_reviewer_box(SV_FN, kept_FNConc_scaled) +
     guides(fill = guide_legend(override.aes = list(alpha = 0.6))) +
     theme(legend.position = "right", legend.direction = "horizontal",
-          legend.title = element_text(size = 14))
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 18))
 )
 
 reviewer_fig_box <- plot_grid(
@@ -556,5 +558,5 @@ reviewer_fig_box <- plot_grid(
 
 ggsave(
   file.path(od, "Fig2ef_REVIEWER_ONLY_boxplot.png"),
-  reviewer_fig_box, width = 17, height = 8, dpi = 300, bg = "white"
+  reviewer_fig_box, width = 20, height = 8, dpi = 300, bg = "white"
 )
