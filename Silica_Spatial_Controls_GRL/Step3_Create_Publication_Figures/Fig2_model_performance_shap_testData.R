@@ -14,7 +14,7 @@
 
 
 # 1. Packages & theme
-librarian::shelf(iml, ggplot2, dplyr, tidyr, randomForest, tibble, scales, cowplot)
+librarian::shelf(iml, ggplot2, dplyr, tidyr, randomForest, tibble, scales, cowplot, ggnewscale, ggridges)
 
 theme_set(
   theme_classic(base_size = 20) +
@@ -98,7 +98,7 @@ kept_FNYield_scaled <- KD_FY %>%
 
 gmin <- 0; gmax <- 1
 
-# 6. Dot‐plot function
+# 6. Dot‐plot function (NO mean bars for final figure)
 dot_plot <- function(SV, KD_s) {
   shap_df <- as.data.frame(SV) %>%
     mutate(id = row_number()) %>%
@@ -120,19 +120,10 @@ dot_plot <- function(SV, KD_s) {
 
   df$pretty <- factor(df$pretty, levels = rev(ord))
 
-  # Calculate mean SHAP for each feature (for bar overlay)
-  mean_shap <- df %>%
-    group_by(pretty) %>%
-    summarize(mean_shap = mean(shap, na.rm = TRUE), .groups = "drop") %>%
-    mutate(pretty = factor(pretty, levels = levels(df$pretty)))
-
   ggplot(df, aes(x = shap, y = pretty)) +
     geom_vline(xintercept = 0, linetype = "dashed", color = "gray60") +
     geom_jitter(aes(fill = val), shape = 21, color = "darkgray",
                 height = 0.2, size = 2.7, alpha = 0.9) +
-    # Add bars showing mean SHAP (ON TOP of dots)
-    geom_col(data = mean_shap, aes(x = mean_shap, y = pretty),
-             fill = "black", alpha = 0.6, width = 0.6, inherit.aes = FALSE) +
     scale_fill_gradient(
       low = "white", high = "black", limits = c(gmin, gmax),
       name = "Scaled Value",
@@ -145,6 +136,83 @@ dot_plot <- function(SV, KD_s) {
         barheight      = unit(1.5, "lines"),
         label.theme    = element_text(size = 16)
       )
+    ) +
+    labs(x = NULL, y = NULL) +
+    theme(
+      legend.position = "right",
+      legend.direction = "horizontal",
+      legend.margin   = ggplot2::margin(t = 2, r = 0, b = 2, l = 0, unit = "pt")
+    )
+}
+
+# 6b. Dot plot WITH big colored mean markers (for reviewer only)
+dot_plot_reviewer <- function(SV, KD_s) {
+  shap_df <- as.data.frame(SV) %>%
+    mutate(id = row_number()) %>%
+    pivot_longer(-id, names_to = "feature", values_to = "shap")
+
+  val_df  <- KD_s %>%
+    mutate(id = row_number()) %>%
+    pivot_longer(-id, names_to = "feature", values_to = "val")
+
+  df <- left_join(shap_df, val_df, by = c("id","feature")) %>%
+    mutate(pretty = recode(feature, !!!recode_map)) %>%
+    filter(!is.na(pretty))
+
+  ord <- df %>%
+    group_by(pretty) %>%
+    summarize(m = mean(abs(shap)), .groups="drop") %>%
+    arrange(desc(m)) %>%
+    pull(pretty)
+
+  df$pretty <- factor(df$pretty, levels = rev(ord))
+
+  # Calculate mean SHAP with direction
+  mean_shap <- df %>%
+    group_by(pretty) %>%
+    summarize(mean_shap = mean(shap, na.rm = TRUE), .groups = "drop") %>%
+    mutate(
+      pretty = factor(pretty, levels = levels(df$pretty)),
+      direction = ifelse(mean_shap > 0, "Positive", "Negative")
+    )
+
+  # Print for debugging
+  cat("\nMean SHAP values being plotted:\n")
+  print(mean_shap)
+  cat("\n")
+
+  ggplot(df, aes(x = shap, y = pretty)) +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "gray60") +
+    # Original dots
+    geom_jitter(aes(fill = val), shape = 21, color = "darkgray",
+                height = 0.2, size = 2.7, alpha = 0.6) +
+    scale_fill_gradient(
+      low = "white", high = "black", limits = c(gmin, gmax),
+      name = "Scaled Value",
+      guide = guide_colourbar(
+        direction      = "horizontal",
+        title.position = "top",
+        title.hjust    = 0.5,
+        barwidth       = unit(15, "lines"),
+        barheight      = unit(1.5, "lines"),
+        label.theme    = element_text(size = 16),
+        title.theme    = element_text(size = 14)
+      )
+    ) +
+    # Add new color scale for mean markers
+    new_scale_color() +
+    new_scale_fill() +
+    # BIG DIAMOND markers at mean SHAP (very visible)
+    geom_point(data = mean_shap, aes(x = mean_shap, y = pretty,
+                                      fill = direction, color = direction),
+               shape = 23, size = 8, stroke = 2, inherit.aes = FALSE) +
+    scale_fill_manual(
+      values = c("Positive" = "#d73027", "Negative" = "#4575b4"),
+      name = "Mean SHAP\nDirection"
+    ) +
+    scale_color_manual(
+      values = c("Positive" = "black", "Negative" = "black"),
+      guide = "none"
     ) +
     labs(x = NULL, y = NULL) +
     theme(
@@ -358,4 +426,58 @@ final_fig2 <- plot_grid(
 ggsave(
   file.path(od, "Fig2_Global_FNConc_FNYield_multi_split.png"),
   final_fig2, width = 17, height = 20, dpi = 300, bg = "white"
+)
+
+# #############################################################################
+# 10. REVIEWER VERSION: Generate panels e-f WITH exaggerated mean SHAP bars
+# #############################################################################
+cat("\n========================================\n")
+cat("Generating REVIEWER-ONLY version...\n")
+
+# Calculate and print statistics for reviewer response
+mean_stats_conc <- as.data.frame(SV_FN) %>%
+  pivot_longer(everything(), names_to = "feature", values_to = "shap") %>%
+  group_by(feature) %>%
+  summarize(mean_shap = mean(shap, na.rm = TRUE), .groups = "drop")
+
+mean_stats_yield <- as.data.frame(SV_FY) %>%
+  pivot_longer(everything(), names_to = "feature", values_to = "shap") %>%
+  group_by(feature) %>%
+  summarize(mean_shap = mean(shap, na.rm = TRUE), .groups = "drop")
+
+cat("\nCONCENTRATION Mean SHAP range:",
+    sprintf("%.4f to %.4f\n", min(mean_stats_conc$mean_shap), max(mean_stats_conc$mean_shap)))
+cat("YIELD Mean SHAP range:",
+    sprintf("%.2f to %.2f\n", min(mean_stats_yield$mean_shap), max(mean_stats_yield$mean_shap)))
+
+# Create reviewer plots side-by-side (like original e-f panels)
+row3_reviewer <- plot_grid(
+  dot_plot_reviewer(SV_FN, kept_FNConc_scaled) + labs(tag = "e)") + theme(legend.position="none"),
+  dot_plot_reviewer(SV_FY, kept_FNYield_scaled) + labs(tag = "f)") + theme(legend.position="none"),
+  ncol = 2, align = "h", axis = "tblr", rel_widths = c(1, 1)
+)
+
+# Get legends
+leg2_dir <- get_legend(
+  dot_plot_reviewer(SV_FN, kept_FNConc_scaled) +
+    guides(fill = guide_legend(override.aes = list(alpha = 1))) +
+    theme(legend.position = "right", legend.direction = "horizontal")
+)
+
+leg2_val <- get_legend(
+  dot_plot_reviewer(SV_FN, kept_FNConc_scaled) +
+    guides(fill = guide_colorbar()) +
+    theme(legend.position = "right", legend.direction = "horizontal")
+)
+
+reviewer_fig <- plot_grid(
+  row3_reviewer,
+  leg2_dir,
+  ncol = 1,
+  rel_heights = c(1, 0.15)
+)
+
+ggsave(
+  file.path(od, "Fig2ef_REVIEWER_ONLY_with_mean_shap_bars.png"),
+  reviewer_fig, width = 17, height = 8, dpi = 300, bg = "white"
 )
