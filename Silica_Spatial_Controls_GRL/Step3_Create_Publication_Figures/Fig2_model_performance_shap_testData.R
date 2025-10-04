@@ -145,8 +145,8 @@ dot_plot <- function(SV, KD_s) {
     )
 }
 
-# 6b. Dot plot WITH big colored mean markers (for reviewer only)
-dot_plot_reviewer <- function(SV, KD_s) {
+# 6b. Boxplot version (for reviewer only)
+dot_plot_reviewer_box <- function(SV, KD_s) {
   shap_df <- as.data.frame(SV) %>%
     mutate(id = row_number()) %>%
     pivot_longer(-id, names_to = "feature", values_to = "shap")
@@ -176,16 +176,72 @@ dot_plot_reviewer <- function(SV, KD_s) {
       direction = ifelse(mean_shap > 0, "Positive", "Negative")
     )
 
-  # Print for debugging
-  cat("\nMean SHAP values being plotted:\n")
-  print(mean_shap)
-  cat("\n")
+  df <- df %>%
+    left_join(mean_shap %>% select(pretty, direction), by = "pretty") %>%
+    mutate(direction_factor = factor(direction, levels = c("Negative", "Positive")))
 
-  ggplot(df, aes(x = shap, y = pretty)) +
+  ggplot(df, aes(x = shap, y = pretty, fill = direction_factor)) +
     geom_vline(xintercept = 0, linetype = "dashed", color = "gray60") +
-    # Original dots
-    geom_jitter(aes(fill = val), shape = 21, color = "darkgray",
-                height = 0.2, size = 2.7, alpha = 0.6) +
+    geom_boxplot(alpha = 0.7, outlier.size = 0.8) +
+    scale_fill_manual(
+      values = c("Positive" = "#d73027", "Negative" = "#4575b4"),
+      name = "Mean SHAP\nDirection"
+    ) +
+    labs(x = "SHAP Value", y = NULL) +
+    theme(
+      legend.position = "right",
+      legend.direction = "vertical"
+    )
+}
+
+# 6c. Raincloud plot version (for reviewer only)
+dot_plot_reviewer_rain <- function(SV, KD_s) {
+  shap_df <- as.data.frame(SV) %>%
+    mutate(id = row_number()) %>%
+    pivot_longer(-id, names_to = "feature", values_to = "shap")
+
+  val_df  <- KD_s %>%
+    mutate(id = row_number()) %>%
+    pivot_longer(-id, names_to = "feature", values_to = "val")
+
+  df <- left_join(shap_df, val_df, by = c("id","feature")) %>%
+    mutate(pretty = recode(feature, !!!recode_map)) %>%
+    filter(!is.na(pretty))
+
+  ord <- df %>%
+    group_by(pretty) %>%
+    summarize(m = mean(abs(shap)), .groups="drop") %>%
+    arrange(desc(m)) %>%
+    pull(pretty)
+
+  df$pretty <- factor(df$pretty, levels = ord)
+
+  # Calculate mean SHAP with direction
+  mean_shap <- df %>%
+    group_by(pretty) %>%
+    summarize(mean_shap = mean(shap, na.rm = TRUE), .groups = "drop") %>%
+    mutate(
+      pretty = factor(pretty, levels = levels(df$pretty)),
+      direction = ifelse(mean_shap > 0, "Positive", "Negative")
+    )
+
+  df <- df %>%
+    left_join(mean_shap %>% select(pretty, direction), by = "pretty") %>%
+    mutate(direction_factor = factor(direction, levels = c("Negative", "Positive")))
+
+  # Create numeric y positions for separation
+  df_with_y <- df %>%
+    mutate(y_numeric = as.numeric(pretty))
+
+  mean_shap_with_y <- mean_shap %>%
+    mutate(y_numeric = as.numeric(pretty))
+
+  ggplot(df_with_y, aes(x = shap)) +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "gray60") +
+    # Jittered points colored by scaled value - positioned lower
+    geom_jitter(aes(y = y_numeric - 0.2, fill = val),
+                shape = 21, color = "darkgray",
+                height = 0.1, size = 2.7, alpha = 0.6) +
     scale_fill_gradient(
       low = "white", high = "black", limits = c(gmin, gmax),
       name = "Scaled Value",
@@ -199,26 +255,22 @@ dot_plot_reviewer <- function(SV, KD_s) {
         title.theme    = element_text(size = 14)
       )
     ) +
-    # Add new color scale for mean markers
-    new_scale_color() +
     new_scale_fill() +
-    # BIG DIAMOND markers at mean SHAP (very visible)
-    geom_point(data = mean_shap, aes(x = mean_shap, y = pretty,
-                                      fill = direction, color = direction),
-               shape = 23, size = 8, stroke = 2, inherit.aes = FALSE) +
+    # Boxplot colored by direction - positioned higher
+    geom_boxplot(data = df_with_y, aes(y = y_numeric + 0.2, fill = direction_factor, group = pretty),
+                 width = 0.35, alpha = 0.6, outlier.shape = NA, linewidth = 0.5) +
     scale_fill_manual(
       values = c("Positive" = "#d73027", "Negative" = "#4575b4"),
       name = "Mean SHAP\nDirection"
     ) +
-    scale_color_manual(
-      values = c("Positive" = "black", "Negative" = "black"),
-      guide = "none"
+    scale_y_continuous(
+      breaks = unique(df_with_y$y_numeric),
+      labels = levels(df$pretty)
     ) +
-    labs(x = NULL, y = NULL) +
+    labs(x = "SHAP Value", y = NULL) +
     theme(
       legend.position = "right",
-      legend.direction = "horizontal",
-      legend.margin   = ggplot2::margin(t = 2, r = 0, b = 2, l = 0, unit = "pt")
+      legend.direction = "vertical"
     )
 }
 
@@ -230,10 +282,10 @@ bar_plot <- function(SV) {
     summarize(m = mean(abs(shap), na.rm = TRUE), .groups="drop") %>%
     mutate(pretty = recode(feature, !!!recode_map)) %>%
     filter(!is.na(pretty)) %>%
-    arrange(desc(m))
-  
-  bs$pretty <- factor(bs$pretty, levels = rev(bs$pretty))
-  
+    arrange(m)  # ascending order so lowest is first
+
+  bs$pretty <- factor(bs$pretty, levels = bs$pretty)
+
   ggplot(bs, aes(x = pretty, y = m)) +
     geom_col() +
     coord_flip() +
@@ -450,34 +502,58 @@ cat("\nCONCENTRATION Mean SHAP range:",
 cat("YIELD Mean SHAP range:",
     sprintf("%.2f to %.2f\n", min(mean_stats_yield$mean_shap), max(mean_stats_yield$mean_shap)))
 
-# Create reviewer plots side-by-side (like original e-f panels)
-row3_reviewer <- plot_grid(
-  dot_plot_reviewer(SV_FN, kept_FNConc_scaled) + labs(tag = "e)") + theme(legend.position="none"),
-  dot_plot_reviewer(SV_FY, kept_FNYield_scaled) + labs(tag = "f)") + theme(legend.position="none"),
+# Create BOXPLOT version
+row3_box <- plot_grid(
+  dot_plot_reviewer_box(SV_FN, kept_FNConc_scaled) + labs(tag = "e)") + theme(legend.position="none"),
+  dot_plot_reviewer_box(SV_FY, kept_FNYield_scaled) + labs(tag = "f)") + theme(legend.position="none"),
   ncol = 2, align = "h", axis = "tblr", rel_widths = c(1, 1)
 )
 
-# Get legends
-leg2_dir <- get_legend(
-  dot_plot_reviewer(SV_FN, kept_FNConc_scaled) +
+leg2_box <- get_legend(
+  dot_plot_reviewer_box(SV_FN, kept_FNConc_scaled) +
     guides(fill = guide_legend(override.aes = list(alpha = 1))) +
     theme(legend.position = "right", legend.direction = "horizontal")
 )
 
-leg2_val <- get_legend(
-  dot_plot_reviewer(SV_FN, kept_FNConc_scaled) +
-    guides(fill = guide_colorbar()) +
-    theme(legend.position = "right", legend.direction = "horizontal")
-)
-
-reviewer_fig <- plot_grid(
-  row3_reviewer,
-  leg2_dir,
+reviewer_fig_box <- plot_grid(
+  row3_box,
+  leg2_box,
   ncol = 1,
   rel_heights = c(1, 0.15)
 )
 
 ggsave(
-  file.path(od, "Fig2ef_REVIEWER_ONLY_with_mean_shap_bars.png"),
-  reviewer_fig, width = 17, height = 8, dpi = 300, bg = "white"
+  file.path(od, "Fig2ef_REVIEWER_ONLY_boxplot.png"),
+  reviewer_fig_box, width = 17, height = 8, dpi = 300, bg = "white"
+)
+
+# Create RAINCLOUD version
+row3_rain <- plot_grid(
+  dot_plot_reviewer_rain(SV_FN, kept_FNConc_scaled) + labs(tag = "e)") + theme(legend.position="none"),
+  dot_plot_reviewer_rain(SV_FY, kept_FNYield_scaled) + labs(tag = "f)") + theme(legend.position="none"),
+  ncol = 2, align = "h", axis = "tblr", rel_widths = c(1, 1)
+)
+
+# Get the combined legend with both scales
+leg2_rain_combined <- get_legend(
+  dot_plot_reviewer_rain(SV_FN, kept_FNConc_scaled) +
+    theme(
+      legend.position = "bottom",
+      legend.direction = "horizontal",
+      legend.box = "horizontal",
+      legend.spacing.x = unit(3, "cm"),
+      legend.box.spacing = unit(0.5, "cm")
+    )
+)
+
+reviewer_fig_rain_full <- plot_grid(
+  row1, leg1, row2, row3_rain, leg2_rain_combined,
+  ncol        = 1,
+  rel_heights = c(1.15, 0.12, 1.15, 1.4, 0.35),
+  align       = "v"
+)
+
+ggsave(
+  file.path(od, "Fig2_REVIEWER_ONLY_raincloud_full.png"),
+  reviewer_fig_rain_full, width = 20, height = 27, dpi = 300, bg = "white"
 )
