@@ -100,30 +100,39 @@ gmin <- 0; gmax <- 1
 
 # 6. Dot‐plot function
 dot_plot <- function(SV, KD_s) {
-  shap_df <- as.data.frame(SV) %>% 
-    mutate(id = row_number()) %>% 
+  shap_df <- as.data.frame(SV) %>%
+    mutate(id = row_number()) %>%
     pivot_longer(-id, names_to = "feature", values_to = "shap")
-  
-  val_df  <- KD_s %>% 
+
+  val_df  <- KD_s %>%
     mutate(id = row_number()) %>%
     pivot_longer(-id, names_to = "feature", values_to = "val")
-  
+
   df <- left_join(shap_df, val_df, by = c("id","feature")) %>%
-    mutate(pretty = recode(feature, !!!recode_map)) %>% 
+    mutate(pretty = recode(feature, !!!recode_map)) %>%
     filter(!is.na(pretty))
-  
-  ord <- df %>% 
-    group_by(pretty) %>% 
-    summarize(m = mean(abs(shap)), .groups="drop") %>% 
-    arrange(desc(m)) %>% 
+
+  ord <- df %>%
+    group_by(pretty) %>%
+    summarize(m = mean(abs(shap)), .groups="drop") %>%
+    arrange(desc(m)) %>%
     pull(pretty)
-  
+
   df$pretty <- factor(df$pretty, levels = rev(ord))
-  
-  ggplot(df, aes(shap, pretty)) +
-    geom_vline(xintercept = 0, linetype = "dashed") +
+
+  # Calculate mean SHAP for each feature (for bar overlay)
+  mean_shap <- df %>%
+    group_by(pretty) %>%
+    summarize(mean_shap = mean(shap, na.rm = TRUE), .groups = "drop") %>%
+    mutate(pretty = factor(pretty, levels = levels(df$pretty)))
+
+  ggplot(df, aes(x = shap, y = pretty)) +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "gray60") +
     geom_jitter(aes(fill = val), shape = 21, color = "darkgray",
                 height = 0.2, size = 2.7, alpha = 0.9) +
+    # Add bars showing mean SHAP (ON TOP of dots)
+    geom_col(data = mean_shap, aes(x = mean_shap, y = pretty),
+             fill = "black", alpha = 0.6, width = 0.6, inherit.aes = FALSE) +
     scale_fill_gradient(
       low = "white", high = "black", limits = c(gmin, gmax),
       name = "Scaled Value",
