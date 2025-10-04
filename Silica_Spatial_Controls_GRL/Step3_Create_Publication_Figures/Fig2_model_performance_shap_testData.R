@@ -173,25 +173,45 @@ dot_plot_reviewer_box <- function(SV, KD_s) {
     summarize(mean_shap = mean(shap, na.rm = TRUE), .groups = "drop") %>%
     mutate(
       pretty = factor(pretty, levels = levels(df$pretty)),
-      direction = ifelse(mean_shap > 0, "Positive", "Negative")
+      direction = ifelse(mean_shap > 0, "Positive", "Negative"),
+      direction_factor = factor(direction, levels = c("Negative", "Positive"))
     )
 
   df <- df %>%
-    left_join(mean_shap %>% select(pretty, direction), by = "pretty") %>%
-    mutate(direction_factor = factor(direction, levels = c("Negative", "Positive")))
+    left_join(mean_shap %>% select(pretty, direction, direction_factor), by = "pretty")
+
+  # Get x-axis range for positioning text
+  x_range <- range(df$shap, na.rm = TRUE)
+  x_text_pos <- x_range[2] + 0.05 * diff(x_range)
 
   ggplot(df, aes(x = shap, y = pretty, fill = direction_factor)) +
-    geom_vline(xintercept = 0, linetype = "dashed", color = "gray60") +
-    geom_boxplot(alpha = 0.7, outlier.size = 0.8) +
-    scale_fill_manual(
-      values = c("Positive" = "#d73027", "Negative" = "#4575b4"),
-      name = "Mean SHAP Direction",
-      guide = guide_legend(title.position = "right", title.hjust = 0, title.vjust = 0.5)
+    geom_vline(xintercept = 0, linetype = "dashed", color = "gray60", linewidth = 0.5) +
+    geom_violin(alpha = 0.6, trim = FALSE, scale = "width") +
+    # Add mean line
+    geom_segment(data = mean_shap,
+                 aes(x = mean_shap, xend = mean_shap,
+                     y = as.numeric(pretty) - 0.4, yend = as.numeric(pretty) + 0.4),
+                 color = "black", linewidth = 1, inherit.aes = FALSE) +
+    # Add mean value text colored by direction
+    geom_text(data = mean_shap,
+              aes(x = x_text_pos, y = pretty, label = sprintf("%.4f", mean_shap),
+                  color = direction_factor),
+              hjust = 0, size = 4, inherit.aes = FALSE) +
+    scale_color_manual(
+      values = c("Positive" = "#4575b4", "Negative" = "#d73027"),
+      guide = "none"
     ) +
+    scale_fill_manual(
+      values = c("Positive" = "#4575b4", "Negative" = "#d73027"),
+      name = "Mean SHAP Direction",
+      guide = guide_legend(title.position = "left", title.hjust = 1, title.vjust = 0.5)
+    ) +
+    scale_x_continuous(expand = expansion(mult = c(0.05, 0.15))) +
     labs(x = "SHAP Value", y = NULL) +
     theme(
       legend.position = "right",
-      legend.direction = "horizontal"
+      legend.direction = "horizontal",
+      legend.title = element_text(size = 10)
     )
 }
 
@@ -248,32 +268,40 @@ dot_plot_reviewer_rain <- function(SV, KD_s) {
       name = "Scaled Value",
       guide = guide_colourbar(
         direction      = "horizontal",
-        title.position = "right",
-        title.hjust    = -0.5,
+        title.position = "left",
+        title.hjust    = 1,
         title.vjust    = 1,
         barwidth       = unit(15, "lines"),
         barheight      = unit(1.5, "lines"),
         label.theme    = element_text(size = 20),
-        title.theme    = element_text(size = 20)
+        title.theme    = element_text(size = 24)
       )
     ) +
     new_scale_fill() +
-    # Boxplot colored by direction - positioned higher
-    geom_boxplot(data = df_with_y, aes(y = y_numeric + 0.2, fill = direction_factor, group = pretty),
-                 width = 0.35, alpha = 0.6, outlier.shape = NA, linewidth = 0.5) +
+    # Violin plot colored by direction - positioned higher
+    geom_violin(data = df_with_y, aes(y = y_numeric + 0.2, x = shap, fill = direction_factor, group = pretty),
+                width = 0.4, alpha = 0.6, trim = FALSE, scale = "width") +
+    # Add mean as a vertical line
+    geom_segment(data = mean_shap_with_y,
+                 aes(x = mean_shap, xend = mean_shap,
+                     y = y_numeric - 0.0, yend = y_numeric + 0.4),
+                 color = "black", linewidth = 1.2) +
     scale_fill_manual(
-      values = c("Positive" = "#d73027", "Negative" = "#4575b4"),
+      values = c("Positive" = "#4575b4", "Negative" = "#d73027"),
       name = "Mean SHAP Direction",
-      guide = guide_legend(title.position = "right", title.hjust = 0, title.vjust = 0.5)
+      guide = guide_legend(title.position = "left", title.hjust = 1, title.vjust = 0.5)
     ) +
     scale_y_continuous(
       breaks = seq_along(levels(df$pretty)),
       labels = levels(df$pretty)
     ) +
+    coord_cartesian(clip = "off") +
     labs(x = "SHAP Value", y = NULL) +
     theme(
       legend.position = "right",
-      legend.direction = "horizontal"
+      legend.direction = "horizontal",
+      legend.title = element_text(size = 10),
+      plot.margin = margin(5, 15, 5, 5, "pt")
     )
 }
 
@@ -514,8 +542,9 @@ row3_box <- plot_grid(
 
 leg2_box <- get_legend(
   dot_plot_reviewer_box(SV_FN, kept_FNConc_scaled) +
-    guides(fill = guide_legend(override.aes = list(alpha = 1))) +
-    theme(legend.position = "right", legend.direction = "horizontal")
+    guides(fill = guide_legend(override.aes = list(alpha = 0.6))) +
+    theme(legend.position = "right", legend.direction = "horizontal",
+          legend.title = element_text(size = 14))
 )
 
 reviewer_fig_box <- plot_grid(
@@ -687,14 +716,18 @@ row3_rain <- plot_grid(
 # Get the combined legend with both scales
 leg2_rain_combined <- get_legend(
   dot_plot_reviewer_rain(SV_FN, kept_FNConc_scaled) +
+    guides(
+      fill = guide_legend(
+        title.theme = element_text(size = 24)
+      )
+    ) +
     theme(
       legend.position = "right",
       legend.direction = "horizontal",
       legend.box = "horizontal",
       legend.spacing.x = unit(3, "cm"),
       legend.box.spacing = unit(0.5, "cm"),
-      legend.text = element_text(size = 24),
-      legend.title = element_text(size = 24)
+      legend.text = element_text(size = 24)
     )
 )
 
