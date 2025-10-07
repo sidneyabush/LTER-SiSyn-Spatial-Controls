@@ -887,7 +887,7 @@ conc_grid <- plot_grid(
   rel_heights = c(1, 0.1)
 )
 
-ggsave("Concentration_Multipanel.png", conc_grid, width = 8, height = 6, dpi = 300, bg = "white")
+ggsave("Concentration_Multipanel.png", conc_grid, width = 8, height = 7, dpi = 300, bg = "white")
 
 # =========
 # YIELDS
@@ -936,7 +936,7 @@ yld_grid <- plot_grid(
   rel_heights = c(1, 0.1)
 )
 
-ggsave("Yield_Multipanel.png", yld_grid, width = 8, height = 6, dpi = 300, bg = "white")
+ggsave("Yield_Multipanel.png", yld_grid, width = 8, height = 7, dpi = 300, bg = "white")
 
 
 #---- End of Script ----
