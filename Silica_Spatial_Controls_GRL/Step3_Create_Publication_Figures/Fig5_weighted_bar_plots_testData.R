@@ -234,16 +234,16 @@ conc_plot <- ggplot(conc_shap_plot, aes(x = litho_mean_abs, y = feature, fill = 
   scale_x_continuous(limits = c(0, conc_max), expand = c(0, 0)) +
   scale_y_discrete(limits = rev) +
   labs(x = NULL, y = NULL, tag = "a) Concentration") +
-  theme_classic(base_size = 16) +
+  theme_classic(base_size = 22) +
   theme(
-    plot.tag = element_text(hjust = 0, size = 20),
+    plot.tag = element_text(hjust = 0, size = 22),
     plot.tag.position = c(-0.05, 1.02),
     plot.margin = ggplot2::margin(t = 10, r = 15, b = 5, l = 70, unit = "pt"),
-    strip.text.x = element_text(size = 16),
+    strip.text.x = element_text(size = 18),
     strip.background = element_rect(fill = "white", color = "black"),
     panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
-    axis.text.y = element_text(size = 14),
-    axis.text.x = element_text(size = 13),
+    axis.text.y = element_text(size = 16),
+    axis.text.x = element_text(size = 14),
     legend.position = "none",
     panel.spacing = unit(0.3, "lines")
   )
@@ -259,17 +259,17 @@ yield_plot <- ggplot(yield_shap_plot, aes(x = litho_mean_abs, y = feature, fill 
   scale_x_continuous(limits = c(0, yield_max), expand = c(0, 0)) +
   scale_y_discrete(limits = rev) +
   labs(x = "Mean Absolute SHAP Value", y = NULL, tag = "b) Yield") +
-  theme_classic(base_size = 16) +
+  theme_classic(base_size = 22) +
   theme(
-    plot.tag = element_text(hjust = 0, size = 20),
+    plot.tag = element_text(hjust = 0, size = 22),
     plot.tag.position = c(-0.05, 1.02),
     plot.margin = ggplot2::margin(t = 10, r = 15, b = 5, l = 70, unit = "pt"),
     strip.text.x = element_blank(),
     strip.background = element_blank(),
     panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
-    axis.text.y = element_text(size = 14),
-    axis.text.x = element_text(size = 13),
-    axis.title.x = element_text(size = 16),
+    axis.text.y = element_text(size = 16),
+    axis.text.x = element_text(size = 14),
+    axis.title.x = element_text(size = 18),
     legend.position = "none",
     panel.spacing = unit(0.3, "lines")
   )
