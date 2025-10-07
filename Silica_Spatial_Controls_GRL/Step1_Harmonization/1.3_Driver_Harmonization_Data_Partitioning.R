@@ -863,7 +863,7 @@ p_conc_density <- ggplot(ss_conc_all, aes(x = med_conc, fill = dataset, color = 
   geom_density(alpha = 0.25, adjust = DENS_ADJUST) +
   scale_fill_manual(values = COLORS) + scale_color_manual(values = COLORS) +
   facet_wrap(~ final_cluster, scales = "free_x", ncol = 3) +
-  labs(x = "DSi Concentration", y = "Density") +
+  labs(x = expression("DSi Concentration (mg L"^-1*")"), y = "Density") +
   themer +
   theme(panel.spacing = unit(0.5, "lines"),
         strip.background = element_rect(fill = "white", color = "black"),
@@ -894,8 +894,8 @@ ggsave("Concentration_Multipanel.png", conc_grid, width = 8, height = 6, dpi = 3
 # =========
 ss_yld_all <- ss_conc_all  # same membership; pull log_med_yield from site_summary
 
-# --- A) boxplots (log10 yields) ---
-p_yld_box <- ggplot(ss_yld_all, aes(y = dataset, x = log_med_yield, fill = dataset, color = dataset)) +
+# --- A) boxplots (yields) ---
+p_yld_box <- ggplot(ss_yld_all, aes(y = dataset, x = med_yield, fill = dataset, color = dataset)) +
   geom_boxplot(outlier.shape = NA, width = 0.6, alpha = 0.5) +
   geom_jitter(height = 0.2, alpha = 0.4, size = 1.5) +
   scale_fill_manual(values = COLORS) +
@@ -907,12 +907,12 @@ p_yld_box <- ggplot(ss_yld_all, aes(y = dataset, x = log_med_yield, fill = datas
         strip.background = element_rect(fill = "white", color = "black"),
         panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5))
 
-# --- B) density (log10 yields) ---
-p_yld_density <- ggplot(ss_yld_all, aes(x = log_med_yield, fill = dataset, color = dataset)) +
+# --- B) density (yields) ---
+p_yld_density <- ggplot(ss_yld_all, aes(x = med_yield, fill = dataset, color = dataset)) +
   geom_density(alpha = 0.25, adjust = DENS_ADJUST) +
   scale_fill_manual(values = COLORS) + scale_color_manual(values = COLORS) +
   facet_wrap(~ final_cluster, scales = "free_x", ncol = 3) +
-  labs(x = "DSi Yield", y = "Density") +
+  labs(x = expression("DSi Yield (kg km"^-2*" year"^-1*")"), y = "Density") +
   themer +
   theme(panel.spacing = unit(0.5, "lines"),
         strip.background = element_rect(fill = "white", color = "black"),
