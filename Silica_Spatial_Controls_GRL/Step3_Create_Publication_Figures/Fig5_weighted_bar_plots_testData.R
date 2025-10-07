@@ -18,7 +18,7 @@ librarian::shelf(ggplot2, dplyr, tidyr, patchwork, colorspace, scales, quiet = T
 # 1. Paths & output
 # #############################################################################
 fm <- "Final_Models"
-recent30_path <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files/AllDrivers_recent30_split.csv"
+recent30_path <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files/inputs/AllDrivers_recent30_split.csv"
 output_dir <- "Final_Figures"
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
@@ -60,7 +60,8 @@ site_clusters <- recent30 %>%
   select(Stream_ID, final_cluster)
 
 recent30 <- recent30 %>%
-  left_join(site_clusters, by = "Stream_ID")
+  left_join(site_clusters, by = "Stream_ID") %>%
+  filter(!is.na(final_cluster))
 
 # 5. Sanity check: row counts
 if (nrow(recent30) != nrow(shap_values_FNConc) || nrow(recent30) != nrow(shap_values_FNYield)) {
@@ -126,7 +127,7 @@ conc_driver_importance <- as.data.frame(shap_values_FNConc) %>%
   pivot_longer(cols = everything(), names_to = "feature", values_to = "driver_mean_abs_shap")
 
 # #############################################################################
-# 10. Concentration: lithology-weighted SHAP
+# 10. Concentration: lithology-specific SHAP with variability
 # #############################################################################
 conc_shap_litho <- as.data.frame(shap_values_FNConc) %>%
   mutate(id = row_number()) %>%
@@ -136,15 +137,15 @@ conc_shap_litho <- as.data.frame(shap_values_FNConc) %>%
     by = "id"
   ) %>%
   filter(!grepl("^rocks_", feature, ignore.case = TRUE)) %>%
+  filter(!is.na(final_cluster)) %>%
+  mutate(abs_shap = abs(shap_value)) %>%
   group_by(feature, final_cluster) %>%
-  summarize(litho_mean_abs = mean(abs(shap_value), na.rm = TRUE), .groups = "drop") %>%
-  left_join(conc_driver_importance, by = "feature") %>%
-  group_by(feature) %>%
-  mutate(
-    proportion     = litho_mean_abs / sum(litho_mean_abs),
-    weighted_value = proportion * driver_mean_abs_shap
+  summarize(
+    litho_mean_abs = mean(abs_shap, na.rm = TRUE),
+    litho_se       = sd(abs_shap, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
   ) %>%
-  ungroup() %>%
+  left_join(conc_driver_importance, by = "feature") %>%
   mutate(
     feature       = recode(feature, !!!recode_map),
     final_cluster = factor(final_cluster, levels = cluster_levels)
@@ -152,7 +153,7 @@ conc_shap_litho <- as.data.frame(shap_values_FNConc) %>%
 
 feature_order_conc <- conc_shap_litho %>%
   distinct(feature, driver_mean_abs_shap) %>%
-  arrange(driver_mean_abs_shap) %>%
+  arrange(desc(driver_mean_abs_shap)) %>%
   pull(feature)
 conc_shap_litho$feature <- factor(conc_shap_litho$feature, levels = feature_order_conc)
 
@@ -166,7 +167,7 @@ yield_driver_importance <- as.data.frame(shap_values_FNYield) %>%
   pivot_longer(cols = everything(), names_to = "feature", values_to = "driver_mean_abs_shap")
 
 # #############################################################################
-# 12. Yield: lithology-weighted SHAP
+# 12. Yield: lithology-specific SHAP with variability
 # #############################################################################
 yield_shap_litho <- as.data.frame(shap_values_FNYield) %>%
   mutate(id = row_number()) %>%
@@ -176,15 +177,15 @@ yield_shap_litho <- as.data.frame(shap_values_FNYield) %>%
     by = "id"
   ) %>%
   filter(!grepl("^rocks_", feature, ignore.case = TRUE)) %>%
+  filter(!is.na(final_cluster)) %>%
+  mutate(abs_shap = abs(shap_value)) %>%
   group_by(feature, final_cluster) %>%
-  summarize(litho_mean_abs = mean(abs(shap_value), na.rm = TRUE), .groups = "drop") %>%
-  left_join(yield_driver_importance, by = "feature") %>%
-  group_by(feature) %>%
-  mutate(
-    proportion     = litho_mean_abs / sum(litho_mean_abs),
-    weighted_value = proportion * driver_mean_abs_shap
+  summarize(
+    litho_mean_abs = mean(abs_shap, na.rm = TRUE),
+    litho_se       = sd(abs_shap, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
   ) %>%
-  ungroup() %>%
+  left_join(yield_driver_importance, by = "feature") %>%
   mutate(
     feature       = recode(feature, !!!recode_map),
     final_cluster = factor(final_cluster, levels = cluster_levels)
@@ -192,81 +193,95 @@ yield_shap_litho <- as.data.frame(shap_values_FNYield) %>%
 
 feature_order_yield <- yield_shap_litho %>%
   distinct(feature, driver_mean_abs_shap) %>%
-  arrange(driver_mean_abs_shap) %>%
+  arrange(desc(driver_mean_abs_shap)) %>%
   pull(feature)
 yield_shap_litho$feature <- factor(yield_shap_litho$feature, levels = feature_order_yield)
 
 # #############################################################################
-# 13. Plot 
+# 13. Plot - Faceted by Driver (across-lithology comparison with variability)
 # #############################################################################
-conc_litho_bar <- ggplot(conc_shap_litho,
-                         aes(x = weighted_value, y = feature, fill = final_cluster)) +
-  geom_col(position = position_stack(reverse = TRUE), color = "black", size = 0.3) +
-  scale_fill_manual(
-    name   = "Lithology",
-    values = my_cluster_colors,
-    breaks = cluster_levels,
-    limits = cluster_levels
-  ) +
-  scale_x_continuous(expand = c(0, 0)) +
-  labs(
-    x     = "Weighted Mean Absolute SHAP Value",
-    y     = NULL,
-    title = "Concentration",
-    tag   = "a)"
-  ) +
-  theme_classic(base_size = 22) +
+# For each driver, show bars for each lithology with error bars (SE)
+# This allows comparison of how each driver varies across lithologies
+
+# Concentration: 9 retained drivers (excluding lithology) - in order from most to least important
+conc_retained_order <- c("Elevation", "Basin slope", "RCS", "Open-water cover",
+                         "Log(P)", "RBI", "Log(N)", "Impervious cover", "NPP")
+
+# Yield: 10 retained drivers (excluding lithology) - in order from most to least important
+yield_retained_order <- c("ET", "Log(N)", "Temp", "RCS", "Elevation", "RBI",
+                          "Impervious cover", "Wetland cover", "Basin slope", "Log(P)")
+
+conc_shap_plot <- conc_shap_litho %>%
+  filter(feature %in% conc_retained_order) %>%
+  mutate(feature = factor(feature, levels = conc_retained_order))
+
+yield_shap_plot <- yield_shap_litho %>%
+  filter(feature %in% yield_retained_order) %>%
+  mutate(feature = factor(feature, levels = yield_retained_order))
+
+# Calculate x-axis limits with padding to ensure error bars don't get cut off
+conc_max <- max(conc_shap_plot$litho_mean_abs + conc_shap_plot$litho_se, na.rm = TRUE) * 1.1
+yield_max <- max(yield_shap_plot$litho_mean_abs + yield_shap_plot$litho_se, na.rm = TRUE) * 1.1
+
+# Create concentration plot with facet_grid (lithology labels on top)
+conc_plot <- ggplot(conc_shap_plot, aes(x = litho_mean_abs, y = feature, fill = final_cluster)) +
+  geom_col(color = "black", size = 0.3) +
+  geom_errorbar(aes(xmin = litho_mean_abs - litho_se,
+                    xmax = litho_mean_abs + litho_se),
+                width = 0.3, size = 0.4) +
+  facet_grid(. ~ final_cluster, scales = "free_x") +
+  scale_fill_manual(values = my_cluster_colors, limits = cluster_levels) +
+  scale_x_continuous(limits = c(0, conc_max), expand = c(0, 0)) +
+  scale_y_discrete(limits = rev) +
+  labs(x = NULL, y = NULL, tag = "a) Concentration") +
+  theme_classic(base_size = 16) +
   theme(
-    plot.title       = element_text(hjust = 0.5, size = 24),
-    plot.tag         = element_text(size = 30, hjust = 0, vjust = 1),
-    axis.text        = element_text(size = 22),
-    axis.title.x     = element_text(size = 22),
-    legend.position  = "bottom",
-    legend.direction = "horizontal",
-    legend.title     = element_blank(),
-    legend.text      = element_text(size = 22)
+    plot.tag = element_text(hjust = 0, size = 20),
+    plot.tag.position = c(-0.02, 1.02),
+    plot.margin = margin(t = 10, r = 5, b = 5, l = 30, unit = "pt"),
+    strip.text.x = element_text(size = 16),
+    strip.background = element_rect(fill = "white", color = "black"),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+    axis.text.y = element_text(size = 14),
+    axis.text.x = element_text(size = 13),
+    legend.position = "none",
+    panel.spacing = unit(0.3, "lines")
   )
 
-yield_litho_bar <- ggplot(yield_shap_litho,
-                          aes(x = weighted_value, y = feature, fill = final_cluster)) +
-  geom_col(position = position_stack(reverse = TRUE), color = "black", size = 0.3) +
-  scale_fill_manual(
-    name   = "Lithology",
-    values = my_cluster_colors,
-    breaks = cluster_levels,
-    limits = cluster_levels
-  ) +
-  scale_x_continuous(expand = c(0, 0)) +
-  labs(
-    x     = "Weighted Mean Absolute SHAP Value",
-    y     = NULL,
-    title = "Yield",
-    tag   = "b)"
-  ) +
-  theme_classic(base_size = 22) +
+# Create yield plot with facet_grid (lithology labels on top, x-axis shown)
+yield_plot <- ggplot(yield_shap_plot, aes(x = litho_mean_abs, y = feature, fill = final_cluster)) +
+  geom_col(color = "black", size = 0.3) +
+  geom_errorbar(aes(xmin = litho_mean_abs - litho_se,
+                    xmax = litho_mean_abs + litho_se),
+                width = 0.3, size = 0.4) +
+  facet_grid(. ~ final_cluster, scales = "free_x") +
+  scale_fill_manual(values = my_cluster_colors, limits = cluster_levels) +
+  scale_x_continuous(limits = c(0, yield_max), expand = c(0, 0)) +
+  scale_y_discrete(limits = rev) +
+  labs(x = "Mean Absolute SHAP Value", y = NULL, tag = "b) Yield") +
+  theme_classic(base_size = 16) +
   theme(
-    plot.title       = element_text(hjust = 0.5, size = 24),
-    plot.tag         = element_text(size = 30, hjust = 0, vjust = 1),
-    axis.text        = element_text(size = 22),
-    axis.title.x     = element_text(size = 22),
-    legend.position  = "bottom",
-    legend.direction = "horizontal",
-    legend.title     = element_blank(),
-    legend.text      = element_text(size = 22)
+    plot.tag = element_text(hjust = 0, size = 20),
+    plot.tag.position = c(-0.02, 1.02),
+    plot.margin = margin(t = 10, r = 5, b = 5, l = 30, unit = "pt"),
+    strip.text.x = element_blank(),
+    strip.background = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+    axis.text.y = element_text(size = 14),
+    axis.text.x = element_text(size = 13),
+    axis.title.x = element_text(size = 16),
+    legend.position = "none",
+    panel.spacing = unit(0.3, "lines")
   )
 
-# #############################################################################
-# 14. Combine & save
-# #############################################################################
-fig_litho_shap <- conc_litho_bar + yield_litho_bar +
-  plot_layout(ncol = 2, guides = "collect") &
-  theme(legend.position = "bottom")
+# Combine vertically (concentration on top, yield on bottom)
+fig_litho_shap <- conc_plot / yield_plot
 
 ggsave(
-  file.path(output_dir, "Fig5_Lithology_Stacked_SHAP_WeightedValues_split.png"),
+  file.path(output_dir, "Fig5_Lithology_Faceted_SHAP_Within_Lithology.png"),
   fig_litho_shap,
-  width  = 20,
-  height = 10,
+  width  = 18,
+  height = 15,
   dpi    = 300,
   bg     = "white"
 )
