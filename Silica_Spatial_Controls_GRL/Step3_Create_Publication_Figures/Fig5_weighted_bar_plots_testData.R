@@ -237,8 +237,8 @@ conc_plot <- ggplot(conc_shap_plot, aes(x = litho_mean_abs, y = feature, fill = 
   theme_classic(base_size = 16) +
   theme(
     plot.tag = element_text(hjust = 0, size = 20),
-    plot.tag.position = c(-0.02, 1.02),
-    plot.margin = margin(t = 10, r = 5, b = 5, l = 30, unit = "pt"),
+    plot.tag.position = c(-0.05, 1.02),
+    plot.margin = ggplot2::margin(t = 10, r = 15, b = 5, l = 70, unit = "pt"),
     strip.text.x = element_text(size = 16),
     strip.background = element_rect(fill = "white", color = "black"),
     panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
@@ -262,8 +262,8 @@ yield_plot <- ggplot(yield_shap_plot, aes(x = litho_mean_abs, y = feature, fill 
   theme_classic(base_size = 16) +
   theme(
     plot.tag = element_text(hjust = 0, size = 20),
-    plot.tag.position = c(-0.02, 1.02),
-    plot.margin = margin(t = 10, r = 5, b = 5, l = 30, unit = "pt"),
+    plot.tag.position = c(-0.05, 1.02),
+    plot.margin = ggplot2::margin(t = 10, r = 15, b = 5, l = 70, unit = "pt"),
     strip.text.x = element_blank(),
     strip.background = element_blank(),
     panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
@@ -280,8 +280,8 @@ fig_litho_shap <- conc_plot / yield_plot
 ggsave(
   file.path(output_dir, "Fig5_Lithology_Faceted_SHAP_Within_Lithology.png"),
   fig_litho_shap,
-  width  = 18,
-  height = 15,
+  width  = 20,
+  height = 12,
   dpi    = 300,
   bg     = "white"
 )
