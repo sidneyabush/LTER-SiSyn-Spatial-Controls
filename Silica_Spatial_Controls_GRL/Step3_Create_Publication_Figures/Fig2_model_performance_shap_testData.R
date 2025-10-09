@@ -121,7 +121,7 @@ dot_plot <- function(SV, KD_s) {
   df$pretty <- factor(df$pretty, levels = rev(ord))
 
   ggplot(df, aes(x = shap, y = pretty)) +
-    geom_vline(xintercept = 0, linetype = "dashed", color = "gray60") +
+    geom_vline(xintercept = 0, linetype = "solid", color = "gray30", linewidth = 1) +
     geom_jitter(aes(fill = val), shape = 21, color = "darkgray",
                 height = 0.2, size = 2.7, alpha = 0.9) +
     scale_fill_gradient(
@@ -322,7 +322,7 @@ bar_plot <- function(SV) {
     geom_col() +
     coord_flip() +
     scale_y_continuous(expand = expansion(mult = c(0.03, 0.25))) +
-    labs(x = NULL, y = "Mean Absolute SHAP Value")
+    labs(x = NULL, y = "Mean |SHAP| Value")
 }
 
 # 8. Panels A & B
