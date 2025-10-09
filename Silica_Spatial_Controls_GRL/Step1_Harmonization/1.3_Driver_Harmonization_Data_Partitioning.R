@@ -818,14 +818,14 @@ library(cowplot)     # for plot grids
 HIST_BINS   <- 30
 DENS_ADJUST <- 1.0
 
-LVL_ORDER <- c("Testing/Training Data", "Cross-Val (stratified)", "Cross-Val (random)")
-COLORS    <- c("Testing/Training Data"             = "#6ea8d3",
-               "Cross-Val (stratified)"= "#525693",
-               "Cross-Val (random)"    = "#9aa0a6")
+LVL_ORDER <- c("Testing/Training Data", "Validation (stratified)", "Validation (random)")
+COLORS    <- c("Testing/Training Data"        = "#6ea8d3",
+               "Validation (stratified)" = "#525693",
+               "Validation (random)"     = "#9aa0a6")
 
 # ------------------- membership (three groups; no training) -------------------
-cv_strat_sites <- unseen10_df %>% distinct(Stream_ID) %>% mutate(dataset = "Cross-Val (stratified)")
-cv_random_sites <- tibble(Stream_ID = unseen10_random, dataset = "Cross-Val (random)")
+cv_strat_sites <- unseen10_df %>% distinct(Stream_ID) %>% mutate(dataset = "Validation (stratified)")
+cv_random_sites <- tibble(Stream_ID = unseen10_random, dataset = "Validation (random)")
 test_sites <- recent30 %>% distinct(Stream_ID) %>% mutate(dataset = "Testing/Training Data")
 
 # helper: minimal theme tweaks

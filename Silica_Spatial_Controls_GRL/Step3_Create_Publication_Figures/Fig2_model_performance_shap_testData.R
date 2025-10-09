@@ -55,7 +55,7 @@ subset_sizes  <- c(
 subset_labs   <- c(
   older70  = "Training",
   recent30 = "Testing",
-  unseen10 = "Cross-Validation"
+  unseen10 = "Validation"
 )
 subset_ann_cols <- c(
   older70  = "gray40",
@@ -322,7 +322,7 @@ bar_plot <- function(SV) {
     geom_col() +
     coord_flip() +
     scale_y_continuous(expand = expansion(mult = c(0.03, 0.25))) +
-    labs(x = NULL, y = "Mean |SHAP| Value")
+    labs(x = NULL, y = "Mean Absolute Value of SHAP")
 }
 
 # 8. Panels A & B

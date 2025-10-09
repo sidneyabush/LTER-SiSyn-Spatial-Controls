@@ -31,9 +31,9 @@ theme_set(
 # #############################################################################
 # 1. Read in and clean data
 # #############################################################################
-older70     <- read_csv("AllDrivers_older70_split.csv", show_col_types = FALSE)     %>% mutate(subset = "Training")
-recent30    <- read_csv("AllDrivers_recent30_split.csv", show_col_types = FALSE)    %>% mutate(subset = "Testing")
-unseen10_df <- read_csv("AllDrivers_unseen10_not_split.csv", show_col_types = FALSE)    %>% mutate(subset = "Validation")
+older70     <- read_csv("inputs/AllDrivers_older70_split.csv", show_col_types = FALSE)     %>% mutate(subset = "Training")
+recent30    <- read_csv("inputs/AllDrivers_recent30_split.csv", show_col_types = FALSE)    %>% mutate(subset = "Testing")
+unseen10_df <- read_csv("inputs/AllDrivers_unseen10_not_split.csv", show_col_types = FALSE)    %>% mutate(subset = "Validation")
 
 # Combine and set order
 hist_input_df <- bind_rows(older70, recent30, unseen10_df) %>%
@@ -89,9 +89,9 @@ p <- ggplot(hist_long, aes(x = value, fill = subset)) +
   facet_wrap(~ driver, scales = "free", ncol = 4) +
   scale_fill_manual(
     values = c(
-      "Training"            = "gray70",  
-      "Testing"             = "#b9d7ef", 
-      "Validation"    = "#525693"
+      "Training"   = "gray70",
+      "Testing"    = "#b9d7ef",
+      "Validation" = "#525693"
     ),
     guide = guide_legend(override.aes = list(alpha = 1))
   ) +

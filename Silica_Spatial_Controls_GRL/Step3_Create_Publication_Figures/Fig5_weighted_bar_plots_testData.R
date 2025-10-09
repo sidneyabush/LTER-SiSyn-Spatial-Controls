@@ -258,7 +258,7 @@ yield_plot <- ggplot(yield_shap_plot, aes(x = litho_mean_abs, y = feature, fill 
   scale_fill_manual(values = my_cluster_colors, limits = cluster_levels) +
   scale_x_continuous(limits = c(0, yield_max), expand = c(0, 0)) +
   scale_y_discrete(limits = rev) +
-  labs(x = "Mean |SHAP| Value", y = NULL, tag = "b) Yield") +
+  labs(x = "Mean Absolute Value of SHAP", y = NULL, tag = "b) Yield") +
   theme_classic(base_size = 26) +
   theme(
     plot.tag = element_text(hjust = 0, size = 26),
