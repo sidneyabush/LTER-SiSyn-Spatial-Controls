@@ -172,10 +172,20 @@ p <- ggplot(df_long, aes(x = feature, y = scaled_value)) +
 # #############################################################################
 # 7. Save the figure
 # #############################################################################
+# Save as PNG for viewing
 ggsave(
-  filename = "Final_Figures/FigS6_Boxplots_lithology_split.png",
+  filename = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PNG/FigS6_Boxplots_lithology_split.png",
   plot     = p,
   width    = 15,
   height   = 10,
   dpi      = 300
+)
+
+# Save as PDF for publication
+ggsave(
+  filename = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PDF/FigS6_Boxplots_lithology_split.pdf",
+  plot     = p,
+  width    = 15,
+  height   = 10,
+  device   = "pdf"
 )

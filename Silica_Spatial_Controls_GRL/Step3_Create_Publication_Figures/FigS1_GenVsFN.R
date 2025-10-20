@@ -14,8 +14,8 @@ librarian::shelf(dplyr, ggplot2, readr, patchwork, cowplot)
 ###### Paths ######
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
 fm <- "Final_Models"
-od <- "Final_Figures"
-dir.create(od, recursive = TRUE, showWarnings = FALSE)
+od_png <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PNG"
+od_pdf <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PDF"
 
 ###### Load data for S1A/S1B (Gen vs FN) ######
 record_length <- 5
@@ -152,5 +152,10 @@ FigS1 <- cowplot::plot_grid(
   ncol = 2, align = "hv", axis = "tblr"
 )
 
-ggsave(file.path(od, "FigS1_GenFN_and_OLS.png"),
+# Save as PNG for viewing
+ggsave(file.path(od_png, "FigS1_GenFN_and_OLS.png"),
        FigS1, width = 9, height = 8, dpi = 300, bg = "white")
+
+# Save as PDF for publication
+ggsave(file.path(od_pdf, "FigS1_GenFN_and_OLS.pdf"),
+       FigS1, width = 9, height = 8, device = "pdf", bg = "white")

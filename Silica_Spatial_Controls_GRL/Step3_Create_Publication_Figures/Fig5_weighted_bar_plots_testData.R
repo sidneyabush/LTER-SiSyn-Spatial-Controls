@@ -19,8 +19,8 @@ librarian::shelf(ggplot2, dplyr, tidyr, patchwork, colorspace, scales, quiet = T
 # #############################################################################
 fm <- "Final_Models"
 recent30_path <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files/inputs/AllDrivers_recent30_split.csv"
-output_dir <- "Final_Figures"
-dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+output_dir_png <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PNG"
+output_dir_pdf <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PDF"
 
 # #############################################################################
 # 2. Load SHAP values (recent30)
@@ -277,11 +277,22 @@ yield_plot <- ggplot(yield_shap_plot, aes(x = litho_mean_abs, y = feature, fill 
 # Combine vertically (concentration on top, yield on bottom)
 fig_litho_shap <- conc_plot / yield_plot
 
+# Save as PNG for viewing
 ggsave(
-  file.path(output_dir, "Fig5_Lithology_Faceted_SHAP_Within_Lithology.png"),
+  file.path(output_dir_png, "Fig5_Lithology_Faceted_SHAP_Within_Lithology.png"),
   fig_litho_shap,
   width  = 23,
   height = 12,
   dpi    = 300,
+  bg     = "white"
+)
+
+# Save as PDF for publication
+ggsave(
+  file.path(output_dir_pdf, "Fig5_Lithology_Faceted_SHAP_Within_Lithology.pdf"),
+  fig_litho_shap,
+  width  = 23,
+  height = 12,
+  device = "pdf",
   bg     = "white"
 )

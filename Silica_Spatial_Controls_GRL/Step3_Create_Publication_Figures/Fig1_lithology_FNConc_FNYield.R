@@ -10,7 +10,7 @@
 # #############################################################################
 
 rm(list = ls())
-setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files")
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files/inputs")
 
 librarian::shelf(dplyr, stringr, ggplot2, maps, patchwork, scales, colorspace, ggrepel, 
                  ggspatial, sf, ggpubr, cowplot)
@@ -279,7 +279,13 @@ combined_figure <- ggarrange(
 # #############################################################################
 # 6) Export Figures
 # #############################################################################
-output_dir <- file.path("..", "Final_Figures")
+output_dir_png <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PNG"
+output_dir_pdf <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PDF"
 
-ggsave(file.path(output_dir, "Fig1_map_and_boxplots.png"), combined_figure,
+# Save as PNG for viewing
+ggsave(file.path(output_dir_png, "Fig1_map_and_boxplots.png"), combined_figure,
        width = 8, height = 8.5, dpi = 300, bg = "white")
+
+# Save as PDF for publication
+ggsave(file.path(output_dir_pdf, "Fig1_map_and_boxplots.pdf"), combined_figure,
+       width = 8, height = 8.5, device = "pdf", bg = "white")

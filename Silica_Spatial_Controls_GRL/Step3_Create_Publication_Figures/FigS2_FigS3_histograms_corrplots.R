@@ -104,13 +104,22 @@ p <- ggplot(hist_long, aes(x = value, fill = subset)) +
       legend.title = element_blank(),
       strip.background = element_blank())
 
-# Save to file
+# Save to file as PNG for viewing
 ggsave(
-  filename = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures/FigS2_histograms_split.png",
+  filename = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PNG/FigS2_histograms_split.png",
   plot     = p,
   width    = 16,
   height   = 18,
   dpi      = 300
+)
+
+# Save to file as PDF for publication
+ggsave(
+  filename = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PDF/FigS2_histograms_split.pdf",
+  plot     = p,
+  width    = 16,
+  height   = 18,
+  device   = "pdf"
 )
 
 # #############################################################################
@@ -127,24 +136,25 @@ save_subset_corrplot <- function(df, label) {
     mutate(across(c(NOx, P), log10)) %>%
     rename_with(~ recode_map[.x]) %>%
     select(all_of(driver_order))
-  
+
   cor_matrix <- cor(numeric_df, use = "pairwise.complete.obs")
-  
+
   # sanitize label for filename
   label_file <- tolower(gsub("[- ]", "_", label))
-  
+
+  # Save as PNG
   png(
     filename = file.path(
-      "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Figures",
+      "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PNG",
       sprintf("FigS3_corrplot_%s_split.png", label_file)
     ),
-    width  = 10, 
-    height = 10, 
-    units = "in", 
+    width  = 10,
+    height = 10,
+    units = "in",
     res = 300
   )
   par(mar = c(1, 1, 1, 1))  # tightened margins
-  
+
   corrplot(
     cor_matrix,
     type         = "lower",
@@ -156,7 +166,32 @@ save_subset_corrplot <- function(df, label) {
     na.label.col = "grey70",
     addgrid.col  = "grey90"
   )
-  
+
+  dev.off()
+
+  # Save as PDF for publication
+  pdf(
+    file = file.path(
+      "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PDF",
+      sprintf("FigS3_corrplot_%s_split.pdf", label_file)
+    ),
+    width  = 10,
+    height = 10
+  )
+  par(mar = c(1, 1, 1, 1))  # tightened margins
+
+  corrplot(
+    cor_matrix,
+    type         = "lower",
+    pch.col      = "black",
+    tl.col       = "black",
+    tl.cex       = 1.0,
+    diag         = FALSE,
+    na.label     = "X",
+    na.label.col = "grey70",
+    addgrid.col  = "grey90"
+  )
+
   dev.off()
 }
 

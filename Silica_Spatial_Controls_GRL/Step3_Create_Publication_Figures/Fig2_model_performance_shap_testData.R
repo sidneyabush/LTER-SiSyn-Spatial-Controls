@@ -31,8 +31,9 @@ theme_set(
 # 2. Clear & paths
 rm(list = ls())
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
-fm <- "Final_Models"; od <- "Final_Figures"
-dir.create(od, recursive = TRUE, showWarnings = FALSE)
+fm <- "Final_Models"
+od_png <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PNG"
+od_pdf <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PDF"
 
 # 3. Define subset styling vectors
 subset_levels <- c("older70", "recent30", "unseen10")
@@ -507,9 +508,16 @@ final_fig2 <- plot_grid(
   align       = "v"
 )
 
+# Save as PNG for viewing
 ggsave(
-  file.path(od, "Fig2_Global_FNConc_FNYield_multi_split.png"),
+  file.path(od_png, "Fig2_Global_FNConc_FNYield_multi_split.png"),
   final_fig2, width = 17, height = 20, dpi = 300, bg = "white"
+)
+
+# Save as PDF for publication
+ggsave(
+  file.path(od_pdf, "Fig2_Global_FNConc_FNYield_multi_split.pdf"),
+  final_fig2, width = 17, height = 20, device = "pdf", bg = "white"
 )
 
 # #############################################################################
@@ -556,7 +564,14 @@ reviewer_fig_box <- plot_grid(
   rel_heights = c(1, 0.15)
 )
 
+# Save reviewer version as PNG
 ggsave(
-  file.path(od, "Fig2ef_REVIEWER_ONLY_boxplot.png"),
+  file.path(od_png, "Fig2ef_REVIEWER_ONLY_boxplot.png"),
   reviewer_fig_box, width = 16.1, height = 6.1, dpi = 300, bg = "white"
+)
+
+# Save reviewer version as PDF
+ggsave(
+  file.path(od_pdf, "Fig2ef_REVIEWER_ONLY_boxplot.pdf"),
+  reviewer_fig_box, width = 16.1, height = 6.1, device = "pdf", bg = "white"
 )
