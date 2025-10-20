@@ -13,6 +13,10 @@
 rm(list = ls())
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files")
 
+# Output directories
+od_png <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PNG"
+od_pdf <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PDF"
+
 # Load libraries & theme
 librarian::shelf(dplyr, readr, tidyr, stringr, ggplot2, corrplot)
 
@@ -106,7 +110,7 @@ p <- ggplot(hist_long, aes(x = value, fill = subset)) +
 
 # Save to file as PNG for viewing
 ggsave(
-  filename = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PNG/FigS2_histograms_split.png",
+  filename = file.path(od_png, "FigS2_histograms_split.png"),
   plot     = p,
   width    = 16,
   height   = 18,
@@ -115,7 +119,7 @@ ggsave(
 
 # Save to file as PDF for publication
 ggsave(
-  filename = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PDF/FigS2_histograms_split.pdf",
+  filename = file.path(od_pdf, "FigS2_histograms_split.pdf"),
   plot     = p,
   width    = 16,
   height   = 18,
@@ -144,10 +148,7 @@ save_subset_corrplot <- function(df, label) {
 
   # Save as PNG
   png(
-    filename = file.path(
-      "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PNG",
-      sprintf("FigS3_corrplot_%s_split.png", label_file)
-    ),
+    filename = file.path(od_png, sprintf("FigS3_corrplot_%s_split.png", label_file)),
     width  = 10,
     height = 10,
     units = "in",
@@ -171,10 +172,7 @@ save_subset_corrplot <- function(df, label) {
 
   # Save as PDF for publication
   pdf(
-    file = file.path(
-      "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PDF",
-      sprintf("FigS3_corrplot_%s_split.pdf", label_file)
-    ),
+    file = file.path(od_pdf, sprintf("FigS3_corrplot_%s_split.pdf", label_file)),
     width  = 10,
     height = 10
   )

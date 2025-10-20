@@ -281,7 +281,7 @@ fig_litho_shap <- conc_plot / yield_plot
 ggsave(
   file.path(output_dir_png, "Fig5_Lithology_Faceted_SHAP_Within_Lithology.png"),
   fig_litho_shap,
-  width  = 20,
+  width  = 22,
   height = 12,
   dpi    = 300,
   bg     = "white"
@@ -291,7 +291,7 @@ ggsave(
 ggsave(
   file.path(output_dir_pdf, "Fig5_Lithology_Faceted_SHAP_Within_Lithology.pdf"),
   fig_litho_shap,
-  width  = 20,
+  width  = 22,
   height = 12,
   device = "pdf",
   bg     = "white"
