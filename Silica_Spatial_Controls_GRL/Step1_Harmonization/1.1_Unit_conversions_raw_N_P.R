@@ -14,7 +14,7 @@ librarian::shelf(dplyr, googledrive, ggplot2, data.table, lubridate, tidyr, stri
 # Clear environment
 rm(list = ls())
 
-setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files")
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Spatial_controls_GRL/harmonization_files")
 
 # #############################################################################
 # Read in and Tidy Data

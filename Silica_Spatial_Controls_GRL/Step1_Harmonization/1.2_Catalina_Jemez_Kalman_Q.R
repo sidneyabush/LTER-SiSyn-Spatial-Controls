@@ -15,7 +15,7 @@ library(data.table)
 library(stringr)
 
 # 1. set your wd
-setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files")
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Spatial_controls_GRL/harmonization_files")
 
 # 2. list only the Catalina Jemez CSVs
 files <- list.files(

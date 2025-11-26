@@ -19,8 +19,8 @@
 librarian::shelf(randomForest, dplyr, tidyr)
 
 # 1) Paths
-drv_dir    <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files/inputs"
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Models"
+drv_dir    <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Spatial_controls_GRL/harmonization_files/inputs"
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Spatial_controls_GRL/Final_Models"
 
 # 2) Load existing RF2 model and feature list
 load(file.path(output_dir, "FNConc_RF2_model_and_settings_split.RData"))

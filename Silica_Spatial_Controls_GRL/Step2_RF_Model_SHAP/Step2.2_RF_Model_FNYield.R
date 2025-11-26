@@ -38,8 +38,8 @@ cl      <- parallel::makeCluster(n_cores)
 doParallel::registerDoParallel(cl)
 
 # 2) Paths
-drv_dir    <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files"
-output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Final_Models"
+drv_dir    <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Spatial_controls_GRL/harmonization_files"
+output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Spatial_controls_GRL/Final_Models"
 setwd(drv_dir)
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
