@@ -23,7 +23,7 @@ rm(list = ls())
 set.seed(123)
 
 ## 3. Set WD
-setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Spatial_controls_GRL")
 final_models_dir <- "Final_Models"
 
 # 4. Load FNConc model & kept‑drivers into their own env to avoid name clashes
