@@ -570,14 +570,14 @@ reviewer_fig_box <- plot_grid(
   rel_heights = c(1, 0.15)
 )
 
-# Save reviewer version as PNG
-ggsave(
-  file.path(od_png, "Fig2ef_REVIEWER_ONLY_boxplot.png"),
-  reviewer_fig_box, width = 16.1, height = 6.1, dpi = 300, bg = "white"
-)
+# # Save reviewer version as PNG
+# ggsave(
+#   file.path(od_png, "Fig2ef_REVIEWER_ONLY_boxplot.png"),
+#   reviewer_fig_box, width = 16.1, height = 6.1, dpi = 300, bg = "white"
+# )
 
-# Save reviewer version as PDF
-ggsave(
-  file.path(od_pdf, "Fig2ef_REVIEWER_ONLY_boxplot.pdf"),
-  reviewer_fig_box, width = 16.1, height = 6.1, device = "pdf", bg = "white"
-)
+# # Save reviewer version as PDF
+# ggsave(
+#   file.path(od_pdf, "Fig2ef_REVIEWER_ONLY_boxplot.pdf"),
+#   reviewer_fig_box, width = 16.1, height = 6.1, device = "pdf", bg = "white"
+# )
