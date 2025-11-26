@@ -19,8 +19,8 @@ librarian::shelf(ggplot2, dplyr, tidyr, patchwork, colorspace, scales, quiet = T
 # #############################################################################
 fm <- "Final_Models"
 recent30_path <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files/inputs/AllDrivers_recent30_split.csv"
-output_dir_png <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PNG"
-output_dir_pdf <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PDF"
+output_dir_png <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Spatial_controls_GRL/GRL_Materials/Final_Figures/PNG"
+output_dir_pdf <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Spatial_controls_GRL/GRL_Materials/Final_Figures/PDF"
 
 # #############################################################################
 # 2. Load SHAP values (recent30)

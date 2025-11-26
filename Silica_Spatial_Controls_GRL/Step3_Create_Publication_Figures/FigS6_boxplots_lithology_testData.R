@@ -16,7 +16,7 @@ librarian::shelf(ggplot2, dplyr, tidyr, scales, colorspace, quiet = TRUE)
 # #############################################################################
 
 recent30 <- read.csv(
-  "harmonization_files/inputs/AllDrivers_recent30_split.csv",
+  "Spatial_controls_GRL/harmonization_files/inputs/AllDrivers_recent30_split.csv",
   stringsAsFactors = FALSE
 )
 
@@ -174,7 +174,7 @@ p <- ggplot(df_long, aes(x = feature, y = scaled_value)) +
 # #############################################################################
 # Save as PNG for viewing
 ggsave(
-  filename = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PNG/FigS6_Boxplots_lithology_split.png",
+  filename = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Spatial_controls_GRL/GRL_Materials/Final_Figures/PNG/FigS6_Boxplots_lithology_split.png",
   plot     = p,
   width    = 15,
   height   = 10,
@@ -183,7 +183,7 @@ ggsave(
 
 # Save as PDF for publication
 ggsave(
-  filename = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PDF/FigS6_Boxplots_lithology_split.pdf",
+  filename = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Spatial_controls_GRL/GRL_Materials/Final_Figures/PDF/FigS6_Boxplots_lithology_split.pdf",
   plot     = p,
   width    = 15,
   height   = 10,

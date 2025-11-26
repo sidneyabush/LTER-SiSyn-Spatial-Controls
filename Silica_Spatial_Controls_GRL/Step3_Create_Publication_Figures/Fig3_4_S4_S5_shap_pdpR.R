@@ -23,16 +23,16 @@ librarian::shelf(
 # 1. Read recent30 split
 # #############################################################################
 recent30_df <- read_csv(
-  "harmonization_files/inputs/AllDrivers_recent30_split.csv",
+  "Spatial_controls_GRL/GRL_Materials/GRL_submission/code_inputs/AllDrivers_recent30_split.csv",
   show_col_types = FALSE
 )
 
 # #############################################################################
 # 2. Load recent30 SHAP values
 # #############################################################################
-load("Final_Models/FNConc_Yearly_shap_values_recent30_split.RData")    
+load("Spatial_controls_GRL/Final_Models/FNConc_Yearly_shap_values_recent30_split.RData")
 shap_FNConc  <- shap_values_FNConc
-load("Final_Models/FNYield_Yearly_shap_values_recent30_split.RData")  
+load("Spatial_controls_GRL/Final_Models/FNYield_Yearly_shap_values_recent30_split.RData")
 shap_FNYield <- shap_values_FNYield
 
 # #############################################################################
@@ -53,7 +53,7 @@ recode_map <- setNames(
     "Ice & snow cover","Impervious cover","Saltwater cover","Tidal wetland cover",
     "Open-water cover","Wetland cover","Volcanic rock","Sedimentary rock",
     "Carbonate-evaporite rock","Metamorphic rock","Plutonic rock"),
-  
+
   c("NOx","P","npp","evapotrans","greenup_day","precip","temp",
     "snow_cover","permafrost","elevation","basin_slope","RBI",
     "recession_slope","land_Bare","land_Cropland","land_Forest",
@@ -63,27 +63,27 @@ recode_map <- setNames(
     "rocks_metamorphic","rocks_plutonic")
 )
 
-# helper function to build one panel 
+# helper function to build one panel
 build_one_panel <- function(feat, shap_matrix, drivers_data, response, lims, recode_map) {
   df <- tibble(
     driver_value = drivers_data[[feat]],
     shap_value   = shap_matrix[, feat],
     response     = response
   ) %>% filter(is.finite(driver_value), is.finite(shap_value))
-  
+
   if (feat %in% c("P", "NOx")) {
     df <- df %>% filter(driver_value > 0)
   }
-  
+
   if (nrow(df) > 0) {
     xlims_feat <- quantile(df$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
     df <- df %>% filter(driver_value >= xlims_feat[1], driver_value <= xlims_feat[2])
   } else {
     warning("No data left after filtering for feature: ", feat)
   }
-  
+
   label_for <- function(f) if (!is.null(recode_map[[f]])) recode_map[[f]] else f
-  
+
   p <- ggplot(df, aes(driver_value, shap_value, fill = response)) +
     geom_hline(yintercept = 0, linetype = "dashed") +
     geom_vline(xintercept = 0, linetype = "dashed") +
@@ -110,8 +110,8 @@ build_one_panel <- function(feat, shap_matrix, drivers_data, response, lims, rec
       expand = expansion(mult = c(0.03, 0.03))
     )
   }
-  
-  
+
+
   if (feat %in% c("P", "NOx")) {
     p <- p + scale_x_log10(
       breaks = trans_breaks("log10", function(x) 10^x),
@@ -122,7 +122,7 @@ build_one_panel <- function(feat, shap_matrix, drivers_data, response, lims, rec
 }
 
 # #############################################################################
-# 5. SI features grid function 
+# 5. SI features grid function
 # #############################################################################
 make_shap_loess_grid <- function(shap_matrix, drivers_data, response,
                                  units_expr, recode_map,
@@ -132,29 +132,22 @@ make_shap_loess_grid <- function(shap_matrix, drivers_data, response,
   if (!all(colnames(shap_matrix) %in% colnames(drivers_data))) {
     stop("drivers_data missing columns: ", paste(setdiff(colnames(shap_matrix), colnames(drivers_data)), collapse = ", "))
   }
-  # Length mismatch is now handled by trimming to minimum length in the loop below
-  
+  if (length(response) != nrow(shap_matrix)) {
+    stop("Length of response does not match rows of shap_matrix")
+  }
+
   # 2. Build trimmed data for each feature first
   trimmed_list <- purrr::map(colnames(shap_matrix), function(feat) {
-    # Extract vectors ensuring they're the same length
-    driver_vals <- as.numeric(drivers_data[[feat]])
-    shap_vals <- as.numeric(shap_matrix[, feat])
-    resp_vals <- as.numeric(response)
-
-    # Ensure all vectors are same length by trimming to minimum
-    min_len <- min(length(driver_vals), length(shap_vals), length(resp_vals))
-
-    # Create dataframe with equal-length vectors
     df <- tibble(
-      driver_value = driver_vals[1:min_len],
-      shap_value   = shap_vals[1:min_len],
-      response     = resp_vals[1:min_len]
-    ) %>% filter(is.finite(driver_value), is.finite(shap_value), is.finite(response))
-    
+      driver_value = drivers_data[[feat]],
+      shap_value   = shap_matrix[, feat],
+      response     = response
+    ) %>% filter(is.finite(driver_value), is.finite(shap_value))
+
     if (feat %in% c("P", "NOx")) {
       df <- df %>% filter(driver_value > 0)
     }
-    
+
     # trim driver_value to 5th–95th percentile
     if (nrow(df) > 0) {
       xlims_feat <- quantile(df$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
@@ -162,24 +155,24 @@ make_shap_loess_grid <- function(shap_matrix, drivers_data, response,
     } else {
       warning("No data left after filtering for feature: ", feat)
     }
-    
+
     df$feature <- feat  # keep track
     df
   })
-  
+
   names(trimmed_list) <- colnames(shap_matrix)
-  
+
   # 3. Compute shared response limits from the trimmed data
   combined_trimmed <- bind_rows(trimmed_list)
   lims_trimmed <- range(combined_trimmed$response, na.rm = TRUE)
-  
+
   # 4. Panel builder using pre-trimmed dfs
   label_for <- function(feat) if (!is.null(recode_map[[feat]])) recode_map[[feat]] else feat
-  
+
   panels <- purrr::map(colnames(shap_matrix), function(feat) {
     if (verbose) message("Building panel for: ", feat)
     df <- trimmed_list[[feat]]
-    
+
     # determine trimmed x-limits; for ET drop exact zeros so axis doesn't anchor at 0
     if (feat == "ET") {
       df_for_xlim <- df %>% filter(driver_value > 0)
@@ -191,7 +184,7 @@ make_shap_loess_grid <- function(shap_matrix, drivers_data, response,
     } else {
       xlims_feat <- quantile(df$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
     }
-    
+
     p <- ggplot(df, aes(driver_value, shap_value, fill = response)) +
       geom_hline(yintercept = 0, linetype = "dashed") +
       geom_vline(xintercept = 0, linetype = "dashed") +
@@ -207,28 +200,28 @@ make_shap_loess_grid <- function(shap_matrix, drivers_data, response,
         axis.text  = element_text(size = 14),
         plot.margin = ggplot2::margin(t = 10, r = 5, b = 25, l = 10, unit = "pt")  # extra bottom space
       )
-    
-    # x-axis scaling with trimmed limits and buffer
+
+    # x-axis scaling with trimmed limits and small buffer
     if (feat %in% c("P", "NOx")) {
       p <- p + scale_x_log10(
         limits = c(xlims_feat[1], xlims_feat[2]),
-        expand = expansion(mult = c(0.02, 0.08)),  # increased right buffer
+        expand = expansion(mult = c(0.02, 0.02)),
         breaks = trans_breaks("log10", function(x) 10^x),
         labels = trans_format("log10", math_format(10^.x))
       )
     } else {
       p <- p + scale_x_continuous(
         limits = c(xlims_feat[1], xlims_feat[2]),
-        expand = expansion(mult = c(0.02, 0.08))  # increased right buffer
+        expand = expansion(mult = c(0.02, 0.02))
       )
     }
-    
+
     # prevent clipping of labels
     p <- p + coord_cartesian(clip = "off")
-    
+
     p
   })
-  
+
   # 5. Shared legend based on trimmed response range
   legend_plot <- ggplot(
     tibble(x = 1, y = 1, response = combined_trimmed$response),
@@ -250,9 +243,9 @@ make_shap_loess_grid <- function(shap_matrix, drivers_data, response,
       legend.title      = element_text(size = 14),
       legend.text       = element_text(size = 12)
     )
-  
+
   shared_leg <- get_legend(legend_plot)
-  
+
   grid <- cowplot::plot_grid(
     plotlist = panels, ncol = 2,
     labels = paste0(letters[seq_along(panels)], ")"),
@@ -272,25 +265,16 @@ global_fn_min <- min(response_FNConc, na.rm = TRUE)
 global_fn_max <- max(response_FNConc, na.rm = TRUE)
 
 build_panel3 <- function(feat, idx) {
-  # Extract vectors ensuring they're the same length
-  driver_vals <- as.numeric(X_FNConc[[feat]])
-  shap_vals <- as.numeric(shap_FNConc[, feat])
-  resp_vals <- as.numeric(response_FNConc)
-
-  # Ensure all vectors are same length by trimming to minimum
-  min_len <- min(length(driver_vals), length(shap_vals), length(resp_vals))
-
-  # Create dataframe with equal-length vectors
   df <- tibble(
-    driver_value = driver_vals[1:min_len],
-    shap_value   = shap_vals[1:min_len],
-    response     = resp_vals[1:min_len]
-  ) %>% filter(is.finite(driver_value), is.finite(shap_value), is.finite(response))
-  
+    driver_value = X_FNConc[[feat]],
+    shap_value   = shap_FNConc[, feat],
+    response     = response_FNConc
+  ) %>% filter(is.finite(driver_value), is.finite(shap_value))
+
   if (feat %in% c("P", "NOx")) {
     df <- df %>% filter(driver_value > 0)
   }
-  
+
   # trim driver_value to 5th–95th percentile
   if (nrow(df) > 0) {
     xlims_feat <- quantile(df$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
@@ -298,10 +282,10 @@ build_panel3 <- function(feat, idx) {
   } else {
     xlims_feat <- c(NA, NA)
   }
-  
+
   # compute fill limits from this trimmed df
   fill_lims <- range(df$response, na.rm = TRUE)
-  
+
   p <- ggplot(df, aes(driver_value, shap_value, fill = response)) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
     geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
@@ -327,19 +311,19 @@ build_panel3 <- function(feat, idx) {
       axis.text       = element_text(size = 14),
       plot.margin     = ggplot2::margin(t = 10, r = 5, b = 25, l = 30, unit = "pt")
     )
-  
-  # x-axis scaling with trimmed limits and buffer
+
+  # x-axis scaling with trimmed limits and small buffer
   if (feat %in% c("P", "NOx")) {
     p <- p + scale_x_log10(
       limits = c(xlims_feat[1], xlims_feat[2]),
-      expand = expansion(mult = c(0.02, 0.08)),  # increased right buffer
+      expand = expansion(mult = c(0.02, 0.02)),
       breaks = trans_breaks("log10", function(x) 10^x),
       labels = trans_format("log10", math_format(10^.x))
     )
   } else {
     p <- p + scale_x_continuous(
       limits = c(xlims_feat[1], xlims_feat[2]),
-      expand = expansion(mult = c(0.02, 0.08))  # increased right buffer
+      expand = expansion(mult = c(0.02, 0.02))
     )
   }
 
@@ -350,35 +334,20 @@ build_panel3 <- function(feat, idx) {
 
 # build shared legend for Fig 3 from the union of all trimmed panels
 all_trimmed3 <- purrr::map_dfr(present3, function(feat) {
-  # Extract vectors ensuring they're the same length
-  driver_vals <- as.numeric(X_FNConc[[feat]])
-  shap_vals <- as.numeric(shap_FNConc[, feat])
-  resp_vals <- as.numeric(response_FNConc)
-
-  # Ensure all vectors are same length by trimming to minimum
-  min_len <- min(length(driver_vals), length(shap_vals), length(resp_vals))
-
-  # Create dataframe with equal-length vectors
   df <- tibble(
-    driver_value = driver_vals[1:min_len],
-    shap_value   = shap_vals[1:min_len],
-    response     = resp_vals[1:min_len]
-  )
+    driver_value = X_FNConc[[feat]],
+    shap_value   = shap_FNConc[, feat],
+    response     = response_FNConc
+  ) %>% filter(is.finite(driver_value), is.finite(shap_value))
 
-  # Filter for finite values
-  df <- df %>% filter(is.finite(driver_value), is.finite(shap_value), is.finite(response))
-
-  # Filter for positive values if needed
   if (feat %in% c("P", "NOx")) {
     df <- df %>% filter(driver_value > 0)
   }
 
-  # Trim to 5th-95th percentile
   if (nrow(df) > 0) {
     xlims_feat <- quantile(df$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
     df <- df %>% filter(driver_value >= xlims_feat[1], driver_value <= xlims_feat[2])
   }
-
   df
 })
 
@@ -416,7 +385,7 @@ shared_leg3 <- get_legend(legend_plot3)
 # build the 4 real panels
 panels3 <- map2(present3, seq_along(present3), build_panel3)
 
-# assemble grid 
+# assemble grid
 # Fig 3
 grid3 <- cowplot::plot_grid(
   plotlist = panels3, ncol = 2,
@@ -429,7 +398,7 @@ grid3 <- cowplot::plot_grid(
 fig3_recent30 <- plot_grid(grid3, shared_leg3, ncol = 1, rel_heights = c(1, 0.1))
 
 # #############################################################################
-# 7. Create Fig4: Yield SHAP–LOESS grid 
+# 7. Create Fig4: Yield SHAP–LOESS grid
 # #############################################################################
 yield_feats4 <- c("evapotrans","temp","recession_slope","land_Wetland_Marsh","npp","NOx")
 present4   <- intersect(yield_feats4, colnames(shap_FNYield))
@@ -437,34 +406,25 @@ global_y_min <- min(response_FNYield, na.rm = TRUE)
 global_y_max <- max(response_FNYield, na.rm = TRUE)
 
 build_panel4 <- function(feat, idx) {
-  # Extract vectors ensuring they're the same length
-  driver_vals <- as.numeric(X_FNYield[[feat]])
-  shap_vals <- as.numeric(shap_FNYield[, feat])
-  resp_vals <- as.numeric(response_FNYield)
-
-  # Ensure all vectors are same length by trimming to minimum
-  min_len <- min(length(driver_vals), length(shap_vals), length(resp_vals))
-
-  # Create dataframe with equal-length vectors
   df <- tibble(
-    driver_value = driver_vals[1:min_len],
-    shap_value   = shap_vals[1:min_len],
-    response     = resp_vals[1:min_len]
-  ) %>% filter(is.finite(driver_value), is.finite(shap_value), is.finite(response))
-  
+    driver_value = X_FNYield[[feat]],
+    shap_value   = shap_FNYield[, feat],
+    response     = response_FNYield
+  ) %>% filter(is.finite(driver_value), is.finite(shap_value))
+
   if (feat %in% c("P", "NOx")) {
     df <- df %>% filter(driver_value > 0)
   }
-  
+
   if (nrow(df) > 0) {
     xlims_feat <- quantile(df$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
     df <- df %>% filter(driver_value >= xlims_feat[1], driver_value <= xlims_feat[2])
   } else {
     xlims_feat <- c(NA, NA)
   }
-  
+
   fill_lims <- range(df$response, na.rm = TRUE)
-  
+
   p <- ggplot(df, aes(driver_value, shap_value, fill = response)) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
     geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
@@ -490,18 +450,18 @@ build_panel4 <- function(feat, idx) {
       axis.text       = element_text(size = 14),
       plot.margin     = ggplot2::margin(t = 10, r = 5, b = 25, l = 30, unit = "pt")
     )
-  
+
   if (feat %in% c("P", "NOx")) {
     p <- p + scale_x_log10(
       limits = c(xlims_feat[1], xlims_feat[2]),
-      expand = expansion(mult = c(0.02, 0.08)),  # increased right buffer
+      expand = expansion(mult = c(0.02, 0.02)),
       breaks = trans_breaks("log10", function(x) 10^x),
       labels = trans_format("log10", math_format(10^.x))
     )
   } else {
     p <- p + scale_x_continuous(
       limits = c(xlims_feat[1], xlims_feat[2]),
-      expand = expansion(mult = c(0.02, 0.08))  # increased right buffer
+      expand = expansion(mult = c(0.02, 0.02))
     )
   }
 
@@ -511,35 +471,20 @@ build_panel4 <- function(feat, idx) {
 }
 
 all_trimmed4 <- purrr::map_dfr(present4, function(feat) {
-  # Extract vectors ensuring they're the same length
-  driver_vals <- as.numeric(X_FNYield[[feat]])
-  shap_vals <- as.numeric(shap_FNYield[, feat])
-  resp_vals <- as.numeric(response_FNYield)
-
-  # Ensure all vectors are same length by trimming to minimum
-  min_len <- min(length(driver_vals), length(shap_vals), length(resp_vals))
-
-  # Create dataframe with equal-length vectors
   df <- tibble(
-    driver_value = driver_vals[1:min_len],
-    shap_value   = shap_vals[1:min_len],
-    response     = resp_vals[1:min_len]
-  )
+    driver_value = X_FNYield[[feat]],
+    shap_value   = shap_FNYield[, feat],
+    response     = response_FNYield
+  ) %>% filter(is.finite(driver_value), is.finite(shap_value))
 
-  # Filter for finite values
-  df <- df %>% filter(is.finite(driver_value), is.finite(shap_value), is.finite(response))
-
-  # Filter for positive values if needed
   if (feat %in% c("P", "NOx")) {
     df <- df %>% filter(driver_value > 0)
   }
 
-  # Trim to 5th-95th percentile
   if (nrow(df) > 0) {
     xlims_feat <- quantile(df$driver_value, probs = c(0.05, 0.95), na.rm = TRUE)
     df <- df %>% filter(driver_value >= xlims_feat[1], driver_value <= xlims_feat[2])
   }
-
   df
 })
 
@@ -594,10 +539,8 @@ figS_conc  <- make_shap_loess_grid(
   expression("Concentration (mg " * L^-1 * ")"),
   recode_map
 )
-n <- length(other_conc)        
+n <- length(other_conc)
 rows <- 5/2
-
-# Note: This duplicate ggsave call has been removed - see the organized saves at the end of the script
 
 other_yield <- setdiff(colnames(shap_FNYield), yield_feats4)
 figS_yield  <- make_shap_loess_grid(
@@ -609,8 +552,8 @@ figS_yield  <- make_shap_loess_grid(
 )
 
 # Output directories
-od_png <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PNG"
-od_pdf <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PDF"
+od_png <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Spatial_controls_GRL/GRL_Materials/Final_Figures/PNG"
+od_pdf <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Spatial_controls_GRL/GRL_Materials/Final_Figures/PDF"
 
 # Fig 3 - PNG and PDF:
 ggsave(file.path(od_png, "Fig3_recent30_Concentration_SHAP_grid_split.png"),

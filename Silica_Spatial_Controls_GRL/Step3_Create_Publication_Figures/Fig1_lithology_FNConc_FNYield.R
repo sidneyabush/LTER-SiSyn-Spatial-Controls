@@ -10,7 +10,7 @@
 # #############################################################################
 
 rm(list = ls())
-setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/harmonization_files/inputs")
+setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Spatial_controls_GRL/harmonization_files/inputs")
 
 librarian::shelf(dplyr, stringr, ggplot2, maps, patchwork, scales, colorspace, ggrepel, 
                  ggspatial, sf, ggpubr, cowplot)
@@ -234,6 +234,9 @@ site_summary <- sites_with_clusters %>%
 site_summary$final_cluster     <- factor(site_summary$final_cluster,     levels = names(my_cluster_colors))
 site_summary$consolidated_rock <- factor(site_summary$consolidated_rock, levels = names(shape_map))
 
+# Set seed for reproducible jitter
+set.seed(42)
+
 p1 <- ggplot(site_summary, aes(x = FNConc, y = final_cluster)) +
   geom_boxplot(aes(fill = final_cluster), outlier.shape = NA, alpha = 0.7) +
   geom_jitter(aes(fill = final_cluster, color = final_cluster, shape = consolidated_rock),  # <-- map shape
@@ -279,8 +282,8 @@ combined_figure <- ggarrange(
 # #############################################################################
 # 6) Export Figures
 # #############################################################################
-output_dir_png <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PNG"
-output_dir_pdf <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PDF"
+output_dir_png <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Spatial_controls_GRL/GRL_Materials/Final_Figures/PNG"
+output_dir_pdf <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Spatial_controls_GRL/GRL_Materials/Final_Figures/PDF"
 
 # Save as PNG for viewing
 ggsave(file.path(output_dir_png, "Fig1_map_and_boxplots.png"), combined_figure,

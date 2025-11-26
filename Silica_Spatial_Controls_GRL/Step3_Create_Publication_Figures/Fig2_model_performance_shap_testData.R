@@ -31,9 +31,9 @@ theme_set(
 # 2. Clear & paths
 rm(list = ls())
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn")
-fm <- "Final_Models"
-od_png <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PNG"
-od_pdf <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PDF"
+fm <- "Spatial_controls_GRL/Final_Models"
+od_png <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Spatial_controls_GRL/GRL_Materials/Final_Figures/PNG"
+od_pdf <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Spatial_controls_GRL/GRL_Materials/Final_Figures/PDF"
 
 # 3. Define subset styling vectors
 subset_levels <- c("older70", "recent30", "unseen10")
@@ -120,6 +120,9 @@ dot_plot <- function(SV, KD_s) {
     pull(pretty)
 
   df$pretty <- factor(df$pretty, levels = rev(ord))
+
+  # Set seed for reproducible jitter
+  set.seed(42)
 
   ggplot(df, aes(x = shap, y = pretty)) +
     geom_vline(xintercept = 0, linetype = "solid", color = "gray30", linewidth = 1) +
@@ -258,6 +261,9 @@ dot_plot_reviewer_rain <- function(SV, KD_s) {
 
   mean_shap_with_y <- mean_shap %>%
     mutate(y_numeric = as.numeric(pretty))
+
+  # Set seed for reproducible jitter
+  set.seed(43)
 
   ggplot(df_with_y, aes(x = shap)) +
     geom_vline(xintercept = 0, linetype = "dashed", color = "gray60") +

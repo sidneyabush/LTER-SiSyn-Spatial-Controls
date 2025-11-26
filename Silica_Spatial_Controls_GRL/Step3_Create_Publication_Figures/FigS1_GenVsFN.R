@@ -13,13 +13,13 @@ librarian::shelf(dplyr, ggplot2, readr, patchwork, cowplot)
 
 ###### Paths ######
 setwd("/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/")
-fm <- "Final_Models"
-od_png <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PNG"
-od_pdf <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/GRL_revision1/Figures_v2/PDF"
+fm <- "Spatial_controls_GRL/Final_Models"
+od_png <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Spatial_controls_GRL/GRL_Materials/Final_Figures/PNG"
+od_pdf <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Spatial_controls_GRL/GRL_Materials/Final_Figures/PDF"
 
 ###### Load data for S1A/S1B (Gen vs FN) ######
 record_length <- 5
-infile <- "harmonization_files/inputs/AllDrivers_Harmonized_Yearly_filtered_5_years.csv"
+infile <- "Spatial_controls_GRL/harmonization_files/inputs/AllDrivers_Harmonized_Yearly_filtered_5_years.csv"
 
 df <- readr::read_csv(infile, show_col_types = FALSE) |>
   dplyr::select(GenConc, FNConc, GenYield, FNYield) |>
