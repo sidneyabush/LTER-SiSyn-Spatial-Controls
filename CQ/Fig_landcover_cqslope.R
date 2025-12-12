@@ -141,74 +141,94 @@ landcover_colors <- c(
   "Wetland_Marsh"       = "#5E7B71",   
   "Impervious"          = "#4F4F4F",   
   "Bare"                = "#C48A72",   
-  "Ice"                 = "#8BAFCF"    
-)
+  # -----------------------------
+  # 4b) Panel C: Build, combine and save figures for specified variable(s)
+  # We'll create a small function that builds Panel C for a chosen variable and
+  # then combines it with the pre-built Panel A and Panel B and saves the PNG.
 
-# landcover_colors <- c(
-#   "Forest"              = "#2F5530",  
-#   "Grassland_Shrubland" = "#8E9F50",   
-#   "Cropland"            = "#C89A1A",   
-#   "Wetland_Marsh"       = "#4A718C",   
-#   "Impervious"          = "#5A5A5A",   
-#   "Bare"                = "#AA5745",   
-#   "Ice"                 = "#6D97C4"    
-# )
+  build_and_save_for_var <- function(panel_c_var_choice) {
+    # prepare variable-specific vector and label
+    if (panel_c_var_choice == "precipitation") {
+      combined_df$precipitation <- as.numeric(combined_df$precipitation)
+      var_vec <- combined_df$precipitation
+      var_label <- expression(paste("Precipitation (", mm~day^{-1}, ")"))
+    } else if (panel_c_var_choice == "drainage_area") {
+      combined_df$drainage_area <- as.numeric(combined_df$drainage_area)
+      var_vec <- combined_df$drainage_area
+      var_label <- "Drainage area (sqkm)"
+    } else {
+      stop("panel_c_var must be either 'precipitation' or 'drainage_area'")
+    }
 
+    # compute quartile breaks and labels
+    var_breaks <- unname(quantile(var_vec, probs = seq(0, 1, 0.25), na.rm = TRUE))
+    var_labels <- vapply(seq_len(length(var_breaks)-1), function(i) {
+      lo <- round(var_breaks[i], 1)
+      hi <- round(var_breaks[i+1], 1)
+      if (i == 1) {
+        paste0("\u2264 ", hi)
+      } else {
+        paste0(lo, " - ", hi)
+      }
+    }, FUN.VALUE = character(1))
 
-# Desired legend order and display labels
-desired_land_order <- c("Forest",  "Grassland_Shrubland", "Cropland", "Wetland_Marsh", "Impervious", "Bare", "Ice")
-display_labels <- c(
-  "Forest" = "Forest",
-  "Grassland_Shrubland" = "Grassland",
-  "Cropland" = "Cropland",
-  "Wetland_Marsh" = "Wetland",
-  "Impervious" = "Impervious",
-  "Bare" = "Bare",
-  "Ice" = "Ice"
-)
+    # prepare panel-specific df, drop NAs for drainage_area if needed
+    panel_df <- combined_df
+    if (panel_c_var_choice == "drainage_area") panel_df <- panel_df %>% dplyr::filter(!is.na(drainage_area))
 
-# Define shape mapping (named) for the desired order. Use filled shapes for first five categories.
-shape_values_all <- c(
-  # Final requested mapping (in desired_land_order):
-  # Forest = circle (21), Grassland = square (22), Cropland = diamond (18),
-  # Wetland = square (15), Impervious = triangle up (24),
-  # Bare = triangle down (25), Ice = circle (21)
-  "Forest" = 21,
-  "Grassland_Shrubland" = 22,
-  "Cropland" = 18,
-  "Wetland_Marsh" = 15,
-  "Impervious" = 24,
-  "Bare" = 25,
-  "Ice" = 21
-)
+    panel_df <- panel_df %>%
+      dplyr::mutate(
+        panel_var = if (panel_c_var_choice == "precipitation") precipitation else drainage_area,
+        panel_bin = cut(panel_var, breaks = var_breaks, include.lowest = TRUE, labels = var_labels)
+      )
 
-# Base size mapping: make all symbols the same base size, but make the
-# two triangles slightly smaller so they read as less heavy visually.
-point_size_base <- c(
-  "Forest" = 1.6,
-  "Grassland_Shrubland" = 1.6,
-  "Cropland" = 1.6,
-  "Wetland_Marsh" = 1.6,
-  "Impervious" = 1.0,
-  "Bare" = 1.0,
-  "Ice" = 1.6
-)
+    quartile_summary <- panel_df %>%
+      dplyr::group_by(panel_bin, major_land) %>%
+      dplyr::summarise(n = dplyr::n(), .groups = "drop") %>%
+      dplyr::group_by(panel_bin) %>%
+      dplyr::mutate(prop = n / sum(n)) %>%
+      dplyr::ungroup()
 
-point_size_jitter <- point_size_base
+    present_quartile_land <- desired_land_order[desired_land_order %in% unique(quartile_summary$major_land)]
+    quartile_colors <- landcover_colors[present_quartile_land]
+    quartile_summary$major_land <- factor(quartile_summary$major_land, levels = present_quartile_land)
 
+    p_third <- ggplot(quartile_summary, aes(x = panel_bin, y = prop, fill = major_land)) +
+      geom_bar(stat = "identity", position = "fill", color = "gray20") +
+      scale_fill_manual(values = quartile_colors, breaks = present_quartile_land, guide = "none") +
+      scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+      labs(x = var_label, y = "Proportion of sites") +
+      theme_classic(base_size = 14) +
+      theme(legend.position = "none",
+            axis.text.x = element_text(angle = 0, hjust = 0.5))
 
-# Filter colors to only those present in the data, preserving desired order
-present_landcovers <- desired_land_order[desired_land_order %in% unique(combined_df$major_land)]
-my_landcover_colors <- landcover_colors[present_landcovers]
-display_labels_present <- unname(display_labels[present_landcovers])
+    p_third_labeled <- p_third +
+      labs(tag = "c)") +
+      theme(plot.tag = element_text(size = 16, hjust = 0))
 
-# Create factor for legend ordering using the desired order
-combined_df <- combined_df %>%
-  dplyr::mutate(
-    landcover_factor = factor(major_land, levels = present_landcovers)
-  ) %>%
-  dplyr::filter(!is.na(landcover_factor))
+    # Combine panels and save
+    final_boxplots <- p_slope_labeled + p_third_labeled
+    combined_figure <- ggarrange(
+      p_map_labeled,
+      final_boxplots,
+      ncol    = 1,
+      nrow    = 2,
+      heights = c(3, 2.5),
+      align   = "v",
+      labels  = NULL
+    )
 
+    # output filename
+    output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/CQ_Site_Map"
+    file_suffix <- ifelse(panel_c_var_choice == "precipitation", "precipitation", "drainage_area")
+    output_file <- file.path(output_dir, paste0("Fig_landcover_cqslope_", file_suffix, ".png"))
+    ggsave(output_file, combined_figure, width = 8, height = 8.5, dpi = 300, bg = "white")
+    message("Saved figure to: ", output_file)
+  }
+
+  # Run the function for both variables so the script produces two PNGs
+  vars_to_save <- c("precipitation", "drainage_area")
+  for (v in vars_to_save) build_and_save_for_var(v)
 # Plotting ----------------------------- 
 # Options: choose either "precipitation" or "drainage_area" for the x-variable
 
@@ -258,25 +278,51 @@ global_base <- ggplot() +
     axis.ticks           = element_blank(),
     legend.position      = c(0.05, 0.65),
     legend.justification = c("left","top"),
-    legend.text          = element_text(size = 10),
+    legend.text          = element_text(size = 12),
     legend.title         = element_blank()
   )
 
 global_map <- global_base +
+  # Draw non-forest points with the standard size/alpha
   geom_point(
-    data = combined_df,
-    aes(x = longitude, y = latitude, fill = landcover_factor, shape = landcover_factor, color = landcover_factor, size = landcover_factor),
-    alpha = 0.85, stroke = 0.12
+    data = combined_df %>% dplyr::filter(landcover_factor != "Forest"),
+    aes(x = longitude, y = latitude, fill = landcover_factor, shape = landcover_factor, color = landcover_factor),
+    size = 2.3, alpha = 0.60, stroke = 0.12
+  ) +
+  # Draw Forest (circle) points slightly smaller and a bit more transparent
+  geom_point(
+    data = combined_df %>% dplyr::filter(landcover_factor == "Forest"),
+    aes(x = longitude, y = latitude, fill = landcover_factor, shape = landcover_factor, color = landcover_factor),
+    size = 2.0, alpha = 0.45, stroke = 0.12
   ) +
   scale_fill_manual(name = "Land Cover", values = my_landcover_colors, labels = display_labels_present, drop = FALSE) +
   scale_color_manual(name = "Land Cover", values = my_landcover_colors, labels = display_labels_present, drop = FALSE) +
-  scale_shape_manual(name = "Land Cover", values = shape_values_all[present_landcovers], labels = display_labels_present, drop = FALSE) +
-  scale_size_manual(values = point_size_base[present_landcovers], guide = "none") +
+  scale_shape_manual(name = "Land Cover", values = shape_map_values[present_landcovers], labels = display_labels_present, drop = FALSE) +
   guides(
-    fill = guide_legend(override.aes = list(shape = unname(shape_values_all[present_landcovers]), fill = unname(my_landcover_colors), colour = unname(my_landcover_colors), size = unname(point_size_base[present_landcovers]), alpha = 1, stroke = 0.12)),
+    fill = guide_legend(override.aes = list(shape = unname(shape_map_values[present_landcovers]), fill = unname(my_landcover_colors), colour = unname(my_landcover_colors), size = unname(legend_size_map[present_landcovers]), alpha = 1.0, stroke = unname(stroke_map[present_landcovers]))),
     shape = "none",
     color = "none"
   )
+
+## Add emphasis overlays: thick Wetland points and filled Impervious triangles (no outline)
+global_map <- global_map +
+  geom_point(
+    data = combined_df %>% dplyr::filter(landcover_factor == "Wetland_Marsh"),
+    aes(x = longitude, y = latitude, shape = landcover_factor, color = landcover_factor, fill = landcover_factor),
+    size = 2.3, stroke = 1, alpha = 0.90, inherit.aes = FALSE
+  ) +
+  geom_point(
+    data = combined_df %>% dplyr::filter(landcover_factor == "Impervious"),
+    aes(x = longitude, y = latitude, shape = landcover_factor, color = landcover_factor, fill = landcover_factor),
+    size = 2.3, stroke = 0, alpha = 0.50, inherit.aes = FALSE
+  )
+  # Emphasize Grassland points slightly by drawing them on top with higher alpha
+  global_map <- global_map +
+    geom_point(
+      data = combined_df %>% dplyr::filter(landcover_factor == "Grassland_Shrubland"),
+      aes(x = longitude, y = latitude, shape = landcover_factor, color = landcover_factor, fill = landcover_factor),
+      size = 2.3, stroke = 0.12, alpha = 0.70, inherit.aes = FALSE
+    )
 
 # #############################################################################
 # 3) Regional Insets
@@ -286,15 +332,26 @@ create_regional_map <- function(xlim, ylim, data_df) {
     geom_polygon(data = world, aes(x = long, y = lat, group = group),
                  fill = "lightgray", color = "white") +
     geom_point(
-      data = data_df,
-      aes(x = longitude, y = latitude, fill = landcover_factor, shape = landcover_factor, color = landcover_factor, size = landcover_factor),
-      alpha = 0.85, stroke = 0.12
+      data = data_df %>% dplyr::filter(landcover_factor != "Forest"),
+      aes(x = longitude, y = latitude, fill = landcover_factor, shape = landcover_factor, color = landcover_factor),
+      size = 2.3, alpha = 0.60, stroke = 0.12
+    ) +
+    geom_point(
+      data = data_df %>% dplyr::filter(landcover_factor == "Forest"),
+      aes(x = longitude, y = latitude, fill = landcover_factor, shape = landcover_factor, color = landcover_factor),
+      size = 2.0, alpha = 0.45, stroke = 0.12
     ) +
     scale_fill_manual(values = my_landcover_colors, drop = FALSE, guide = "none") +
     scale_color_manual(values = my_landcover_colors[names(my_landcover_colors)], drop = FALSE, guide = "none") +
-    scale_shape_manual(values = shape_values_all[names(my_landcover_colors)], drop = FALSE, guide = "none") +
-    scale_size_manual(values = point_size_base[names(my_landcover_colors)], guide = "none") +
-    
+    scale_shape_manual(values = shape_map_values[names(my_landcover_colors)], drop = FALSE, guide = "none") +
+    # Overlay Impervious in the inset as a filled triangle without outline
+        geom_point(data = data_df %>% dplyr::filter(landcover_factor == "Impervious"),
+          aes(x = longitude, y = latitude, shape = landcover_factor, color = landcover_factor, fill = landcover_factor),
+         size = 2.3, stroke = 0, alpha = 0.90, inherit.aes = FALSE) +
+        # Overlay Grassland in the inset as a slightly more opaque square
+            geom_point(data = data_df %>% dplyr::filter(landcover_factor == "Grassland_Shrubland"),
+              aes(x = longitude, y = latitude, shape = landcover_factor, color = landcover_factor, fill = landcover_factor),
+              size = 2.3, stroke = 0.12, alpha = 0.70, inherit.aes = FALSE) +
     coord_sf(xlim = xlim, ylim = ylim, crs = st_crs(3857), expand = FALSE) +
     theme_void() +
     theme(panel.background = element_rect(fill = "white", color = NA),
@@ -347,14 +404,20 @@ p_slope <- ggplot(combined_df, aes(x = slope_estimate, y = landcover_factor)) +
   labs(x = "CQ Slope Estimate", y = NULL) +
   theme_classic(base_size = 14) +
   scale_y_discrete(limits = rev(present_landcovers), labels = rev(display_labels_present)) +
-  theme(legend.position = "none",
-        axis.text.x = element_text(angle = 45, hjust = 1))
+    theme(legend.position = "none",
+      axis.text.x = element_text(angle = 0, hjust = 0.5),
+      axis.title.x = element_text(margin = margin(t = 8)))
 
 # Overlay jitter points for plus/asterisk categories with thicker lines only
 p_slope <- p_slope +
-  geom_jitter(data = combined_df %>% dplyr::filter(landcover_factor %in% c("Wetland_Marsh", "Impervious")),
+  # Emphasize wetland points with thicker outlines
+  geom_jitter(data = combined_df %>% dplyr::filter(landcover_factor == "Wetland_Marsh"),
               aes(x = slope_estimate, y = landcover_factor, shape = landcover_factor, color = landcover_factor, fill = landcover_factor),
-              width = 0, height = 0.2, size = 3, stroke = 1, alpha = 0.95, inherit.aes = FALSE)
+              width = 0, height = 0.2, size = point_size_jitter["Wetland_Marsh"], stroke = 1, alpha = 0.98, inherit.aes = FALSE) +
+  # Draw Impervious as a filled triangle in the jitter with no outline
+  geom_jitter(data = combined_df %>% dplyr::filter(landcover_factor == "Impervious"),
+              aes(x = slope_estimate, y = landcover_factor, shape = landcover_factor, color = landcover_factor, fill = landcover_factor),
+              width = 0, height = 0.2, size = point_size_jitter["Impervious"], stroke = 0, alpha = 0.75, inherit.aes = FALSE)
 
 p_slope_labeled <- p_slope +
   labs(tag = "b)") +
@@ -425,9 +488,9 @@ quartile_summary$major_land <- factor(quartile_summary$major_land, levels = pres
   scale_fill_manual(values = quartile_colors, breaks = present_quartile_land, guide = "none") +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
   labs(x = var_label, y = "Proportion of sites") +
-  theme_classic(base_size = 12) +
-  theme(legend.position = "none",
-        axis.text.x = element_text(angle = 0, hjust = 0.5))
+    theme_classic(base_size = 14) +
+    theme(legend.position = "none",
+      axis.text.x = element_text(angle = 0, hjust = 0.5))
 
 p_third_labeled <- p_third +
   labs(tag = "c)") +
@@ -456,8 +519,13 @@ combined_figure <- ggarrange(
 # Set output directory to CQ_Site_Map for site map export
 output_dir <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/CQ_Site_Map"
 
-# Save as PNG for viewing
-ggsave(file.path(output_dir, "Fig_landcover_cqslope.png"), combined_figure,
-       width = 8, height = 8.5, dpi = 300, bg = "white")
+# Save as PNG for viewing with suffix based on selected panel variable
+# e.g. Fig_landcover_cqslope_precipitation.png or Fig_landcover_cqslope_drainage_area.png
+file_suffix <- ifelse(panel_c_var == "precipitation", "precipitation",
+       ifelse(panel_c_var == "drainage_area", "drainage_area", panel_c_var))
+output_file <- file.path(output_dir, paste0("Fig_landcover_cqslope_", file_suffix, ".png"))
+ggsave(output_file, combined_figure,
+  width = 8, height = 8.5, dpi = 300, bg = "white")
+cat("Saved figure to:", output_file, "\n")
 
 
