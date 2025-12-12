@@ -103,16 +103,6 @@ print(unique_landcover)
 # Ensure slope_estimate is numeric for boxplots
 combined_df$slope_estimate <- as.numeric(combined_df$slope_estimate)
 
-# Define colors for land cover types
-landcover_colors <- c(
-  "Forest"              = "#2d5016",  # Dark green
-  "Cropland"            = "#d4a017",  # Golden
-  "Grassland_Shrubland" = "#b8a67d",  # Tan
-  "Wetland_Marsh"       = "#4682b4",  # Teal green
-  "Impervious"          = "#6b6b6b",  # Gray
-  "Bare"                = "#c2a882",  # Beige
-  "Ice"                 = "#e3f2fd"   # Pale blue
-)
 
 landcover_colors <- c(
   "Forest"              = "#3C5E3E",   # Muted green
@@ -154,15 +144,15 @@ landcover_colors <- c(
   "Ice"                 = "#8BAFCF"    
 )
 
-landcover_colors <- c(
-  "Forest"              = "#2F5530",   # muted deep green
-  "Grassland_Shrubland" = "#8E9F50",   # sage/olive green
-  "Cropland"            = "#C89A1A",   # ochre gold
-  "Wetland_Marsh"       = "#4A718C",   # steel blue
-  "Impervious"          = "#5A5A5A",   # neutral grey
-  "Bare"                = "#AA5745",   # muted clay red
-  "Ice"                 = "#6D97C4"    # medium cool blue
-)
+# landcover_colors <- c(
+#   "Forest"              = "#2F5530",  
+#   "Grassland_Shrubland" = "#8E9F50",   
+#   "Cropland"            = "#C89A1A",   
+#   "Wetland_Marsh"       = "#4A718C",   
+#   "Impervious"          = "#5A5A5A",   
+#   "Bare"                = "#AA5745",   
+#   "Ice"                 = "#6D97C4"    
+# )
 
 
 # Desired legend order and display labels
@@ -179,13 +169,22 @@ display_labels <- c(
 
 # Define shape mapping (named) for the desired order. Use filled shapes for first five categories.
 shape_values_all <- c(
-  "Forest" = 21,
-  "Cropland" = 22,
-  "Grassland_Shrubland" = 23,
-  "Wetland_Marsh" = 24,
-  "Impervious" = 25,
-  "Bare" = 3,
-  "Ice" = 4
+  # Updated shapes per user request:
+  # Wetland -> plus sign (pch = 3)
+  # Impervious -> asterisk (pch = 8)
+  # Forest -> upright triangle (pch = 2)
+  # Grassland_Shrubland -> down triangle (pch = 6)
+  # Cropland -> diamond (filled) (pch = 18)
+  # Bare -> filled circle (pch = 21)
+  # Ice -> filled square (pch = 15)  # set to 15 to avoid duplicate diamond
+  # Use filled triangles for Forest (up) and Grassland (down)
+  "Forest" = 24,
+  "Cropland" = 18,
+  "Grassland_Shrubland" = 25,
+  "Wetland_Marsh" = 3,
+  "Impervious" = 8,
+  "Bare" = 21,
+  "Ice" = 15
 )
 
 
@@ -210,29 +209,26 @@ panel_c_var <- "precipitation"  # set to either "precipitation" or "drainage_are
 if (panel_c_var == "precipitation") {
   combined_df$precipitation <- as.numeric(combined_df$precipitation)
   var_vec <- combined_df$precipitation
-  var_label <- "Precipitation (mm day\u207B\u00B9)"
+  var_label <- "Precipitation (mm day\u207B\u00B9)" 
 } else if (panel_c_var == "drainage_area") {
   combined_df$drainage_area <- as.numeric(combined_df$drainage_area)
   var_vec <- combined_df$drainage_area
-  var_label <- "Drainage area (sqkm)"
-} else {
-  stop("panel_c_var must be either 'precipitation' or 'drainage_area'")
+  var_label <- "Drainage area (sqkm)" 
 }
 
-# Compute quartile breaks and labels using the chosen variable
+# Compute quartile breaks and labels
 var_breaks <- unname(quantile(var_vec, probs = seq(0, 1, 0.25), na.rm = TRUE))
+
 var_labels <- vapply(seq_len(length(var_breaks)-1), function(i) {
   lo <- round(var_breaks[i], 1)
   hi <- round(var_breaks[i+1], 1)
+  
   if (i == 1) {
-    paste0("\u2264 ", hi)        # ≤ hi
+    paste0("\u2264 ", hi)      # ≤ hi
   } else {
-    paste0(lo, " – ", hi)        # en-dash
+    paste0(lo, " – ", hi)      # en dash
   }
 }, FUN.VALUE = character(1))
-
-# Note: For drainage_area we will drop NA only in panel_df when constructing Panel C
-
 
 # #############################################################################
 # 2. Global Map (Panel A)
@@ -260,12 +256,16 @@ global_base <- ggplot() +
 global_map <- global_base +
   geom_point(
     data = combined_df,
-    aes(x = longitude, y = latitude, fill = landcover_factor),
-    shape = 21, size = 2, alpha = 0.7, stroke = 0.1, color = "gray20"
+    aes(x = longitude, y = latitude, fill = landcover_factor, shape = landcover_factor, color = landcover_factor),
+    size = 2.2, alpha = 0.8, stroke = 0.12
   ) +
   scale_fill_manual(name = "Land Cover", values = my_landcover_colors, labels = display_labels_present, drop = FALSE) +
+  scale_color_manual(name = "Land Cover", values = my_landcover_colors, labels = display_labels_present, drop = FALSE) +
+  scale_shape_manual(name = "Land Cover", values = shape_values_all[present_landcovers], labels = display_labels_present, drop = FALSE) +
   guides(
-    fill = guide_legend(override.aes = list(color = "gray20", size = 4, alpha = 1, stroke = 0.1))
+    fill = guide_legend(override.aes = list(shape = unname(shape_values_all[present_landcovers]), fill = unname(my_landcover_colors), colour = unname(my_landcover_colors), size = 5, alpha = 1, stroke = 0.2)),
+    shape = "none",
+    color = "none"
   )
 
 # #############################################################################
@@ -277,10 +277,11 @@ create_regional_map <- function(xlim, ylim, data_df) {
                  fill = "lightgray", color = "white") +
     geom_point(
       data = data_df,
-      aes(x = longitude, y = latitude, fill = landcover_factor, shape = landcover_factor),
-      size = 2, alpha = 0.7, stroke = 0.1, color = "gray20"
+      aes(x = longitude, y = latitude, fill = landcover_factor, shape = landcover_factor, color = landcover_factor),
+      size = 2, alpha = 0.8, stroke = 0.12
     ) +
     scale_fill_manual(values = my_landcover_colors, drop = FALSE, guide = "none") +
+    scale_color_manual(values = my_landcover_colors[names(my_landcover_colors)], drop = FALSE, guide = "none") +
     scale_shape_manual(values = shape_values_all[names(my_landcover_colors)], drop = FALSE, guide = "none") +
     coord_sf(xlim = xlim, ylim = ylim, crs = st_crs(3857), expand = FALSE) +
     theme_void() +
@@ -325,13 +326,14 @@ set.seed(42)
 
 p_slope <- ggplot(combined_df, aes(x = slope_estimate, y = landcover_factor)) +
   geom_boxplot(aes(fill = landcover_factor), outlier.shape = NA, alpha = 0.7) +
-  geom_jitter(aes(fill = landcover_factor, color = landcover_factor),
-              width = 0, height = 0.2, size = 2.2, stroke = 0.1, alpha = 0.6, shape = 21) +
+  geom_jitter(aes(fill = landcover_factor, color = landcover_factor, shape = landcover_factor),
+              width = 0, height = 0.2, size = 2.6, stroke = 0.14, alpha = 0.75) +
   scale_fill_manual(values = my_landcover_colors) +
   scale_color_manual(values = my_landcover_colors) +
+  scale_shape_manual(values = shape_values_all[present_landcovers]) +
   labs(x = "CQ Slope Estimate", y = NULL) +
   theme_classic(base_size = 14) +
-  scale_y_discrete(limits = rev(levels(combined_df$landcover_factor))) +
+  scale_y_discrete(limits = rev(present_landcovers), labels = rev(display_labels_present)) +
   theme(legend.position = "none",
         axis.text.x = element_text(angle = 45, hjust = 1))
 
@@ -348,7 +350,9 @@ panel_c_var <- "precipitation"  # set to either "precipitation" or "drainage_are
 if (panel_c_var == "precipitation") {
   combined_df$precipitation <- as.numeric(combined_df$precipitation)
   var_vec <- combined_df$precipitation
-  var_label <- "Precipitation (mm day^-1)"
+  var_vec <- combined_df$precipitation
+  # Use plotmath expression for mm day^-1 (superscript -1)
+  var_label <- expression(paste("Precipitation (", mm~day^{-1}, ")"))
 } else if (panel_c_var == "drainage_area") {
   combined_df$drainage_area <- as.numeric(combined_df$drainage_area)
   var_vec <- combined_df$drainage_area
@@ -363,7 +367,7 @@ var_labels <- vapply(seq_len(length(var_breaks)-1), function(i) {
   lo <- round(var_breaks[i], 1)
   hi <- round(var_breaks[i+1], 1)
   if (i == 1) {
-    paste0("<= ", hi)
+    paste0("\u2264 ", hi)
   } else {
     paste0(lo, " - ", hi)
   }
@@ -390,14 +394,16 @@ quartile_summary <- panel_df %>%
   dplyr::mutate(prop = n / sum(n)) %>%
   dplyr::ungroup()
 
-# Ensure quartile colors respect desired order
+# Ensure quartile colors respect desired order and force factor levels so stacking matches legend
 present_quartile_land <- desired_land_order[desired_land_order %in% unique(quartile_summary$major_land)]
 quartile_colors <- landcover_colors[present_quartile_land]
+# Force factor levels for major_land to preserve stacking order
+quartile_summary$major_land <- factor(quartile_summary$major_land, levels = present_quartile_land)
 
 # Stacked proportion bar plot (panel C) using unified panel_bin
  p_third <- ggplot(quartile_summary, aes(x = panel_bin, y = prop, fill = major_land)) +
   geom_bar(stat = "identity", position = "fill", color = "gray20") +
-  scale_fill_manual(values = quartile_colors, guide = "none") +
+  scale_fill_manual(values = quartile_colors, breaks = present_quartile_land, guide = "none") +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
   labs(x = var_label, y = "Proportion of sites") +
   theme_classic(base_size = 12) +
