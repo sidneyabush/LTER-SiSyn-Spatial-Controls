@@ -18,13 +18,19 @@ librarian::shelf(dplyr, stringr, ggplot2, maps, patchwork, scales, colorspace, g
 # #############################################################################
 
 # Load sizer data
-data_file <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Spatial_controls_GRL/harmonization_files/sizer_outs_with_drivers_6Aug25.csv"
+data_file <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/CQ_Site_Map/sizer_outs_with_drivers_6Aug25.csv"
 sizer_data <- read.csv(data_file, stringsAsFactors = FALSE)
 unique_landcover <- unique(sizer_data$major_land)
 print(unique_landcover)
 
+land_cover_check <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/CQ_Site_Map/all-data_si-extract_2_20250325.csv"
+all_spatial_data <- read.csv(land_cover_check, stringsAsFactors = FALSE)
 
-# Filter to one record per site
+LULC_spatial_data <- all_spatial_data %>%
+  dplyr::select(LTER, Stream_Name, major_land) %>%
+  dplyr::rename(major_land_all ==  major_land)
+  
+  # Filter to one record per site
 sites_df <- sizer_data %>%
   dplyr::group_by(LTER, Stream_Name) %>%
   dplyr::slice(1) %>%
