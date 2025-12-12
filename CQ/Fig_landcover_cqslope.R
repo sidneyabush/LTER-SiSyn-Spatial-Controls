@@ -576,6 +576,12 @@ build_and_save_for_df <- function(df_local, file_suffix = "", use_ext = FALSE) {
     point_size_jitter_local <- point_size_jitter
     stroke_map_local <- stroke_map
     legend_size_map_local <- legend_size_map
+    # If ext run and Tundra present, make tundra diamond smaller for map and jitter
+    if (!is.null(file_suffix) && file_suffix == "_ext" && ("Tundra" %in% present_landcovers_local)) {
+      point_size_jitter_local["Tundra"] <- 1.5
+      stroke_map_local["Tundra"] <- 0.08
+      legend_size_map_local["Tundra"] <- 3.0
+    }
   
     # No relabeling or aesthetic copying for Tundra — Tundra should have its
     # own defined aesthetics (if present) and will be handled by the mapping
@@ -610,18 +616,19 @@ build_and_save_for_df <- function(df_local, file_suffix = "", use_ext = FALSE) {
     theme_minimal() +
     theme(panel.background = element_rect(fill = "white", color = NA), plot.background = element_rect(fill = "white", color = NA), panel.grid = element_blank(), axis.title = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(), legend.position = c(0.05, 0.65), legend.justification = c("left","top"), legend.text = element_text(size = 12), legend.title = element_blank())
 
+  # choose the wetland key depending on whether Tundra replaced Wetland in this run
+  wetland_key_local <- if ("Tundra" %in% present_landcovers_local) "Tundra" else "Wetland_Marsh"
+
   global_map_local <- global_base_local +
-    geom_point(data = df_local %>% dplyr::filter(landcover_factor != "Forest"), aes(x = longitude, y = latitude, fill = landcover_factor, shape = landcover_factor, color = landcover_factor), size = 2.3, alpha = 0.60, stroke = 0.12) +
+    geom_point(data = df_local %>% dplyr::filter(landcover_factor != "Forest" & landcover_factor != wetland_key_local), aes(x = longitude, y = latitude, fill = landcover_factor, shape = landcover_factor, color = landcover_factor), size = 2.3, alpha = 0.60, stroke = 0.12) +
     geom_point(data = df_local %>% dplyr::filter(landcover_factor == "Forest"), aes(x = longitude, y = latitude, fill = landcover_factor, shape = landcover_factor, color = landcover_factor), size = 2.0, alpha = 0.45, stroke = 0.12) +
     scale_fill_manual(name = "Land Cover", values = my_landcover_colors_local, labels = display_labels_local, drop = FALSE) +
     scale_color_manual(name = "Land Cover", values = my_landcover_colors_local, labels = display_labels_local, drop = FALSE) +
     scale_shape_manual(name = "Land Cover", values = shape_map_values_local[present_landcovers_local], labels = display_labels_local, drop = FALSE) +
     guides(fill = guide_legend(override.aes = list(shape = unname(shape_map_values_local[present_landcovers_local]), fill = unname(my_landcover_colors_local), colour = unname(my_landcover_colors_local), size = unname(legend_size_map_local[present_landcovers_local]), alpha = 1.0, stroke = unname(stroke_map_local[present_landcovers_local]))), shape = "none", color = "none")
 
-  # choose the wetland key depending on whether Tundra replaced Wetland in this run
-  wetland_key <- if ("Tundra" %in% present_landcovers_local) "Tundra" else "Wetland_Marsh"
   global_map_local <- global_map_local +
-    geom_point(data = df_local %>% dplyr::filter(landcover_factor == wetland_key), aes(x = longitude, y = latitude, shape = landcover_factor, color = landcover_factor, fill = landcover_factor), size = 2.3, stroke = 1, alpha = 0.90, inherit.aes = FALSE) +
+    geom_point(data = df_local %>% dplyr::filter(landcover_factor == wetland_key_local), aes(x = longitude, y = latitude, shape = landcover_factor, color = landcover_factor, fill = landcover_factor), size = as.numeric(point_size_jitter_local[wetland_key_local]), stroke = 1, alpha = 0.90, inherit.aes = FALSE) +
     geom_point(data = df_local %>% dplyr::filter(landcover_factor == "Impervious"), aes(x = longitude, y = latitude, shape = landcover_factor, color = landcover_factor, fill = landcover_factor), size = 2.3, stroke = 0, alpha = 0.50, inherit.aes = FALSE) +
     geom_point(data = df_local %>% dplyr::filter(landcover_factor == "Grassland_Shrubland"), aes(x = longitude, y = latitude, shape = landcover_factor, color = landcover_factor, fill = landcover_factor), size = 2.3, stroke = 0.12, alpha = 0.70, inherit.aes = FALSE)
 
@@ -629,7 +636,7 @@ build_and_save_for_df <- function(df_local, file_suffix = "", use_ext = FALSE) {
   create_regional_map_local <- function(xlim, ylim, data_df) {
     ggplot() +
       geom_polygon(data = world, aes(x = long, y = lat, group = group), fill = "lightgray", color = "white") +
-      geom_point(data = data_df %>% dplyr::filter(landcover_factor != "Forest"), aes(x = longitude, y = latitude, fill = landcover_factor, shape = landcover_factor, color = landcover_factor), size = 2.3, alpha = 0.60, stroke = 0.12) +
+      geom_point(data = data_df %>% dplyr::filter(landcover_factor != "Forest" & landcover_factor != wetland_key_local), aes(x = longitude, y = latitude, fill = landcover_factor, shape = landcover_factor, color = landcover_factor), size = 2.3, alpha = 0.60, stroke = 0.12) +
       geom_point(data = data_df %>% dplyr::filter(landcover_factor == "Forest"), aes(x = longitude, y = latitude, fill = landcover_factor, shape = landcover_factor, color = landcover_factor), size = 2.0, alpha = 0.45, stroke = 0.12) +
       scale_fill_manual(values = my_landcover_colors_local, drop = FALSE, guide = "none") +
       scale_color_manual(values = my_landcover_colors_local, drop = FALSE, guide = "none") +
@@ -686,20 +693,23 @@ build_and_save_for_df <- function(df_local, file_suffix = "", use_ext = FALSE) {
       var_label <- expression(paste("Precipitation (", mm~day^{-1}, ")"))
       panel_df_local <- df_local
     } else {
+      # Convert drainage area to hectares for plotting (1 km^2 = 100 ha)
       df_local$drainage_area <- as.numeric(df_local$drainage_area)
-      panel_df_local <- df_local %>% dplyr::filter(!is.na(drainage_area))
-      var_vec <- panel_df_local$drainage_area
-      var_label <- expression(paste("Drainage area (km"^2, ")"))
+      panel_df_local <- df_local %>% dplyr::filter(!is.na(drainage_area)) %>% dplyr::mutate(panel_var = drainage_area * 100)
+      var_vec <- panel_df_local$panel_var
+      var_label <- "Drainage area (ha)"
     }
 
     var_breaks <- unname(quantile(var_vec, probs = seq(0, 1, 0.25), na.rm = TRUE))
     # Round drainage-area (km^2) bin edges to whole numbers for readability
     if (panel_var_choice == "drainage_area") {
-      var_breaks <- round(var_breaks, 0)
+      # var_breaks currently in km^2; convert to hectares and round
+      var_breaks <- round(var_breaks * 100, 0)
     }
     var_labels <- vapply(seq_len(length(var_breaks)-1), function(i) { lo <- var_breaks[i]; hi <- var_breaks[i+1]; if (i == 1) paste0("\u2264 ", hi) else paste0(lo, " - ", hi) }, FUN.VALUE = character(1))
 
-    panel_df_local <- panel_df_local %>% dplyr::mutate(panel_var = if (panel_var_choice == "precipitation") precipitation else drainage_area, panel_bin = cut(panel_var, breaks = var_breaks, include.lowest = TRUE, labels = var_labels))
+    # ensure panel_var uses hectares for drainage_area
+    panel_df_local <- panel_df_local %>% dplyr::mutate(panel_var = if (panel_var_choice == "precipitation") precipitation else (drainage_area * 100), panel_bin = cut(panel_var, breaks = var_breaks, include.lowest = TRUE, labels = var_labels))
 
     quartile_summary_local <- panel_df_local %>% dplyr::group_by(panel_bin, major_land) %>% dplyr::summarise(n = dplyr::n(), .groups = "drop") %>% dplyr::group_by(panel_bin) %>% dplyr::mutate(prop = n / sum(n)) %>% dplyr::ungroup()
     present_quartile_land_local <- desired_local_order[desired_local_order %in% unique(quartile_summary_local$major_land)]
@@ -759,7 +769,8 @@ var_labels2 <- vapply(seq_len(length(var_breaks2)-1), function(i) {
 }, FUN.VALUE = character(1))
 
 panel_df2 <- combined_df %>% dplyr::filter(!is.na(drainage_area)) %>%
-  dplyr::mutate(panel_var = drainage_area, panel_bin = cut(panel_var, breaks = var_breaks2, include.lowest = TRUE, labels = var_labels2))
+  # convert to hectares for panel C (1 km^2 = 100 ha)
+  dplyr::mutate(panel_var = drainage_area * 100, panel_bin = cut(panel_var, breaks = var_breaks2 * 100, include.lowest = TRUE, labels = var_labels2))
 
 quartile_summary2 <- panel_df2 %>%
   dplyr::group_by(panel_bin, major_land) %>%
