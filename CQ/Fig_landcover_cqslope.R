@@ -134,6 +134,36 @@ landcover_colors <- c(
   "Ice"                 = "#7FA7C4"    # Muted medium icy blue (VISIBLE!)
 )
 
+landcover_colors <- c(
+  "Forest"              = "#1F5633",   # very dark green
+  "Grassland_Shrubland" = "#89A55A",   # light olive
+  "Cropland"            = "#D3A022",   # saturated ochre
+  "Wetland_Marsh"       = "#3F6B8E",   # marine blue
+  "Impervious"          = "#4A4949",   # dark grey
+  "Bare"                = "#B45C4F",   # terracotta
+  "Ice"                 = "#6D8FB9"    # mid blue
+)
+
+landcover_colors <- c(
+  "Forest"              = "#305D3B",   
+  "Grassland_Shrubland" = "#A1A86B",   
+  "Cropland"            = "#CEB24C",   
+  "Wetland_Marsh"       = "#5E7B71",   
+  "Impervious"          = "#4F4F4F",   
+  "Bare"                = "#C48A72",   
+  "Ice"                 = "#8BAFCF"    
+)
+
+landcover_colors <- c(
+  "Forest"              = "#2F5530",   # muted deep green
+  "Grassland_Shrubland" = "#8E9F50",   # sage/olive green
+  "Cropland"            = "#C89A1A",   # ochre gold
+  "Wetland_Marsh"       = "#4A718C",   # steel blue
+  "Impervious"          = "#5A5A5A",   # neutral grey
+  "Bare"                = "#AA5745",   # muted clay red
+  "Ice"                 = "#6D97C4"    # medium cool blue
+)
+
 
 # Desired legend order and display labels
 desired_land_order <- c("Forest",  "Grassland_Shrubland", "Cropland", "Wetland_Marsh", "Impervious", "Bare", "Ice")
@@ -180,11 +210,11 @@ panel_c_var <- "precipitation"  # set to either "precipitation" or "drainage_are
 if (panel_c_var == "precipitation") {
   combined_df$precipitation <- as.numeric(combined_df$precipitation)
   var_vec <- combined_df$precipitation
-  var_label <- "Precipitation (mm day^-1)"
+  var_label <- "Precipitation (mm day\u207B\u00B9)"
 } else if (panel_c_var == "drainage_area") {
   combined_df$drainage_area <- as.numeric(combined_df$drainage_area)
   var_vec <- combined_df$drainage_area
-  var_label <- "Drainage area (units)"
+  var_label <- "Drainage area (sqkm)"
 } else {
   stop("panel_c_var must be either 'precipitation' or 'drainage_area'")
 }
@@ -195,9 +225,9 @@ var_labels <- vapply(seq_len(length(var_breaks)-1), function(i) {
   lo <- round(var_breaks[i], 1)
   hi <- round(var_breaks[i+1], 1)
   if (i == 1) {
-    paste0("<= ", hi)
+    paste0("\u2264 ", hi)        # ≤ hi
   } else {
-    paste0(lo, " - ", hi)
+    paste0(lo, " – ", hi)        # en-dash
   }
 }, FUN.VALUE = character(1))
 
