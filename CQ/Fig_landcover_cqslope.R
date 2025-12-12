@@ -169,23 +169,32 @@ display_labels <- c(
 
 # Define shape mapping (named) for the desired order. Use filled shapes for first five categories.
 shape_values_all <- c(
-  # Updated shapes per user request:
-  # Wetland -> plus sign (pch = 3)
-  # Impervious -> asterisk (pch = 8)
-  # Forest -> upright triangle (pch = 2)
-  # Grassland_Shrubland -> down triangle (pch = 6)
-  # Cropland -> diamond (filled) (pch = 18)
-  # Bare -> filled circle (pch = 21)
-  # Ice -> filled square (pch = 15)  # set to 15 to avoid duplicate diamond
-  # Use filled triangles for Forest (up) and Grassland (down)
-  "Forest" = 24,
+  # Final requested mapping (in desired_land_order):
+  # Forest = circle (21), Grassland = square (22), Cropland = diamond (18),
+  # Wetland = square (15), Impervious = triangle up (24),
+  # Bare = triangle down (25), Ice = circle (21)
+  "Forest" = 21,
+  "Grassland_Shrubland" = 22,
   "Cropland" = 18,
-  "Grassland_Shrubland" = 25,
-  "Wetland_Marsh" = 3,
-  "Impervious" = 8,
-  "Bare" = 21,
-  "Ice" = 15
+  "Wetland_Marsh" = 15,
+  "Impervious" = 24,
+  "Bare" = 25,
+  "Ice" = 21
 )
+
+# Base size mapping: make all symbols the same base size, but make the
+# two triangles slightly smaller so they read as less heavy visually.
+point_size_base <- c(
+  "Forest" = 1.6,
+  "Grassland_Shrubland" = 1.6,
+  "Cropland" = 1.6,
+  "Wetland_Marsh" = 1.6,
+  "Impervious" = 1.0,
+  "Bare" = 1.0,
+  "Ice" = 1.6
+)
+
+point_size_jitter <- point_size_base
 
 
 # Filter colors to only those present in the data, preserving desired order
@@ -256,14 +265,15 @@ global_base <- ggplot() +
 global_map <- global_base +
   geom_point(
     data = combined_df,
-    aes(x = longitude, y = latitude, fill = landcover_factor, shape = landcover_factor, color = landcover_factor),
-    size = 2.2, alpha = 0.8, stroke = 0.12
+    aes(x = longitude, y = latitude, fill = landcover_factor, shape = landcover_factor, color = landcover_factor, size = landcover_factor),
+    alpha = 0.85, stroke = 0.12
   ) +
   scale_fill_manual(name = "Land Cover", values = my_landcover_colors, labels = display_labels_present, drop = FALSE) +
   scale_color_manual(name = "Land Cover", values = my_landcover_colors, labels = display_labels_present, drop = FALSE) +
   scale_shape_manual(name = "Land Cover", values = shape_values_all[present_landcovers], labels = display_labels_present, drop = FALSE) +
+  scale_size_manual(values = point_size_base[present_landcovers], guide = "none") +
   guides(
-    fill = guide_legend(override.aes = list(shape = unname(shape_values_all[present_landcovers]), fill = unname(my_landcover_colors), colour = unname(my_landcover_colors), size = 5, alpha = 1, stroke = 0.2)),
+    fill = guide_legend(override.aes = list(shape = unname(shape_values_all[present_landcovers]), fill = unname(my_landcover_colors), colour = unname(my_landcover_colors), size = unname(point_size_base[present_landcovers]), alpha = 1, stroke = 0.12)),
     shape = "none",
     color = "none"
   )
@@ -277,12 +287,14 @@ create_regional_map <- function(xlim, ylim, data_df) {
                  fill = "lightgray", color = "white") +
     geom_point(
       data = data_df,
-      aes(x = longitude, y = latitude, fill = landcover_factor, shape = landcover_factor, color = landcover_factor),
-      size = 2, alpha = 0.8, stroke = 0.12
+      aes(x = longitude, y = latitude, fill = landcover_factor, shape = landcover_factor, color = landcover_factor, size = landcover_factor),
+      alpha = 0.85, stroke = 0.12
     ) +
     scale_fill_manual(values = my_landcover_colors, drop = FALSE, guide = "none") +
     scale_color_manual(values = my_landcover_colors[names(my_landcover_colors)], drop = FALSE, guide = "none") +
     scale_shape_manual(values = shape_values_all[names(my_landcover_colors)], drop = FALSE, guide = "none") +
+    scale_size_manual(values = point_size_base[names(my_landcover_colors)], guide = "none") +
+    
     coord_sf(xlim = xlim, ylim = ylim, crs = st_crs(3857), expand = FALSE) +
     theme_void() +
     theme(panel.background = element_rect(fill = "white", color = NA),
@@ -326,16 +338,23 @@ set.seed(42)
 
 p_slope <- ggplot(combined_df, aes(x = slope_estimate, y = landcover_factor)) +
   geom_boxplot(aes(fill = landcover_factor), outlier.shape = NA, alpha = 0.7) +
-  geom_jitter(aes(fill = landcover_factor, color = landcover_factor, shape = landcover_factor),
-              width = 0, height = 0.2, size = 2.6, stroke = 0.14, alpha = 0.75) +
+  geom_jitter(aes(fill = landcover_factor, color = landcover_factor, shape = landcover_factor, size = landcover_factor),
+              width = 0, height = 0.2, stroke = 0.12, alpha = 0.75) +
   scale_fill_manual(values = my_landcover_colors) +
   scale_color_manual(values = my_landcover_colors) +
   scale_shape_manual(values = shape_values_all[present_landcovers]) +
+  scale_size_manual(values = point_size_jitter[present_landcovers], guide = "none") +
   labs(x = "CQ Slope Estimate", y = NULL) +
   theme_classic(base_size = 14) +
   scale_y_discrete(limits = rev(present_landcovers), labels = rev(display_labels_present)) +
   theme(legend.position = "none",
         axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Overlay jitter points for plus/asterisk categories with thicker lines only
+p_slope <- p_slope +
+  geom_jitter(data = combined_df %>% dplyr::filter(landcover_factor %in% c("Wetland_Marsh", "Impervious")),
+              aes(x = slope_estimate, y = landcover_factor, shape = landcover_factor, color = landcover_factor, fill = landcover_factor),
+              width = 0, height = 0.2, size = 3, stroke = 1, alpha = 0.95, inherit.aes = FALSE)
 
 p_slope_labeled <- p_slope +
   labs(tag = "b)") +
