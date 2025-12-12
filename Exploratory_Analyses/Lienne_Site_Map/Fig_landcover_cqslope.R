@@ -20,6 +20,9 @@ librarian::shelf(dplyr, stringr, ggplot2, maps, patchwork, scales, colorspace, g
 # Load sizer data
 data_file <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/Spatial_controls_GRL/harmonization_files/sizer_outs_with_drivers_6Aug25.csv"
 sizer_data <- read.csv(data_file, stringsAsFactors = FALSE)
+unique_landcover <- unique(sizer_data$major_land)
+print(unique_landcover)
+
 
 # Filter to one record per site
 sites_df <- sizer_data %>%
