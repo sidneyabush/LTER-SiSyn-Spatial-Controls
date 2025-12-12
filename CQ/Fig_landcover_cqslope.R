@@ -723,7 +723,13 @@ build_and_save_for_df <- function(df_local, file_suffix = "", use_ext = FALSE) {
 # Build and save figures for both canonical and external landcover workflows.
 # Canonical: use `major_land` (from sizer). External: use `major_land_ext`.
 # We run them in a simple loop to keep behavior explicit.
-for (is_ext in c(FALSE, TRUE)) {
+is_ext_list <- switch(as.character(run_mode),
+                      "both" = c(FALSE, TRUE),
+                      "canon" = c(FALSE),
+                      "ext" = c(TRUE),
+                      c(FALSE, TRUE))
+
+for (is_ext in is_ext_list) {
   if (!is_ext) {
     df_local <- combined_df
     suffix_local <- ""
