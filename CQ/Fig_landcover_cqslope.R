@@ -26,11 +26,68 @@ print(unique_landcover)
 land_cover_check <- "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/CQ_Site_Map/all-data_si-extract_2_20250325.csv"
 all_spatial_data <- read.csv(land_cover_check, stringsAsFactors = FALSE)
 
+# Standardize 'East Fork' and 'West Fork' capitalization in Stream_Name for both datasets
+sizer_data$Stream_Name <- gsub("(?i)east fork", "East Fork", sizer_data$Stream_Name, perl = TRUE)
+sizer_data$Stream_Name <- gsub("(?i)west fork", "West Fork", sizer_data$Stream_Name, perl = TRUE)
+all_spatial_data$Stream_Name <- gsub("(?i)east fork", "East Fork", all_spatial_data$Stream_Name, perl = TRUE)
+all_spatial_data$Stream_Name <- gsub("(?i)west fork", "West Fork", all_spatial_data$Stream_Name, perl = TRUE)
+
+sizer_df <- sizer_data %>%
+  dplyr::select(LTER, Stream_Name, major_land) %>%
+  dplyr::group_by(LTER, Stream_Name) %>%
+  dplyr::slice(1) %>%
+  dplyr::ungroup()
+
+# Manually set major_land to 'Forest' for East Fork and West Fork
+sizer_df <- sizer_df %>%
+  dplyr::mutate(major_land = ifelse(Stream_Name %in% c("East Fork", "West Fork"), "Forest", major_land))
+
+# Extract LULC_spatial_data for comparison of major land classes
 LULC_spatial_data <- all_spatial_data %>%
   dplyr::select(LTER, Stream_Name, major_land) %>%
-  dplyr::rename(major_land_all ==  major_land)
-  
-  # Filter to one record per site
+  dplyr::rename(major_land_ext = major_land) %>%
+  dplyr::group_by(LTER, Stream_Name) %>%
+  dplyr::slice(1) %>%
+  dplyr::ungroup()
+
+# Standardize land cover class names in major_land_ext
+LULC_spatial_data <- LULC_spatial_data %>%
+  dplyr::mutate(
+    major_land_ext = dplyr::case_when(
+      grepl("_forest", tolower(major_land_ext)) ~ "Forest",
+      tolower(major_land_ext) == "tundra" ~ "Tundra",
+      tolower(major_land_ext) == "shrubland_grassland" ~ "Grassland_Shrubland",
+      tolower(major_land_ext) == "cropland" ~ "Cropland",
+      tolower(major_land_ext) == "wetland_marsh" ~ "Wetland_Marsh",
+      tolower(major_land_ext) == "urban_and_built_up_land" ~ "Impervious",
+      TRUE ~ major_land_ext
+    )
+  )
+
+# Create a combined data frame for comparison (no duplicated columns)
+cols_to_add <- setdiff(names(LULC_spatial_data), c("LTER", "Stream_Name", names(sizer_df)))
+
+combined_df <- dplyr::left_join(
+  sizer_df,
+  LULC_spatial_data[, c("LTER", "Stream_Name", cols_to_add)],
+  by = c("LTER", "Stream_Name")
+)
+
+# Ensure combined_df is limited to what is in sizer_df (should already be the case with left_join, but enforce explicitly)
+combined_df <- combined_df %>% 
+  dplyr::semi_join(sizer_df, by = c("LTER", "Stream_Name")) %>%
+  dplyr::mutate(
+    major_land = ifelse(LTER == "MCM", "Ice", major_land),
+    major_land_ext = ifelse(LTER == "MCM", "Ice", major_land_ext),
+    land_match = major_land == major_land_ext
+  )
+
+# Export combined_df as CSV for checking in the specified directory
+write.csv(combined_df, file = "/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/CQ_Site_Map/LULC_site_check.csv", row.names = FALSE)
+
+#--- End land-use checks---
+
+# Filter to one record per site
 sites_df <- sizer_data %>%
   dplyr::group_by(LTER, Stream_Name) %>%
   dplyr::slice(1) %>%
@@ -194,4 +251,4 @@ output_dir <- "/Users/sidneybush/Documents/GitHub/LTER-SiSyn-Spatial-Controls/Ex
 ggsave(file.path(output_dir, "Fig_landcover_cqslope.png"), combined_figure,
        width = 8, height = 8.5, dpi = 300, bg = "white")
 
-cat("\nFigure saved to:", file.path(output_dir, "Fig_landcover_cqslope.png"), "\n")
+
