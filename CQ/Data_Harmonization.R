@@ -424,104 +424,94 @@ if (length(xy_cols) > 0) {
 # #############################################################################
 # 7) Merge the site average driver data with sizer outs
 # #############################################################################
-# Filter site_summary to only Stream_IDs in sizer_outs
+# Filter site_summary to only Stream_IDs in sizer_outs and remove duplicate columns
 sizer_stream_ids <- unique(sizer_outs$Stream_ID)
+
+# Only remove specific overlapping columns that should come from sizer_outs
+# Keep driver columns from site_summary (major_rock, major_land, major_soil, climate data, etc.)
+cols_to_remove <- c("LTER", "Stream_Name", "Date", "Year")
+
+# Prepare site_summary_filtered: remove only the specified overlapping columns
 site_summary_filtered <- site_summary %>%
-  filter(Stream_ID %in% sizer_stream_ids)
+  filter(Stream_ID %in% sizer_stream_ids) %>%
+  dplyr::select(-any_of(cols_to_remove))
 
 sizer_outs_ave_drivers <- sizer_outs %>%
   left_join(site_summary_filtered, by = "Stream_ID") %>%
-  # Remove any .x or .y suffix columns
-  dplyr::select(-matches("\\.x$|\\.y$")) %>%
   dplyr::rename(
     drainage_area = drainSqKm) %>%
   mutate_at(vars(npp, evapotrans, precip, temp, greenup_day, snow_cover, permafrost),
-            as.numeric) %>%
-  replace_na(list(permafrost = 0, snow_cover = 0))
+            as.numeric)
 
 # Check for any .x or .y columns
 xy_cols_sizer <- grep("\\.x$|\\.y$", names(sizer_outs_ave_drivers), value = TRUE)
 if (length(xy_cols_sizer) > 0) {
   warning(paste0("Found .x/.y columns in sizer_outs_ave_drivers: ", paste(xy_cols_sizer, collapse = ", ")))
-}
-
-# Set major_land to "Ice" for MCM sites
-sizer_outs_ave_drivers <- sizer_outs_ave_drivers %>%
-  mutate(major_land = ifelse(LTER == "MCM", "Ice", major_land))
-
-sizer_outs_ave_drivers <- sizer_outs_ave_drivers[!is.na(major_rock) &
-             trimws(major_rock) != "" &
-             major_rock != "0"]
-
-# Integrity check: recompute site averages from `all_drivers` and compare to joined `siteavg_` columns
-fresh_siteavg <- all_drivers %>%
-  group_by(Stream_ID) %>%
-  summarise(across(all_of(num_cols), ~ if (all(is.na(.x))) NA_real_ else mean(.x, na.rm = TRUE), .names = "fresh_{col}"), .groups = "drop")
-
-sizer_check <- sizer_outs_ave_drivers %>%
-  left_join(fresh_siteavg, by = "Stream_ID")
-
-tol <- 1e-8
-check_cols <- intersect(paste0("siteavg_", num_cols), names(sizer_check))
-issues_list <- list()
-for (col in num_cols) {
-  s_col <- paste0("siteavg_", col)
-  f_col <- paste0("fresh_", col)
-  if (s_col %in% names(sizer_check) && f_col %in% names(sizer_check)) {
-    mism <- sizer_check %>%
-      filter((is.na(.data[[s_col]]) != is.na(.data[[f_col]])) | (!is.na(.data[[s_col]]) & !is.na(.data[[f_col]]) & abs(.data[[s_col]] - .data[[f_col]]) > tol)) %>%
-      select(Stream_ID, Date, Year, !!sym(s_col), !!sym(f_col))
-    if (nrow(mism) > 0) {
-      mism$variable <- col
-      issues_list[[col]] <- mism
-    }
-  }
-}
-
-if (length(issues_list) > 0) {
-  issues_df <- do.call(rbind, issues_list)
-  warning(paste0('Found ', nrow(issues_df), ' mismatches between recomputed site averages and joined siteavg_ columns. Writing siteavg_mismatches.csv'))
-  write.csv(issues_df, 'siteavg_mismatches.csv', row.names = FALSE)
 } else {
-  message('Site-average integrity check passed: recomputed averages match joined siteavg_ columns.')
+  message("No .x/.y columns found - join successful without duplicates.")
 }
+
+# Set major_land to "Ice" for MCM sites ******** This can be updated for more sites later
+sizer_outs_ave_drivers <- sizer_outs_ave_drivers %>%
+  mutate(major_land = ifelse(LTER == "MCM", "Ice", major_land)) %>%
+  filter(!is.na(major_rock) & trimws(major_rock) != "" & major_rock != "0")
+
+# Integrity check: Verify non-numeric columns match original all_spatial
+# Get original non-numeric columns from all_spatial (one row per Stream_ID)
+spatial_check <- all_spatial %>%
+  dplyr::select(Stream_ID, major_land, major_rock, major_soil) %>%
+  distinct(Stream_ID, .keep_all = TRUE)
+
+# Compare with site_summary
+site_summary_check <- site_summary %>%
+  dplyr::select(Stream_ID, major_land, major_rock, major_soil)
+
+# Find mismatches
+comparison <- site_summary_check %>%
+  left_join(spatial_check, by = "Stream_ID", suffix = c("_site", "_orig"))
+
+non_numeric_issues <- comparison %>%
+  filter(
+    (major_land_site != major_land_orig & !(is.na(major_land_site) & is.na(major_land_orig))) |
+    (major_rock_site != major_rock_orig & !(is.na(major_rock_site) & is.na(major_rock_orig))) |
+    (major_soil_site != major_soil_orig & !(is.na(major_soil_site) & is.na(major_soil_orig)))
+  )
+
+if (nrow(non_numeric_issues) > 0) {
+  warning(paste0("Found ", nrow(non_numeric_issues), " mismatches in major_land/rock/soil columns. Writing 'non_numeric_mismatches.csv'"))
+  write.csv(non_numeric_issues, "non_numeric_mismatches.csv", row.names = FALSE)
+} else {
+  message("Non-numeric column integrity check passed: major_land/rock/soil match original all_spatial.")
+}
+
+# Last step, change the major_land classes to simple ones: 
+sizer_outs_ave_drivers <- sizer_outs_ave_drivers %>%
+  dplyr::mutate(
+    major_land = dplyr::case_when(
+      grepl("_forest", tolower(major_land)) ~ "Forest",
+      tolower(major_land) == "tundra" ~ "Tundra",
+      tolower(major_land) == "shrubland_grassland" ~ "Grassland_Shrubland",
+      tolower(major_land) == "cropland" ~ "Cropland",
+      tolower(major_land) == "wetland_marsh" ~ "Wetland_Marsh",
+      tolower(major_land) == "urban_and_built_up_land" ~ "Impervious",
+      TRUE ~ major_land
+    )
+  )
 
 # #############################################################################
 # 8) Export
 # #############################################################################
 # Tidy data for export: 
 sizer_outs_ave_drivers <- sizer_outs_ave_drivers %>%
-  dplyr::select(Stream_ID, Date, Year, drainSqKm, precip, Q,
-                temp, prop_area, npp, evapotrans,
-                cycle0, permafrost_mean_m, elevation_mean_m, RBI, recession_slope,
-                basin_slope_mean_degree, major_rock, major_land,
-                contains("rocks"), contains("land_"), contains("soil_")) %>%
   dplyr::mutate(
     permafrost = 100 * pmin(pmax(replace_na(permafrost, 0), 0), 1),  # now in %
-    snow_cover = replace_na(snow_cover, 0)
-  )
+    snow_cover = replace_na(snow_cover, 0)) %>%
+  mutate(across(where(is.character), ~ na_if(., "")))
 
-# Convert numeric columns to numeric
-sizer_annual_drivers <- tot_si %>%
-  distinct(Stream_ID, Year, .keep_all = TRUE)  %>% 
-  mutate(across(c(drainage_area, NOx, P, precip, Q, temp, 
-                  snow_cover, npp, evapotrans, 
-                  greenup_day, permafrost, elevation, basin_slope, 
-                  FNConc, FNYield, GenConc, GenYield), 
-                as.numeric))
-
-sizer_annual_drivers <- sizer_annual_drivers %>%
-  # Convert blank strings to NA in all character columns
-  mutate(across(where(is.character), ~ na_if(., ""))) %>%
-  # Replace NAs in selected numeric columns with 0 (if desired)
-  mutate_at(vars(24:38), ~ replace(., is.na(.), 0)) %>%
-  filter(complete.cases(.))
-
-
-# Write out tot_si. This is for the FULL dataset (not partitioned at all)
+# Write out. This is for the FULL dataset (not partitioned at all)
 write.csv(
-  drivers_df,
-  sprintf("AllDrivers_Harmonized_Yearly_filtered_%d_years.csv", record_length),
+  sizer_outs_ave_drivers,
+  "sizer_outs_ave_drivers_harmonized.csv",
   row.names = FALSE
 )
 
