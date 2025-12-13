@@ -498,6 +498,14 @@ sizer_outs_ave_drivers <- sizer_outs_ave_drivers %>%
     )
   )
 
+# Print unique major land: 
+unique(sizer_outs_ave_drivers$major_land)
+
+# And sites: 
+unique(sizer_outs_ave_drivers$Stream_ID)
+
+# n = 446
+
 # #############################################################################
 # 8) Export
 # #############################################################################
