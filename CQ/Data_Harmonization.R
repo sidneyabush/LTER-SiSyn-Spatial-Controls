@@ -31,7 +31,7 @@ sizer_outs <- read.csv("sizer_outs_DSi_15May24.csv", stringsAsFactors = FALSE) %
     Year = lubridate::year(Date),
     Stream_ID = paste0(LTER, "__", Stream_Name)) 
 
-# Merge drainage area from the site reference table so sizer_outs has `drainSqKm`
+# Merge drainage area from the site reference table so sizer_outs has `drainSqKm` column
 site_ref <- read.csv('/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush/SiSyn/CQ_Site_Map/Site_Reference_Table - WRTDS_Reference_Table_LTER_V2.csv', stringsAsFactors = FALSE) %>%
   mutate(
     Stream_Name = case_when(
@@ -42,7 +42,7 @@ site_ref <- read.csv('/Users/sidneybush/Library/CloudStorage/Box-Box/Sidney_Bush
     ),
     Stream_ID = paste0(LTER, "__", Stream_Name)
   ) %>%
-  dplyr::select(Stream_ID, drainSqKm)
+  dplyr::select(Stream_ID, drainSqKm, Latitude, Longitude)
 
 sizer_outs <- sizer_outs %>%
   left_join(site_ref, by = "Stream_ID") %>%
@@ -68,6 +68,10 @@ daily_kalman <- read_csv("Full_Results_WRTDS_kalman_daily_filtered.csv",
     Year = lubridate::year(Date),
     Stream_ID = paste0(LTER, "__", Stream_Name))
 
+# We needed to grab Catalina Jemez sites separately because they were not 
+# run in the original WRTDS, but we had not yet fully run the next round 
+# of WRTDS where this issue was fixed
+
 daily_Q_CJ <- read.csv("WRTDS-input_discharge.csv",
                        stringsAsFactors = FALSE) %>%
   mutate(
@@ -79,8 +83,7 @@ daily_Q_CJ <- read.csv("WRTDS-input_discharge.csv",
   filter(Stream_ID %in% c("Catalina Jemez__OR_low", "Catalina Jemez__MG_WEIR")) %>%
   select(-indicate)
 
-
-# — 3. Join them by Date & Stream_ID —
+# Combine
 daily_kalman <- bind_rows(
   daily_kalman,
   daily_Q_CJ
@@ -103,7 +106,7 @@ recession_data <- Q_diff %>%
   dplyr::filter(dQ < 0) %>%  # Keep only recession periods
   dplyr::mutate(recession_slope = -dQ_dt)  # Make it positive for the slope
 
-# 3. Compute Aggregate Recession Slope per Stream
+# Compute Aggregate Recession Slope per Stream
 # For each stream, if there are at least 50 recession days, fit a linear model (recession_slope ~ Q)
 # and extract the slope coefficient.
 recession_slopes <- recession_data %>%
@@ -134,13 +137,12 @@ flashiness <- daily_kalman %>%
     total_change = sum(abs_dQ, na.rm = TRUE),         # Total absolute change
     RBI = total_change / total_discharge           # Richards-Baker Flashiness Index
   ) %>%
+  dplyr::select(-total_discharge, -total_change) %>% 
   ungroup()
 
-# View the flashiness data frame with RBI values for each Stream_ID
-print(flashiness)
-
 # Merge both metrics
-Q_metrics <- left_join(recession_slopes, flashiness, by ="Stream_ID") 
+Q_metrics <- left_join(recession_slopes, flashiness, by ="Stream_ID") %>%
+  dplyr::select(-n_days)
 
 # #############################################################################
 # 3. Add Köppen–Geiger Classification ----
@@ -162,6 +164,9 @@ Q_KG <- left_join(Q_metrics, KG, by="Stream_ID") %>%
   distinct(Stream_ID,.keep_all=TRUE) %>%
   dplyr::select(-contains(".x")) %>%
   rename_with(~str_remove(., "\\.y$"))
+
+Q_KG <- Q_KG %>%
+  dplyr::select(LTER, Stream_Name, Stream_ID, dplyr::everything())
 
 # #############################################################################
 # 4. Spatial Drivers + Basin Slope Gap-Fill
@@ -341,34 +346,26 @@ all_drivers <- left_join(all_spatial, Q_KG, by = "Stream_ID") %>%
   # set LTER and Stream_Name from parsed Stream_ID (keep Stream_ID as well)
   mutate(
     LTER = .LTER_from_id,
-    Stream_Name = .Stream_from_id
-  ) %>%
-  # remove helper and any duplicate .x/.y suffixed LTER/Stream_Name columns
-  dplyr::select(-n_days, -total_discharge, -total_change,
-    -dplyr::any_of(c('.LTER_from_id', '.Stream_from_id')))
+    Stream_Name = .Stream_from_id) %>%
+  dplyr::select(-.LTER_from_id, -.Stream_from_id)
 
 # Tidy column order
 all_drivers <- all_drivers %>%
   dplyr::select(LTER, Stream_Name, Stream_ID, Year, ClimateZ, KG_Class, major_land, 
                 major_rock, major_soil, recession_slope, RBI, dplyr::everything())
 
-# Ensure columns that begin with land_/soil_/rocks_ use numeric 0 where values are the string "NA" or NA
-landsoilrocks_cols <- grep('^(land_|soil_|rocks_)', names(all_drivers), value = TRUE)
+# Ensure columns that begin with land_/soil_/rocks_ use numeric 0 where values are NA
+lsr_cols <- grep('^(land_|soil_|rocks_)', names(all_drivers), value = TRUE)
 all_drivers <- all_drivers %>%
-  dplyr::mutate(dplyr::across(dplyr::any_of(landsoilrocks_cols), ~ {
+  dplyr::mutate(dplyr::across(dplyr::any_of(lsr_cols), ~ {
     tmp <- as.character(.);
     tmp[is.na(tmp) | tmp == "NA"] <- "0";
     as.numeric(tmp)
   }))
 
-  
 # #############################################################################
 # 6) Calculate site averages for numerical driver data
 # #############################################################################
-
-# Identify land/soil/rocks columns
-lsr_cols <- grep('^(land_|soil_|rocks_)', names(all_drivers), value = TRUE)
-
 # Calculate site summaries
 # For land/soil/rocks: use the constant value (not averaged)
 # For other numeric columns: calculate mean across years
@@ -397,29 +394,11 @@ non_numeric_cols <- all_drivers %>%
   dplyr::select(Stream_ID, LTER, Stream_Name, where(~ !is.numeric(.x))) %>%
   distinct(Stream_ID, .keep_all = TRUE)
 
-# Check for join issues before merging
-n_before <- nrow(site_summary)
-
 site_summary <- site_summary %>%
   left_join(non_numeric_cols, by = "Stream_ID") %>%
   dplyr::select(LTER, Stream_Name, Stream_ID, ClimateZ, KG_Class, major_land,
                 major_rock, major_soil, recession_slope, RBI, dplyr::everything()) %>%
-  # Remove any .x or .y suffix columns that might have been created
   dplyr::select(-matches("\\.x$|\\.y$"))
-
-n_after <- nrow(site_summary)
-
-if (n_before != n_after) {
-  warning(paste0("Join with non_numeric_cols changed row count from ", n_before, " to ", n_after))
-} else {
-  message(paste0("Join verification passed: ", n_after, " rows maintained."))
-}
-
-# Check for any remaining .x or .y columns
-xy_cols <- grep("\\.x$|\\.y$", names(site_summary), value = TRUE)
-if (length(xy_cols) > 0) {
-  warning(paste0("Found .x/.y columns in site_summary: ", paste(xy_cols, collapse = ", ")))
-}
 
 # #############################################################################
 # 7) Merge the site average driver data with sizer outs
@@ -439,19 +418,9 @@ site_summary_filtered <- site_summary %>%
 sizer_outs_ave_drivers <- sizer_outs %>%
   left_join(site_summary_filtered, by = "Stream_ID") %>%
   dplyr::rename(
-    drainage_area = drainSqKm) %>%
-  mutate_at(vars(npp, evapotrans, precip, temp, greenup_day, snow_cover, permafrost),
-            as.numeric)
+    drainage_area = drainSqKm) 
 
-# Check for any .x or .y columns
-xy_cols_sizer <- grep("\\.x$|\\.y$", names(sizer_outs_ave_drivers), value = TRUE)
-if (length(xy_cols_sizer) > 0) {
-  warning(paste0("Found .x/.y columns in sizer_outs_ave_drivers: ", paste(xy_cols_sizer, collapse = ", ")))
-} else {
-  message("No .x/.y columns found - join successful without duplicates.")
-}
-
-# Set major_land to "Ice" for MCM sites ******** This can be updated for more sites later
+# Set major_land to "Ice" for MCM sites ******** This can be manually updated for more sites later
 sizer_outs_ave_drivers <- sizer_outs_ave_drivers %>%
   mutate(major_land = ifelse(LTER == "MCM", "Ice", major_land)) %>%
   filter(!is.na(major_rock) & trimws(major_rock) != "" & major_rock != "0")
